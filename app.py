@@ -23,6 +23,10 @@ UPLOADS_DIR = Path("uploads")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     database.init_db()
+    database.ensure_superadmin(
+        os.getenv("SUPER_ADMIN_EMAIL", ""),
+        os.getenv("SUPER_ADMIN_PASSWORD", ""),
+    )
     UPLOADS_DIR.mkdir(exist_ok=True)
     bot_poller.start()
     yield

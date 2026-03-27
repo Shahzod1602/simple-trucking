@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Super Admin — SimpleTrucking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0f1e;
+      --card: #111827;
+      --card-inner: #0d1421;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --border: rgba(255,255,255,0.06);
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: rgba(37,99,235,0.12);
+      --success: #10b981;
+      --success-light: rgba(16,185,129,0.12);
+      --error: #ef4444;
+      --error-light: rgba(239,68,68,0.12);
+    }
+    [data-theme="light"] {
+      --bg: #f0f4fa; --card: #fff; --card-inner: #f8fafc;
+      --text: #0f172a; --text-muted: #64748b; --border: #e2e8f0;
+      --primary: #2563eb; --primary-hover: #1d4ed8; --primary-light: rgba(37,99,235,0.1);
+      --success: #059669; --success-light: #ecfdf5;
+      --error: #dc2626; --error-light: #fef2f2;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
+
+    /* topbar */
+    .topbar {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px; height: 56px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    }
+    .brand-name { font-weight: 800; font-size: 0.95rem; }
+    .badge {
+      background: var(--primary-light); color: var(--primary);
+      font-size: 0.7rem; font-weight: 700; padding: 2px 9px;
+      border-radius: 20px; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .greeting { font-size: 0.83rem; color: var(--text-muted); }
+    .btn-top {
+      padding: 6px 14px; border-radius: 7px; border: 1px solid var(--border);
+      font-size: 0.82rem; font-weight: 600; cursor: pointer;
+      background: transparent; color: var(--text-muted); transition: all 0.15s;
+    }
+    .btn-top:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* main */
+    .main { max-width: 1100px; margin: 0 auto; padding: 36px 24px; }
+
+    /* stat cards */
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px; margin-bottom: 36px;
+    }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden;
+    }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    }
+    .stat-card.blue::before  { background: linear-gradient(90deg, #2563eb, transparent); }
+    .stat-card.green::before { background: linear-gradient(90deg, #10b981, transparent); }
+    .stat-card.amber::before { background: linear-gradient(90deg, #f59e0b, transparent); }
+    .stat-card.purple::before{ background: linear-gradient(90deg, #8b5cf6, transparent); }
+    .stat-icon { margin-bottom: 10px; }
+    .stat-label { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .stat-value { font-size: 1.9rem; font-weight: 800; line-height: 1; }
+    .stat-value.blue   { color: #60a5fa; }
+    .stat-value.green  { color: var(--success); }
+    .stat-value.amber  { color: #fbbf24; }
+    .stat-value.purple { color: #a78bfa; }
+    .stat-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* section */
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-title { font-size: 0.95rem; font-weight: 700; }
+    .btn-add {
+      padding: 8px 20px; border-radius: 8px; border: none;
+      background: var(--primary); color: #fff; font-size: 0.85rem; font-weight: 700;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .btn-add:hover { background: var(--primary-hover); }
+
+    /* table */
+    .tbl-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--card-inner); }
+    th {
+      padding: 11px 16px; text-align: left;
+      font-size: 0.71rem; font-weight: 700; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+    td { padding: 13px 16px; border-bottom: 1px solid var(--border); font-size: 0.87rem; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.015); }
+
+    .company-name { font-weight: 700; font-size: 0.9rem; }
+    .company-id   { font-size: 0.72rem; color: var(--text-muted); font-family: monospace; margin-top: 1px; }
+
+    .admin-name  { font-size: 0.87rem; font-weight: 500; }
+    .admin-email { font-size: 0.73rem; color: var(--text-muted); margin-top: 1px; }
+    .no-admin    { color: var(--text-muted); font-size: 0.82rem; font-style: italic; }
+
+    .role-badge {
+      display: inline-block; padding: 2px 9px; border-radius: 20px;
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .role-admin  { background: rgba(37,99,235,0.15); color: #60a5fa; }
+    .role-user   { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+    .dot.on  { background: var(--success); }
+    .dot.off { background: var(--error); }
+
+    .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+    .btn-act {
+      padding: 4px 11px; border-radius: 6px; border: 1px solid var(--border);
+      font-size: 0.77rem; font-weight: 600; cursor: pointer;
+      background: transparent; color: var(--text-muted); transition: all 0.15s;
+    }
+    .btn-act:hover        { border-color: var(--primary); color: var(--primary); }
+    .btn-act.del:hover    { border-color: var(--error); color: var(--error); }
+    .btn-act.green:hover  { border-color: var(--success); color: var(--success); }
+
+    /* Users sub-panel */
+    .users-row td { background: var(--card-inner) !important; padding: 0 !important; }
+    .users-panel { padding: 16px 20px; }
+    .users-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .users-panel-title { font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .btn-sm { padding: 5px 13px; border-radius: 7px; border: none; background: var(--primary); color: #fff; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: background 0.15s; }
+    .btn-sm:hover { background: var(--primary-hover); }
+    .users-table { width: 100%; border-collapse: collapse; }
+    .users-table th { padding: 8px 12px; font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    .users-table td { padding: 10px 12px; font-size: 0.84rem; border-bottom: 1px solid var(--border); }
+    .users-table tr:last-child td { border-bottom: none; }
+    .users-empty { color: var(--text-muted); font-size: 0.84rem; text-align: center; padding: 20px 0; }
+
+    /* modal */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+      z-index: 200; align-items: center; justify-content: center; padding: 16px;
+    }
+    .overlay.open { display: flex; }
+    .modal {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px; width: 100%; max-width: 420px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+      animation: modalIn 0.2s ease;
+    }
+    @keyframes modalIn { from { transform: translateY(10px) scale(0.97); opacity: 0; } to { transform: none; opacity: 1; } }
+    .modal h3 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+    .modal-sub { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 20px; }
+    .field { margin-bottom: 13px; }
+    .field label { display: block; font-size: 0.79rem; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+    .field input {
+      width: 100%; padding: 9px 12px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 0.9rem; color: var(--text); background: var(--bg);
+      outline: none; transition: border-color 0.15s; font-family: inherit;
+    }
+    .field input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+    .modal-btns .btn-add { flex: 1; padding: 10px; }
+    .btn-cancel {
+      flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+      font-size: 0.88rem; font-weight: 600; cursor: pointer;
+      background: transparent; color: var(--text-muted);
+    }
+    .btn-cancel:hover { border-color: var(--error); color: var(--error); }
+    .err-msg {
+      background: var(--error-light); border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 7px; padding: 8px 12px;
+      color: var(--error); font-size: 0.82rem; margin-bottom: 13px; display: none;
+    }
+    .ok-msg {
+      background: var(--success-light); border: 1px solid rgba(16,185,129,0.2);
+      border-radius: 7px; padding: 8px 12px;
+      color: var(--success); font-size: 0.82rem; margin-bottom: 13px; display: none;
+    }
+    .confirm-text { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px; line-height: 1.55; }
+
+    .empty-row td { text-align: center; color: var(--text-muted); padding: 48px; }
+    .loading-row td { text-align: center; color: var(--text-muted); padding: 32px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+    </div>
+    <span class="brand-name">SimpleTrucking</span>
+    <span class="badge">Super Admin</span>
+  </div>
+  <div class="topbar-right">
+    <span class="greeting" id="greeting"></span>
+    <button class="btn-top" onclick="doLogout()">Logout</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card blue">
+      <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></div>
+      <div class="stat-label">Companies</div>
+      <div class="stat-value blue" id="s-companies">—</div>
+      <div class="stat-sub">registered</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="stat-label">Admins</div>
+      <div class="stat-value green" id="s-admins">—</div>
+      <div class="stat-sub">company admins</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+      <div class="stat-label">Users</div>
+      <div class="stat-value amber" id="s-users">—</div>
+      <div class="stat-sub">dispatchers</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="stat-label">Revenue</div>
+      <div class="stat-value purple" id="s-revenue">—</div>
+      <div class="stat-sub" id="s-delivered-sub">— delivered</div>
+    </div>
+  </div>
+
+  <!-- Companies table -->
+  <div class="section-head">
+    <div class="section-title">Companies</div>
+    <button class="btn-add" onclick="openCreateCompany()">+ New Company</button>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Company</th>
+          <th>Company Admin</th>
+          <th>Users</th>
+          <th>Loads</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tbl-body">
+        <tr class="loading-row"><td colspan="6">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- Create Company Modal -->
+<div class="overlay" id="m-company">
+  <div class="modal">
+    <h3>New Company</h3>
+    <p class="modal-sub">Create a company and assign an admin to it.</p>
+    <div class="err-msg" id="co-err"></div>
+    <div class="ok-msg"  id="co-ok"></div>
+    <div class="field"><label>Company Name</label><input type="text" id="co-name" placeholder="Acme Trucking LLC" maxlength="120"/></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('m-company')">Cancel</button>
+      <button class="btn-add" id="co-btn" onclick="doCreateCompany()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename Company Modal -->
+<div class="overlay" id="m-rename">
+  <div class="modal">
+    <h3>Rename Company</h3>
+    <div class="err-msg" id="rn-err"></div>
+    <div class="field"><label>New Name</label><input type="text" id="rn-name" maxlength="120"/></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('m-rename')">Cancel</button>
+      <button class="btn-add" id="rn-btn" onclick="doRenameCompany()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Admin Modal -->
+<div class="overlay" id="m-assign">
+  <div class="modal">
+    <h3>Assign Company Admin</h3>
+    <p class="modal-sub">Create an admin account for <strong id="assign-company-name"></strong></p>
+    <div class="err-msg" id="as-err"></div>
+    <div class="ok-msg"  id="as-ok"></div>
+    <div class="field"><label>Full Name</label><input type="text" id="as-name" placeholder="John Smith" maxlength="80"/></div>
+    <div class="field"><label>Email</label><input type="email" id="as-email" placeholder="john@company.com"/></div>
+    <div class="field"><label>Password</label><input type="password" id="as-pass" placeholder="At least 6 characters"/></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('m-assign')">Cancel</button>
+      <button class="btn-add" id="as-btn" onclick="doAssignAdmin()">Create Admin</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Users Modal -->
+<div class="overlay" id="m-users">
+  <div class="modal" style="max-width:600px;">
+    <h3 id="users-modal-title">Users</h3>
+    <p class="modal-sub" id="users-modal-sub"></p>
+    <div class="err-msg" id="us-err"></div>
+    <div class="ok-msg"  id="us-ok"></div>
+
+    <!-- Add user form (hidden by default) -->
+    <div id="add-user-form" style="display:none;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:0.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">New User</div>
+      <div class="field"><label>Full Name</label><input type="text" id="nu-name" placeholder="Jane Doe" maxlength="80"/></div>
+      <div class="field"><label>Email</label><input type="email" id="nu-email" placeholder="jane@company.com"/></div>
+      <div class="field" style="margin-bottom:0"><label>Password</label><input type="password" id="nu-pass" placeholder="At least 6 characters"/></div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button class="btn-cancel" style="flex:0;padding:7px 16px;" onclick="document.getElementById('add-user-form').style.display='none'">Cancel</button>
+        <button class="btn-add" style="flex:1;padding:7px;" id="nu-btn" onclick="doAddUser()">Add User</button>
+      </div>
+    </div>
+
+    <div class="users-panel-head">
+      <div class="users-panel-title">User Accounts</div>
+      <button class="btn-sm" onclick="document.getElementById('add-user-form').style.display='block'">+ Add User</button>
+    </div>
+
+    <div id="users-list"></div>
+
+    <div style="margin-top:16px;text-align:right;">
+      <button class="btn-cancel" style="flex:none;" onclick="closeModal('m-users')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal (for user in company) -->
+<div class="overlay" id="m-reset-user">
+  <div class="modal">
+    <h3>Reset Password</h3>
+    <p class="modal-sub">For: <strong id="ru-name"></strong></p>
+    <div class="err-msg" id="ru-err"></div>
+    <div class="ok-msg"  id="ru-ok"></div>
+    <div class="field"><label>New Password</label><input type="password" id="ru-pass" placeholder="At least 6 characters"/></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('m-reset-user')">Cancel</button>
+      <button class="btn-add" id="ru-btn" onclick="doResetUserPw()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Company -->
+<div class="overlay" id="m-del-company">
+  <div class="modal">
+    <h3>Delete Company</h3>
+    <p class="confirm-text" id="del-company-msg"></p>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('m-del-company')">Cancel</button>
+      <button class="btn-add" style="background:var(--error);color:#fff" onclick="doDeleteCompany()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const TOKEN = localStorage.getItem('st_token');
+  if (!TOKEN) location.href = '/login';
+
+  let targetCompanyId = null;
+  let targetUserId = null;
+  let activeCompanyIdForUsers = null;
+  let companies = [];
+
+  async function api(method, path, body) {
+    const r = await fetch(path, {
+      method,
+      headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || 'Error');
+    return d;
+  }
+
+  function openModal(id)  { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  function showErr(id, msg) { const e = document.getElementById(id); e.textContent = msg; e.style.display = 'block'; }
+  function showOk(id, msg)  { const e = document.getElementById(id); e.textContent = msg; e.style.display = 'block'; }
+  function hideMsg(id) { document.getElementById(id).style.display = 'none'; }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  async function init() {
+    try {
+      const me = await api('GET', '/api/me');
+      if (me.role !== 'superadmin') { location.href = '/'; return; }
+      document.getElementById('greeting').textContent = me.name;
+    } catch { location.href = '/login'; return; }
+    loadStats();
+    loadCompanies();
+  }
+
+  async function loadStats() {
+    try {
+      const s = await api('GET', '/api/superadmin/stats');
+      document.getElementById('s-companies').textContent = s.total_companies;
+      document.getElementById('s-admins').textContent = s.total_admins;
+      document.getElementById('s-users').textContent = s.total_accounts;
+      document.getElementById('s-revenue').textContent = '$' + Number(s.total_revenue).toLocaleString();
+      document.getElementById('s-delivered-sub').textContent = s.delivered_loads + ' delivered';
+    } catch {}
+  }
+
+  async function loadCompanies() {
+    try {
+      companies = await api('GET', '/api/superadmin/companies');
+      renderCompanies();
+    } catch (e) {
+      document.getElementById('tbl-body').innerHTML =
+        `<tr class="loading-row"><td colspan="6">Failed: ${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  function renderCompanies() {
+    const tbody = document.getElementById('tbl-body');
+    if (!companies.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No companies yet. Create the first one.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = companies.map((c, i) => `
+      <tr id="row-${c.id}">
+        <td style="color:var(--text-muted)">${i+1}</td>
+        <td>
+          <div class="company-name">${esc(c.name)}</div>
+          <div class="company-id">#${c.id}</div>
+        </td>
+        <td>
+          ${c.admin_name
+            ? `<div class="admin-name">${esc(c.admin_name)}</div><div class="admin-email">${esc(c.admin_email||'')}</div>`
+            : `<span class="no-admin">No admin assigned</span>`}
+        </td>
+        <td style="text-align:center;font-weight:600">${c.user_count ?? 0}</td>
+        <td style="text-align:center">${c.load_count ?? 0}</td>
+        <td>
+          <div class="acts">
+            <button class="btn-act" onclick="openAssign(${c.id},'${esc(c.name)}')">Assign Admin</button>
+            <button class="btn-act green" onclick="openManageUsers(${c.id},'${esc(c.name)}')">Users</button>
+            <button class="btn-act" onclick="openRename(${c.id},'${esc(c.name)}')">Rename</button>
+            <button class="btn-act del" onclick="openDeleteCompany(${c.id},'${esc(c.name)}')">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // ── Create Company ──────────────────────────────────────────────────────────
+  function openCreateCompany() {
+    document.getElementById('co-name').value = '';
+    ['co-err','co-ok'].forEach(hideMsg);
+    openModal('m-company');
+  }
+  async function doCreateCompany() {
+    const name = document.getElementById('co-name').value.trim();
+    hideMsg('co-err'); hideMsg('co-ok');
+    if (!name) { showErr('co-err','Company name is required'); return; }
+    const btn = document.getElementById('co-btn');
+    btn.disabled = true; btn.textContent = 'Creating...';
+    try {
+      await api('POST', '/api/superadmin/companies', { name });
+      showOk('co-ok', 'Company created.');
+      setTimeout(() => { closeModal('m-company'); refresh(); }, 800);
+    } catch(e) { showErr('co-err', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Create'; }
+  }
+
+  // ── Rename Company ──────────────────────────────────────────────────────────
+  function openRename(id, name) {
+    targetCompanyId = id;
+    document.getElementById('rn-name').value = name;
+    hideMsg('rn-err');
+    openModal('m-rename');
+  }
+  async function doRenameCompany() {
+    const name = document.getElementById('rn-name').value.trim();
+    if (!name) { showErr('rn-err','Name is required'); return; }
+    const btn = document.getElementById('rn-btn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+      await api('PATCH', `/api/superadmin/companies/${targetCompanyId}`, { name });
+      closeModal('m-rename'); refresh();
+    } catch(e) { showErr('rn-err', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Save'; }
+  }
+
+  // ── Assign Admin ────────────────────────────────────────────────────────────
+  function openAssign(id, companyName) {
+    targetCompanyId = id;
+    document.getElementById('assign-company-name').textContent = companyName;
+    ['as-name','as-email','as-pass'].forEach(id => document.getElementById(id).value = '');
+    ['as-err','as-ok'].forEach(hideMsg);
+    openModal('m-assign');
+  }
+  async function doAssignAdmin() {
+    const name  = document.getElementById('as-name').value.trim();
+    const email = document.getElementById('as-email').value.trim();
+    const pass  = document.getElementById('as-pass').value;
+    hideMsg('as-err'); hideMsg('as-ok');
+    if (!name)  { showErr('as-err','Name is required'); return; }
+    if (!email || !email.includes('@')) { showErr('as-err','Invalid email'); return; }
+    if (pass.length < 6) { showErr('as-err','Password must be at least 6 characters'); return; }
+    const btn = document.getElementById('as-btn');
+    btn.disabled = true; btn.textContent = 'Creating...';
+    try {
+      await api('POST', `/api/superadmin/companies/${targetCompanyId}/assign-admin`, { name, email, password: pass });
+      showOk('as-ok', 'Admin account created.');
+      setTimeout(() => { closeModal('m-assign'); refresh(); }, 800);
+    } catch(e) { showErr('as-err', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Create Admin'; }
+  }
+
+  // ── Delete Company ──────────────────────────────────────────────────────────
+  function openDeleteCompany(id, name) {
+    targetCompanyId = id;
+    document.getElementById('del-company-msg').textContent =
+      `Delete "${name}"? All admins, users, loads and driver groups will also be deleted. This cannot be undone.`;
+    openModal('m-del-company');
+  }
+  async function doDeleteCompany() {
+    try {
+      await api('DELETE', `/api/superadmin/companies/${targetCompanyId}`);
+      closeModal('m-del-company'); refresh();
+    } catch(e) { alert(e.message); }
+  }
+
+  // ── Manage Users ────────────────────────────────────────────────────────────
+  async function openManageUsers(companyId, companyName) {
+    activeCompanyIdForUsers = companyId;
+    document.getElementById('users-modal-title').textContent = companyName + ' — Users';
+    document.getElementById('users-modal-sub').textContent = 'Manage dispatcher accounts for this company.';
+    ['us-err','us-ok'].forEach(hideMsg);
+    document.getElementById('add-user-form').style.display = 'none';
+    ['nu-name','nu-email','nu-pass'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('users-list').innerHTML = '<div style="color:var(--text-muted);font-size:0.84rem;padding:12px 0">Loading...</div>';
+    openModal('m-users');
+    await loadUsers(companyId);
+  }
+
+  async function loadUsers(companyId) {
+    // Use superadmin endpoint to get company users
+    try {
+      const users = await api('GET', `/api/superadmin/companies/${companyId}/users`);
+      renderUsers(users);
+    } catch(e) {
+      document.getElementById('users-list').innerHTML = `<div class="users-empty">Failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function renderUsers(users) {
+    const el = document.getElementById('users-list');
+    if (!users.length) {
+      el.innerHTML = '<div class="users-empty">No users yet. Click "+ Add User" to create one.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <table class="users-table">
+        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td><strong>${esc(u.name)}</strong></td>
+              <td style="color:var(--text-muted);font-size:0.8rem">${esc(u.email||'—')}</td>
+              <td>
+                <span class="dot ${u.is_active ? 'on' : 'off'}"></span>
+                ${u.is_active ? 'Active' : 'Inactive'}
+              </td>
+              <td>
+                <div class="acts">
+                  <button class="btn-act" onclick="openResetUserPw(${u.id},'${esc(u.name)}')">Reset PW</button>
+                  <button class="btn-act ${u.is_active ? 'del' : 'green'}" onclick="toggleUserActive(${u.id},${u.is_active})">
+                    ${u.is_active ? 'Disable' : 'Enable'}
+                  </button>
+                  <button class="btn-act del" onclick="doDeleteUser(${u.id},'${esc(u.name)}')">Delete</button>
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  async function doAddUser() {
+    const name  = document.getElementById('nu-name').value.trim();
+    const email = document.getElementById('nu-email').value.trim();
+    const pass  = document.getElementById('nu-pass').value;
+    hideMsg('us-err'); hideMsg('us-ok');
+    if (!name)  { showErr('us-err','Name is required'); return; }
+    if (!email || !email.includes('@')) { showErr('us-err','Invalid email'); return; }
+    if (pass.length < 6) { showErr('us-err','Password must be at least 6 characters'); return; }
+    const btn = document.getElementById('nu-btn');
+    btn.disabled = true; btn.textContent = 'Adding...';
+    try {
+      await api('POST', `/api/superadmin/companies/${activeCompanyIdForUsers}/users`, { name, email, password: pass });
+      showOk('us-ok', 'User created.');
+      ['nu-name','nu-email','nu-pass'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('add-user-form').style.display = 'none';
+      await loadUsers(activeCompanyIdForUsers);
+      refresh();
+    } catch(e) { showErr('us-err', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Add User'; }
+  }
+
+  function openResetUserPw(userId, name) {
+    targetUserId = userId;
+    document.getElementById('ru-name').textContent = name;
+    document.getElementById('ru-pass').value = '';
+    ['ru-err','ru-ok'].forEach(hideMsg);
+    openModal('m-reset-user');
+  }
+  async function doResetUserPw() {
+    const pass = document.getElementById('ru-pass').value;
+    if (pass.length < 6) { showErr('ru-err','At least 6 characters'); return; }
+    const btn = document.getElementById('ru-btn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+      await api('POST', `/api/superadmin/users/${targetUserId}/reset-password`, { new_password: pass });
+      showOk('ru-ok','Password updated.');
+      setTimeout(() => closeModal('m-reset-user'), 900);
+    } catch(e) { showErr('ru-err', e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Save'; }
+  }
+
+  async function toggleUserActive(userId, isActive) {
+    try {
+      await api('PATCH', `/api/superadmin/users/${userId}`, { is_active: !isActive });
+      await loadUsers(activeCompanyIdForUsers);
+      refresh();
+    } catch(e) { showErr('us-err', e.message); }
+  }
+
+  async function doDeleteUser(userId, name) {
+    if (!confirm(`Delete user "${name}"? All their data will be deleted.`)) return;
+    try {
+      await api('DELETE', `/api/superadmin/users/${userId}`);
+      await loadUsers(activeCompanyIdForUsers);
+      refresh();
+    } catch(e) { showErr('us-err', e.message); }
+  }
+
+  async function refresh() {
+    await Promise.all([loadStats(), loadCompanies()]);
+  }
+
+  // Close on overlay click
+  document.querySelectorAll('.overlay').forEach(el =>
+    el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); })
+  );
+
+  function doLogout() { localStorage.clear(); location.href = '/login'; }
+
+  init();
+</script>
+</body>
+</html>

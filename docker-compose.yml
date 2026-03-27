@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    container_name: ratecon_app
+    restart: always
+    env_file: .env
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./ratecon.db:/app/ratecon.db

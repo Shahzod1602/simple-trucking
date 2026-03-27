@@ -130,6 +130,12 @@ class ChangePasswordBody(BaseModel):
     new_password: str
 
 
+class CreateUserBody(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
 @app.post("/api/register")
 async def api_register(body: RegisterBody):
     name = body.name.strip()

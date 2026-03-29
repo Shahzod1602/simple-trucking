@@ -353,11 +353,12 @@ def delete_eld_config(dispatcher_id: int) -> bool:
         return cur.rowcount > 0
 
 
-def set_group_driver(group_id: int, dispatcher_id: int, eld_driver_id: str | None, eld_driver_name: str | None = None) -> bool:
+def set_group_driver(group_id: int, company_id: int, eld_driver_id: str | None, eld_driver_name: str | None = None) -> bool:
     with get_conn() as conn:
         cur = conn.execute(
-            "UPDATE driver_groups SET eld_driver_id = ?, eld_driver_name = ? WHERE id = ? AND dispatcher_id = ?",
-            (eld_driver_id, eld_driver_name, group_id, dispatcher_id),
+            """UPDATE driver_groups SET eld_driver_id = ?, eld_driver_name = ? WHERE id = ?
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+            (eld_driver_id, eld_driver_name, group_id, company_id),
         )
         return cur.rowcount > 0
 

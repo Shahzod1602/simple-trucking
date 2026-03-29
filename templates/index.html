@@ -1176,7 +1176,7 @@ Rate: {{total_rate_usd}}
         userName  = d.name;
         localStorage.setItem(NAME_KEY, d.name);
         renderUser();
-        if (userRole === 'admin') {
+        if (userRole === 'admin' || userRole === 'superadmin') {
           document.getElementById('users-nav').hidden = false;
           document.getElementById('paystructure-nav').hidden = false;
         }

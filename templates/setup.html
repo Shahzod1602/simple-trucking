@@ -192,7 +192,8 @@
       applyTheme();
     });
 
-    if (localStorage.getItem('st_token')) window.location.href = '/';
+    if (localStorage.getItem('st_token')) window.location.href = '/app';
+    if (location.hash === '#register') switchTab('register');
 
     // ── Tab switching ─────────────────────────────────────────────────────
     function switchTab(tab) {
@@ -235,7 +236,7 @@
         if (!r.ok) { showErr('login-err', data.detail || 'Invalid email or password'); return; }
         localStorage.setItem('st_token', data.token);
         localStorage.setItem('st_name', data.name);
-        window.location.href = '/';
+        window.location.href = '/app';
       } catch {
         showErr('login-err', 'Connection error. Please try again.');
       } finally {
@@ -271,7 +272,7 @@
         if (!r.ok) { showErr('reg-err', data.detail || 'An error occurred'); return; }
         localStorage.setItem('st_token', data.token);
         localStorage.setItem('st_name', data.name);
-        window.location.href = '/';
+        window.location.href = '/app';
       } catch {
         showErr('reg-err', 'Connection error. Please try again.');
       } finally {

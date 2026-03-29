@@ -1358,6 +1358,63 @@ async def api_alerts(authorization: str | None = Header(default=None)):
     return {"alerts": alerts}
 
 
+# ── Pay Tiers & Earnings API ──────────────────────────────────────────────────
+
+class PayTierBody(BaseModel):
+    dispatcher_id: int | None = None
+    min_gross: float
+    max_gross: float | None = None
+    min_rpm: float = 0
+    percentage: float
+
+
+@app.get("/api/pay-tiers")
+async def api_get_pay_tiers(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    return database.get_pay_tiers(company_id)
+
+
+@app.post("/api/pay-tiers")
+async def api_create_pay_tier(
+    body: PayTierBody,
+    authorization: str | None = Header(default=None),
+):
+    me = require_company_admin(authorization)
+    company_id = get_company_id(me)
+    if body.percentage <= 0 or body.percentage > 100:
+        raise HTTPException(status_code=400, detail="Percentage must be between 0 and 100")
+    if body.dispatcher_id and not database.get_dispatcher_in_company(body.dispatcher_id, company_id):
+        raise HTTPException(status_code=404, detail="Worker not found in your company")
+    tier = database.create_pay_tier(
+        company_id, body.dispatcher_id,
+        body.min_gross, body.max_gross, body.min_rpm, body.percentage,
+    )
+    return tier
+
+
+@app.delete("/api/pay-tiers/{tier_id}")
+async def api_delete_pay_tier(
+    tier_id: int,
+    authorization: str | None = Header(default=None),
+):
+    me = require_company_admin(authorization)
+    ok = database.delete_pay_tier(tier_id, get_company_id(me))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Tier not found")
+    return {"ok": True}
+
+
+@app.get("/api/earnings")
+async def api_earnings(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    is_admin = dispatcher.get("role") in ("admin", "superadmin")
+    worker_id = None if is_admin else dispatcher["id"]
+    loads = database.get_earnings(company_id, worker_id)
+    return {"earnings": loads}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True)

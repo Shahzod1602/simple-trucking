@@ -139,6 +139,19 @@ def init_db():
             )
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pay_tiers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                dispatcher_id INTEGER REFERENCES dispatchers(id) ON DELETE CASCADE,
+                min_gross REAL NOT NULL DEFAULT 0,
+                max_gross REAL,
+                min_rpm REAL NOT NULL DEFAULT 0,
+                percentage REAL NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+
     super_email = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
     super_pass = os.environ.get("SUPER_ADMIN_PASSWORD", "").strip()
     if super_email and super_pass:
@@ -794,3 +807,100 @@ def get_loads_for_auto_send() -> list[dict]:
                  AND ec.provider IS NOT NULL"""
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ── Pay Tiers ─────────────────────────────────────────────────────────────────
+
+def get_pay_tiers(company_id: int) -> list[dict]:
+    """Returns all tiers for a company (both company-wide and per-worker)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT pt.*, d.name as dispatcher_name
+               FROM pay_tiers pt
+               LEFT JOIN dispatchers d ON pt.dispatcher_id = d.id
+               WHERE pt.company_id = ?
+               ORDER BY pt.dispatcher_id NULLS FIRST, pt.min_gross DESC""",
+            (company_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def create_pay_tier(company_id: int, dispatcher_id: int | None,
+                    min_gross: float, max_gross: float | None,
+                    min_rpm: float, percentage: float) -> dict:
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO pay_tiers (company_id, dispatcher_id, min_gross, max_gross, min_rpm, percentage, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (company_id, dispatcher_id, min_gross, max_gross, min_rpm, percentage, now),
+        )
+        return {"id": cur.lastrowid, "company_id": company_id, "dispatcher_id": dispatcher_id,
+                "min_gross": min_gross, "max_gross": max_gross, "min_rpm": min_rpm,
+                "percentage": percentage, "created_at": now}
+
+
+def delete_pay_tier(tier_id: int, company_id: int) -> bool:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM pay_tiers WHERE id = ? AND company_id = ?",
+            (tier_id, company_id),
+        )
+        return cur.rowcount > 0
+
+
+def get_earnings(company_id: int, dispatcher_id: int | None = None) -> list[dict]:
+    """Calculate earnings for delivered loads using pay tiers.
+    If dispatcher_id given, returns only that worker's earnings.
+    """
+    with get_conn() as conn:
+        if dispatcher_id:
+            rows = conn.execute(
+                """SELECT l.*, d.name as dispatcher_name, d.id as worker_id
+                   FROM loads l
+                   JOIN dispatchers d ON l.dispatcher_id = d.id
+                   WHERE d.company_id = ? AND l.dispatcher_id = ? AND l.status = 'delivered'
+                   ORDER BY l.created_at DESC""",
+                (company_id, dispatcher_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT l.*, d.name as dispatcher_name, d.id as worker_id
+                   FROM loads l
+                   JOIN dispatchers d ON l.dispatcher_id = d.id
+                   WHERE d.company_id = ? AND l.status = 'delivered'
+                   ORDER BY l.created_at DESC""",
+                (company_id,),
+            ).fetchall()
+
+        tiers = get_pay_tiers(company_id)
+        company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
+
+        result = []
+        for row in rows:
+            load = dict(row)
+            worker_id = load["worker_id"]
+            worker_tiers = [t for t in tiers if t["dispatcher_id"] == worker_id]
+            active_tiers = worker_tiers if worker_tiers else company_tiers
+
+            gross = float(load.get("total_rate_usd") or 0)
+            miles = float(load.get("miles") or 0)
+            rpm = gross / miles if miles > 0 else 0
+
+            earning = 0.0
+            matched_tier = None
+            for tier in sorted(active_tiers, key=lambda t: t["min_gross"], reverse=True):
+                gross_ok = gross >= tier["min_gross"]
+                max_ok = tier["max_gross"] is None or gross < tier["max_gross"]
+                rpm_ok = rpm >= tier["min_rpm"]
+                if gross_ok and max_ok and rpm_ok:
+                    earning = round(gross * tier["percentage"] / 100, 2)
+                    matched_tier = tier
+                    break
+
+            load["rpm"] = round(rpm, 2)
+            load["earning"] = earning
+            load["tier_percentage"] = matched_tier["percentage"] if matched_tier else None
+            result.append(load)
+
+        return result

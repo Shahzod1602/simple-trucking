@@ -43,7 +43,7 @@ MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 _attempts: dict[str, dict] = {}  # {ip: {count, blocked_until}}
 MAX_ATTEMPTS = 5
-BLOCK_SECS = 15 * 60  # 15 minutes
+BLOCK_SECS = 3 * 60  # 3 minutes
 
 
 def _check_rate_limit(ip: str) -> int:

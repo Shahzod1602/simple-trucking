@@ -599,7 +599,7 @@ def get_active_load_by_chat_id(chat_id: int) -> dict | None:
     with get_conn() as conn:
         row = conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
-                      dg.chat_id as group_chat_id, d.name as dispatcher_name
+                      dg.chat_id as group_chat_id, d.name as dispatcher_name, d.company_id
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
@@ -616,7 +616,7 @@ def get_upcoming_load_by_chat_id(chat_id: int) -> dict | None:
     with get_conn() as conn:
         row = conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
-                      dg.chat_id as group_chat_id, d.name as dispatcher_name
+                      dg.chat_id as group_chat_id, d.name as dispatcher_name, d.company_id
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id

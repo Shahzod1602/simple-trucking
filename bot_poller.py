@@ -171,7 +171,7 @@ def _process_updates(updates: list[dict]):
                 _reply(message, "✅ You're at the last stop! Use /delivered to complete the load.")
                 continue
             new_idx = idx + 1
-            database.update_load_stop_index(load["id"], load["dispatcher_id"], new_idx)
+            database.update_load_stop_index(load["id"], load["company_id"], new_idx)
             next_stop = stops[new_idx]
             next_city = f"{next_stop.get('city', '')}, {next_stop.get('state', '')}".strip(", ")
             next_type = next_stop.get("type", "stop").capitalize()
@@ -191,7 +191,7 @@ def _process_updates(updates: list[dict]):
             if not load:
                 _reply(message, "No active dispatched load found for this group.")
                 continue
-            database.update_load_status(load["id"], load["dispatcher_id"], "delivered")
+            database.update_load_status(load["id"], load["company_id"], "delivered")
             load_id_display = load.get("load_number") or load["id"]
             _reply(message, f"✅ Load {load_id_display} marked as *delivered*! Great job! 🎉")
 
@@ -204,7 +204,7 @@ def _process_updates(updates: list[dict]):
             stops = _json.loads(load.get("stops_json") or "[]")
             first_delivery = next((i for i, s in enumerate(stops) if s.get("type") == "delivery"), None)
             new_idx = first_delivery if first_delivery is not None else 0
-            database.update_load_status(load["id"], load["dispatcher_id"], "dispatched", new_idx)
+            database.update_load_status(load["id"], load["company_id"], "dispatched", new_idx)
             load_id_display = load.get("load_number") or load["id"]
             _reply(message, f"🚛 Load {load_id_display} marked as *dispatched*! Safe travels!")
 

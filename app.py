@@ -539,7 +539,7 @@ async def api_delete_company_user(
 @app.get("/api/groups")
 async def api_groups(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
-    return database.get_groups(dispatcher["id"])
+    return database.get_groups(dispatcher["company_id"])
 
 
 class RenameBody(BaseModel):
@@ -556,7 +556,7 @@ async def api_rename_group(
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name cannot be empty")
-    ok = database.rename_group(group_id, dispatcher["id"], name)
+    ok = database.rename_group(group_id, dispatcher["company_id"], name)
     if not ok:
         raise HTTPException(status_code=404, detail="Group not found")
     return {"ok": True}
@@ -568,7 +568,7 @@ async def api_delete_group(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    ok = database.delete_group(group_id, dispatcher["id"])
+    ok = database.delete_group(group_id, dispatcher["company_id"])
     if not ok:
         raise HTTPException(status_code=404, detail="Group not found")
     return {"ok": True}
@@ -599,7 +599,7 @@ async def api_send(
     dispatcher = require_dispatcher(authorization)
     if not os.environ.get("TELEGRAM_BOT_TOKEN"):
         raise HTTPException(status_code=500, detail="TELEGRAM_BOT_TOKEN not configured")
-    group = database.get_group(body.group_id, dispatcher["id"])
+    group = database.get_group(body.group_id, dispatcher["company_id"])
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     try:
@@ -792,7 +792,7 @@ async def api_create_load(
 @app.get("/api/loads")
 async def api_get_loads(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
-    return {"loads": database.get_loads(dispatcher["id"])}
+    return {"loads": database.get_loads(dispatcher["company_id"])}
 
 
 class UpdateLoadStatusBody(BaseModel):
@@ -810,7 +810,7 @@ async def api_update_load_status(
     if body.status not in ("upcoming", "dispatched", "delivered"):
         raise HTTPException(status_code=400, detail="Invalid status")
 
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
 
@@ -824,7 +824,7 @@ async def api_update_load_status(
     elif body.status == "upcoming":
         new_stop_index = 0
 
-    ok = database.update_load_status(load_id, dispatcher["id"], body.status, new_stop_index)
+    ok = database.update_load_status(load_id, dispatcher["company_id"], body.status, new_stop_index)
     if not ok:
         raise HTTPException(status_code=404, detail="Load not found")
     return {"ok": True}
@@ -837,14 +837,14 @@ async def api_load_next_stop(
 ):
     import json as _json
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     stops = _json.loads(load.get("stops_json") or "[]")
     current = load.get("current_stop_index", 0)
     if current + 1 >= len(stops):
         raise HTTPException(status_code=400, detail="Already at last stop")
-    database.update_load_stop_index(load_id, dispatcher["id"], current + 1)
+    database.update_load_stop_index(load_id, dispatcher["company_id"], current + 1)
     return {"ok": True, "current_stop_index": current + 1, "stop": stops[current + 1]}
 
 
@@ -854,7 +854,7 @@ async def api_delete_load(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    ok = database.delete_load(load_id, dispatcher["id"])
+    ok = database.delete_load(load_id, dispatcher["company_id"])
     if not ok:
         raise HTTPException(status_code=404, detail="Load not found")
     return {"ok": True}
@@ -867,7 +867,7 @@ async def api_load_eta(
 ):
     import json as _json
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     if not load.get("driver_eld_id"):
@@ -917,7 +917,7 @@ async def api_load_send_status(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     if not load.get("group_id"):
@@ -931,7 +931,7 @@ async def api_load_send_status(
     if not cfg:
         raise HTTPException(status_code=400, detail="ELD not configured")
 
-    group = database.get_group(load["group_id"], dispatcher["id"])
+    group = database.get_group(load["group_id"], dispatcher["company_id"])
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
@@ -1066,7 +1066,7 @@ async def api_invoice(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     company = database.get_company_info(dispatcher["id"]) or {}
@@ -1086,30 +1086,32 @@ async def api_invoice(
 @app.get("/api/analytics")
 async def api_analytics(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
+    company_id = dispatcher["company_id"]
+    company_filter = "dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)"
     with database.get_conn() as conn:
         total_rev = conn.execute(
-            "SELECT SUM(CAST(total_rate_usd AS REAL)) FROM loads WHERE dispatcher_id = ? AND status = 'delivered'",
-            (dispatcher["id"],),
+            f"SELECT SUM(CAST(total_rate_usd AS REAL)) FROM loads WHERE {company_filter} AND status = 'delivered'",
+            (company_id,),
         ).fetchone()[0] or 0
 
         total_miles = conn.execute(
-            "SELECT SUM(CAST(miles AS REAL)) FROM loads WHERE dispatcher_id = ? AND status = 'delivered'",
-            (dispatcher["id"],),
+            f"SELECT SUM(CAST(miles AS REAL)) FROM loads WHERE {company_filter} AND status = 'delivered'",
+            (company_id,),
         ).fetchone()[0] or 0
 
         counts_rows = conn.execute(
-            "SELECT status, COUNT(*) as cnt FROM loads WHERE dispatcher_id = ? GROUP BY status",
-            (dispatcher["id"],),
+            f"SELECT status, COUNT(*) as cnt FROM loads WHERE {company_filter} GROUP BY status",
+            (company_id,),
         ).fetchall()
         counts = {r["status"]: r["cnt"] for r in counts_rows}
 
         monthly_rows = conn.execute(
-            """SELECT strftime('%Y-%m', created_at) as month,
+            f"""SELECT strftime('%Y-%m', created_at) as month,
                       SUM(CAST(total_rate_usd AS REAL)) as revenue,
                       COUNT(*) as loads
-               FROM loads WHERE dispatcher_id = ? AND status = 'delivered'
+               FROM loads WHERE {company_filter} AND status = 'delivered'
                GROUP BY month ORDER BY month ASC LIMIT 6""",
-            (dispatcher["id"],),
+            (company_id,),
         ).fetchall()
         monthly = [dict(r) for r in monthly_rows]
 
@@ -1131,7 +1133,7 @@ async def api_map_locations(authorization: str | None = Header(default=None)):
     if not cfg:
         return {"locations": []}
 
-    groups = database.get_groups(dispatcher["id"])
+    groups = database.get_groups(dispatcher["company_id"])
     groups_with_driver = [g for g in groups if g.get("eld_driver_id")]
     if not groups_with_driver:
         return {"locations": []}
@@ -1171,7 +1173,7 @@ async def api_upload_load_file(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     suffix = Path(file.filename).suffix.lower()
@@ -1195,7 +1197,7 @@ async def api_get_load_file(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     fp = load.get("file_path")
@@ -1216,7 +1218,7 @@ async def api_upload_pod(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     suffix = Path(file.filename).suffix.lower()
@@ -1241,7 +1243,7 @@ async def api_get_pods(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     return {"pods": database.get_load_pods(load_id)}
@@ -1254,7 +1256,7 @@ async def api_download_pod(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     pods = database.get_load_pods(load_id)
@@ -1271,7 +1273,7 @@ async def api_delete_pod(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     file_path = database.delete_load_pod(pod_id, load_id)
@@ -1297,12 +1299,12 @@ async def api_load_auto_send(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.get_load(load_id, dispatcher["id"])
+    load = database.get_load(load_id, dispatcher["company_id"])
     if not load:
         raise HTTPException(status_code=404, detail="Load not found")
     if body.hours < 0 or body.hours > 24:
         raise HTTPException(status_code=400, detail="Hours must be 0–24")
-    database.update_load_auto_send(load_id, dispatcher["id"], body.hours)
+    database.update_load_auto_send(load_id, dispatcher["company_id"], body.hours)
     return {"ok": True}
 
 
@@ -1312,7 +1314,7 @@ async def api_load_auto_send(
 async def api_alerts(authorization: str | None = Header(default=None)):
     from datetime import datetime, timezone
     dispatcher = require_dispatcher(authorization)
-    loads = database.get_loads(dispatcher["id"])
+    loads = database.get_loads(dispatcher["company_id"])
     now = datetime.now(timezone.utc)
     alerts = []
     for load in loads:

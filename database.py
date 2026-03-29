@@ -393,37 +393,44 @@ def link_group(dispatcher_id: int, chat_id: int, name: str) -> dict:
         return {"id": cur.lastrowid, "dispatcher_id": dispatcher_id, "chat_id": chat_id, "name": name}
 
 
-def get_groups(dispatcher_id: int) -> list[dict]:
+def get_groups(company_id: int) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM driver_groups WHERE dispatcher_id = ?", (dispatcher_id,)
+            """SELECT dg.* FROM driver_groups dg
+               JOIN dispatchers d ON dg.dispatcher_id = d.id
+               WHERE d.company_id = ?""",
+            (company_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def get_group(group_id: int, dispatcher_id: int) -> dict | None:
+def get_group(group_id: int, company_id: int) -> dict | None:
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT * FROM driver_groups WHERE id = ? AND dispatcher_id = ?",
-            (group_id, dispatcher_id),
+            """SELECT dg.* FROM driver_groups dg
+               JOIN dispatchers d ON dg.dispatcher_id = d.id
+               WHERE dg.id = ? AND d.company_id = ?""",
+            (group_id, company_id),
         ).fetchone()
         return dict(row) if row else None
 
 
-def rename_group(group_id: int, dispatcher_id: int, name: str) -> bool:
+def rename_group(group_id: int, company_id: int, name: str) -> bool:
     with get_conn() as conn:
         cur = conn.execute(
-            "UPDATE driver_groups SET name = ? WHERE id = ? AND dispatcher_id = ?",
-            (name, group_id, dispatcher_id),
+            """UPDATE driver_groups SET name = ? WHERE id = ?
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+            (name, group_id, company_id),
         )
         return cur.rowcount > 0
 
 
-def delete_group(group_id: int, dispatcher_id: int) -> bool:
+def delete_group(group_id: int, company_id: int) -> bool:
     with get_conn() as conn:
         cur = conn.execute(
-            "DELETE FROM driver_groups WHERE id = ? AND dispatcher_id = ?",
-            (group_id, dispatcher_id),
+            """DELETE FROM driver_groups WHERE id = ?
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+            (group_id, company_id),
         )
         return cur.rowcount > 0
 
@@ -456,10 +463,10 @@ def create_load(dispatcher_id: int, data: dict) -> dict:
                 now,
             ),
         )
-        return get_load(cur.lastrowid, dispatcher_id)
+        return get_load_by_id(cur.lastrowid)
 
 
-def get_load(load_id: int, dispatcher_id: int) -> dict | None:
+def get_load(load_id: int, company_id: int) -> dict | None:
     with get_conn() as conn:
         row = conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
@@ -467,13 +474,27 @@ def get_load(load_id: int, dispatcher_id: int) -> dict | None:
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
-               WHERE l.id = ? AND l.dispatcher_id = ?""",
-            (load_id, dispatcher_id),
+               WHERE l.id = ? AND d.company_id = ?""",
+            (load_id, company_id),
         ).fetchone()
         return dict(row) if row else None
 
 
-def get_loads(dispatcher_id: int) -> list[dict]:
+def get_load_by_id(load_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
+                      d.name as dispatcher_name
+               FROM loads l
+               LEFT JOIN driver_groups dg ON l.group_id = dg.id
+               LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
+               WHERE l.id = ?""",
+            (load_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_loads(company_id: int) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
@@ -481,33 +502,36 @@ def get_loads(dispatcher_id: int) -> list[dict]:
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
-               WHERE l.dispatcher_id = ?
+               WHERE d.company_id = ?
                ORDER BY l.created_at DESC""",
-            (dispatcher_id,),
+            (company_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def update_load_status(load_id: int, dispatcher_id: int, status: str, current_stop_index: int | None = None) -> bool:
+def update_load_status(load_id: int, company_id: int, status: str, current_stop_index: int | None = None) -> bool:
     with get_conn() as conn:
         if current_stop_index is not None:
             cur = conn.execute(
-                "UPDATE loads SET status = ?, current_stop_index = ? WHERE id = ? AND dispatcher_id = ?",
-                (status, current_stop_index, load_id, dispatcher_id),
+                """UPDATE loads SET status = ?, current_stop_index = ? WHERE id = ?
+                   AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+                (status, current_stop_index, load_id, company_id),
             )
         else:
             cur = conn.execute(
-                "UPDATE loads SET status = ? WHERE id = ? AND dispatcher_id = ?",
-                (status, load_id, dispatcher_id),
+                """UPDATE loads SET status = ? WHERE id = ?
+                   AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+                (status, load_id, company_id),
             )
         return cur.rowcount > 0
 
 
-def update_load_stop_index(load_id: int, dispatcher_id: int, index: int) -> bool:
+def update_load_stop_index(load_id: int, company_id: int, index: int) -> bool:
     with get_conn() as conn:
         cur = conn.execute(
-            "UPDATE loads SET current_stop_index = ? WHERE id = ? AND dispatcher_id = ?",
-            (index, load_id, dispatcher_id),
+            """UPDATE loads SET current_stop_index = ? WHERE id = ?
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+            (index, load_id, company_id),
         )
         return cur.rowcount > 0
 
@@ -522,11 +546,12 @@ def update_load_eta(load_id: int, eta_utc: str, eta_miles: float) -> bool:
         return cur.rowcount > 0
 
 
-def delete_load(load_id: int, dispatcher_id: int) -> bool:
+def delete_load(load_id: int, company_id: int) -> bool:
     with get_conn() as conn:
         cur = conn.execute(
-            "DELETE FROM loads WHERE id = ? AND dispatcher_id = ?",
-            (load_id, dispatcher_id),
+            """DELETE FROM loads WHERE id = ?
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+            (load_id, company_id),
         )
         return cur.rowcount > 0
 
@@ -540,11 +565,12 @@ def update_load_file(load_id: int, file_path: str) -> bool:
         return cur.rowcount > 0
 
 
-def update_load_auto_send(load_id: int, dispatcher_id: int, hours: int) -> bool:
+def update_load_auto_send(load_id: int, company_id: int, hours: int) -> bool:
     with get_conn() as conn:
         cur = conn.execute(
-            "UPDATE loads SET auto_send_hours = ? WHERE id = ? AND dispatcher_id = ?",
-            (hours, load_id, dispatcher_id),
+            """UPDATE loads SET auto_send_hours = ? WHERE id = ?
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+            (hours, load_id, company_id),
         )
         return cur.rowcount > 0
 

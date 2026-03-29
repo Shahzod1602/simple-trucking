@@ -1531,11 +1531,7 @@ Rate: {{total_rate_usd}}
     // ── Settings ──────────────────────────────────────────────────────────
     function doLogout() {
       localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(NAME_KEY);
-      token = null; userName = null; userRole = 'user';
-      document.getElementById('admin-nav').hidden = true;
-      document.getElementById('users-nav').hidden = true;
-      document.getElementById('send-btn').classList.remove('visible');
-      renderUser(); toast('Signed out');
+      window.location.href = '/';
     }
 
     document.getElementById('settings-logout-btn').addEventListener('click', doLogout);

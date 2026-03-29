@@ -792,6 +792,31 @@
           </div>
           <button class="btn-blue" id="ci-save-btn" style="margin-top:4px;">Save Company Info</button>
         </div>
+        <!-- Team Members — visible to admin/superadmin only -->
+        <div class="card settings-section" id="team-section" style="display:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div class="settings-title" style="margin-bottom:0;">Team Members</div>
+            <button class="btn-blue" onclick="openTeamAddPanel()" style="font-size:0.82rem;padding:7px 14px;">+ Add User</button>
+          </div>
+          <!-- Add user form -->
+          <div id="team-add-panel" style="display:none;background:var(--card-inner,var(--bg));border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">New User Account</div>
+            <div class="err-banner" id="tm-err"></div>
+            <div class="ok-banner" id="tm-ok"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="field"><label>Full Name</label><input type="text" id="tm-name" placeholder="Jane Doe" maxlength="80"/></div>
+              <div class="field"><label>Email</label><input type="email" id="tm-email" placeholder="jane@company.com"/></div>
+            </div>
+            <div class="field" style="max-width:280px;"><label>Password</label><input type="password" id="tm-pass" placeholder="At least 6 characters"/></div>
+            <div style="display:flex;gap:8px;margin-top:4px;">
+              <button class="btn-outline" onclick="closeTeamAddPanel()">Cancel</button>
+              <button class="btn-blue" id="tm-btn" onclick="doCreateTeamUser()">Create User</button>
+            </div>
+          </div>
+          <!-- Users list -->
+          <div id="team-users-list"></div>
+        </div>
+
         <div class="card settings-section">
           <div class="settings-title">Session</div>
           <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:14px;">Sign out from your account on this device.</p>
@@ -1522,6 +1547,76 @@ Rate: {{total_rate_usd}}
       ['pw-current','pw-new','pw-confirm'].forEach(id => document.getElementById(id).value = '');
       loadEldConfig();
       loadCompanyInfo();
+      // Show team section for admin/superadmin
+      const teamSection = document.getElementById('team-section');
+      if (userRole === 'admin' || userRole === 'superadmin') {
+        teamSection.style.display = '';
+        loadTeamUsers();
+      } else {
+        teamSection.style.display = 'none';
+      }
+    }
+
+    function openTeamAddPanel() {
+      ['tm-err','tm-ok'].forEach(id => { const el = document.getElementById(id); el.style.display='none'; el.textContent=''; });
+      ['tm-name','tm-email','tm-pass'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('team-add-panel').style.display = '';
+    }
+    function closeTeamAddPanel() {
+      document.getElementById('team-add-panel').style.display = 'none';
+    }
+
+    async function loadTeamUsers() {
+      const el = document.getElementById('team-users-list');
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;padding:8px 0;">Loading...</div>';
+      try {
+        const users = await (await fetch('/api/company/users', { headers: authH() })).json();
+        if (!users.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;padding:8px 0;">No team members yet.</div>'; return; }
+        el.innerHTML = users.map(u => `
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#f97316);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;color:#fff;flex-shrink:0;">${(u.name||'?')[0].toUpperCase()}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:0.875rem;color:var(--text);">${esc(u.name)}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);">${esc(u.email)}</div>
+            </div>
+            <span style="font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:100px;background:rgba(245,158,11,0.1);color:#92400e;">${u.role}</span>
+            <button onclick="deleteTeamUser(${u.id},'${esc(u.name)}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px;" title="Remove">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>`).join('');
+      } catch { el.innerHTML = '<div style="color:var(--error);font-size:0.85rem;">Failed to load users.</div>'; }
+    }
+
+    async function doCreateTeamUser() {
+      const name = document.getElementById('tm-name').value.trim();
+      const email = document.getElementById('tm-email').value.trim();
+      const pass = document.getElementById('tm-pass').value;
+      const errEl = document.getElementById('tm-err');
+      const okEl = document.getElementById('tm-ok');
+      [errEl, okEl].forEach(e => { e.style.display='none'; e.textContent=''; });
+      if (!name) { errEl.textContent='Enter full name'; errEl.style.display=''; return; }
+      if (!email || !email.includes('@')) { errEl.textContent='Invalid email'; errEl.style.display=''; return; }
+      if (pass.length < 6) { errEl.textContent='Password must be at least 6 characters'; errEl.style.display=''; return; }
+      const btn = document.getElementById('tm-btn');
+      btn.disabled = true; btn.textContent = 'Creating...';
+      try {
+        const r = await fetch('/api/company/users', {
+          method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password: pass })
+        });
+        const d = await r.json();
+        if (!r.ok) { errEl.textContent = d.detail || 'Error creating user'; errEl.style.display=''; return; }
+        okEl.textContent = `User "${name}" created! Password: ${pass}`; okEl.style.display='';
+        closeTeamAddPanel();
+        loadTeamUsers();
+      } catch { errEl.textContent='Connection error'; errEl.style.display=''; }
+      finally { btn.disabled=false; btn.textContent='Create User'; }
+    }
+
+    async function deleteTeamUser(id, name) {
+      if (!confirm(`Remove ${name}?`)) return;
+      await fetch(`/api/admin/dispatchers/${id}`, { method:'DELETE', headers: authH() });
+      loadTeamUsers();
     }
 
     async function loadCompanyInfo() {

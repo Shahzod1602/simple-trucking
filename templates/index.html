@@ -575,6 +575,9 @@
       <button class="nav-item" data-page="settings">
         <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Settings
       </button>
+      <button class="nav-item" data-page="paystructure" id="paystructure-nav" hidden>
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span> Pay Structure
+      </button>
       <button class="nav-item" data-page="users" id="users-nav" hidden>
         <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Users
       </button>
@@ -717,6 +720,48 @@
         <div id="history-content"></div>
       </div>
 
+      <!-- ── Pay Structure ── -->
+      <div class="page" id="page-paystructure">
+        <div class="page-header">
+          <h1 class="page-title">Pay Structure</h1>
+          <p class="page-subtitle">Set commission tiers for your team</p>
+        </div>
+
+        <!-- Add tier form -->
+        <div class="card" style="margin-bottom:16px;">
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">Add Tier</div>
+          <div class="err-banner" id="tier-err"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
+            <div class="field">
+              <label>Worker (leave blank = company-wide)</label>
+              <select id="tier-worker"><option value="">Company-wide</option></select>
+            </div>
+            <div class="field">
+              <label>Commission %</label>
+              <input type="number" id="tier-pct" placeholder="e.g. 3" step="0.1" min="0.1" max="100" />
+            </div>
+            <div class="field">
+              <label>Min Gross ($)</label>
+              <input type="number" id="tier-min-gross" placeholder="e.g. 10000" min="0" />
+            </div>
+            <div class="field">
+              <label>Max Gross ($) — blank = no limit</label>
+              <input type="number" id="tier-max-gross" placeholder="e.g. 20000 (optional)" min="0" />
+            </div>
+            <div class="field">
+              <label>Min RPM ($)</label>
+              <input type="number" id="tier-min-rpm" placeholder="e.g. 2.3" step="0.01" min="0" />
+            </div>
+          </div>
+          <button class="btn-blue" id="tier-add-btn" style="margin-top:4px;">Add Tier</button>
+        </div>
+
+        <!-- Tiers list -->
+        <div class="card">
+          <div id="pay-tiers-list"></div>
+        </div>
+      </div>
+
       <!-- ── Settings ── -->
       <div class="page" id="page-settings">
         <div class="page-header">
@@ -820,48 +865,6 @@
           </div>
           <!-- Users list -->
           <div id="team-users-list"></div>
-        </div>
-
-        <!-- Pay Structure — visible to admin/superadmin only -->
-        <div class="card settings-section" id="pay-structure-section" style="display:none">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <div class="settings-title" style="margin-bottom:0;">Pay Structure</div>
-          </div>
-          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Set commission tiers for your team. Worker-specific tiers override company-wide tiers.</p>
-
-          <!-- Add tier form -->
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
-            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Add Tier</div>
-            <div class="err-banner" id="tier-err"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
-              <div class="field">
-                <label>Worker (leave blank = company-wide)</label>
-                <select id="tier-worker">
-                  <option value="">Company-wide</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Commission %</label>
-                <input type="number" id="tier-pct" placeholder="e.g. 3" step="0.1" min="0.1" max="100" />
-              </div>
-              <div class="field">
-                <label>Min Gross ($)</label>
-                <input type="number" id="tier-min-gross" placeholder="e.g. 10000" min="0" />
-              </div>
-              <div class="field">
-                <label>Max Gross ($) — blank = no limit</label>
-                <input type="number" id="tier-max-gross" placeholder="e.g. 20000 (optional)" min="0" />
-              </div>
-              <div class="field">
-                <label>Min RPM ($)</label>
-                <input type="number" id="tier-min-rpm" placeholder="e.g. 2.3" step="0.01" min="0" />
-              </div>
-            </div>
-            <button class="btn-blue" id="tier-add-btn" style="margin-top:4px;">Add Tier</button>
-          </div>
-
-          <!-- Tiers list -->
-          <div id="pay-tiers-list"></div>
         </div>
 
         <div class="card settings-section">
@@ -1175,6 +1178,7 @@ Rate: {{total_rate_usd}}
         renderUser();
         if (userRole === 'admin') {
           document.getElementById('users-nav').hidden = false;
+          document.getElementById('paystructure-nav').hidden = false;
         }
         if (userRole === 'superadmin') document.getElementById('admin-nav').hidden = false;
         startAlertPolling();
@@ -1205,7 +1209,7 @@ Rate: {{total_rate_usd}}
     }
 
     // ── Navigation ────────────────────────────────────────────────────────
-    const pageTitles = { extract:'Extract', loads:'Loads', groups:'Groups', history:'History', settings:'Settings', admin:'Admin', analytics:'Analytics', map:'Map', telegram:'Telegram' };
+    const pageTitles = { extract:'Extract', loads:'Loads', groups:'Groups', history:'History', settings:'Settings', admin:'Admin', analytics:'Analytics', map:'Map', telegram:'Telegram', paystructure:'Pay Structure' };
     function goTo(page) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
@@ -1223,7 +1227,8 @@ Rate: {{total_rate_usd}}
       if (page === 'users')     loadUsersPage();
       if (page === 'analytics') loadAnalyticsPage();
       if (page === 'map')       loadMapPage();
-      if (page === 'telegram')  loadTgGroups();
+      if (page === 'telegram')    loadTgGroups();
+      if (page === 'paystructure') loadPayStructurePage();
     }
     document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => goTo(b.dataset.page)));
     function closeSidebar() {
@@ -1596,15 +1601,11 @@ Rate: {{total_rate_usd}}
       document.getElementById('eld-section').style.display = isAdmin ? '' : 'none';
       document.getElementById('company-info-section').style.display = isAdmin ? '' : 'none';
       const teamSection = document.getElementById('team-section');
-      const paySection = document.getElementById('pay-structure-section');
       if (isAdmin) {
         teamSection.style.display = '';
-        paySection.style.display = '';
         loadTeamUsers();
-        loadPayTiers();
       } else {
         teamSection.style.display = 'none';
-        paySection.style.display = 'none';
       }
     }
 
@@ -1668,6 +1669,11 @@ Rate: {{total_rate_usd}}
       if (!confirm(`Remove ${name}?`)) return;
       await fetch(`/api/admin/dispatchers/${id}`, { method:'DELETE', headers: authH() });
       loadTeamUsers();
+    }
+
+    // ── Pay Structure Page ────────────────────────────────────────────────────
+    async function loadPayStructurePage() {
+      await loadPayTiers();
     }
 
     // ── Pay Tiers ─────────────────────────────────────────────────────────────

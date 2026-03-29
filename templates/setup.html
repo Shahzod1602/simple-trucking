@@ -126,15 +126,8 @@
   </a>
 
   <div class="card">
-    <div class="tab-bar">
-      <button class="tab-btn active" data-tab="login">Sign In</button>
-      <button class="tab-btn" data-tab="register">Sign Up</button>
-    </div>
-
     <div class="form-body">
-
-      <!-- Login -->
-      <div class="panel active" id="panel-login">
+      <div id="panel-login">
         <div class="err-banner" id="login-err"></div>
         <div class="field">
           <label>Email</label>
@@ -145,36 +138,7 @@
           <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" />
         </div>
         <button class="btn-submit" id="login-btn">Sign In</button>
-        <div class="form-footer">
-          Don't have an account? <a href="#" id="go-register">Sign up</a>
-        </div>
       </div>
-
-      <!-- Register -->
-      <div class="panel" id="panel-register">
-        <div class="err-banner" id="reg-err"></div>
-        <div class="field">
-          <label>Full Name</label>
-          <input type="text" id="r-name" placeholder="e.g. John Smith" maxlength="80" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label>Email</label>
-          <input type="email" id="r-email" placeholder="you@example.com" autocomplete="email" />
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <input type="password" id="r-pass" placeholder="At least 6 characters" autocomplete="new-password" />
-        </div>
-        <div class="field">
-          <label>Confirm Password</label>
-          <input type="password" id="r-pass2" placeholder="Repeat your password" autocomplete="new-password" />
-        </div>
-        <button class="btn-submit" id="reg-btn">Create Account</button>
-        <div class="form-footer">
-          Already have an account? <a href="#" id="go-login">Sign in</a>
-        </div>
-      </div>
-
     </div>
   </div>
 
@@ -193,25 +157,7 @@
     });
 
     if (localStorage.getItem('st_token')) window.location.href = '/app';
-    if (location.hash === '#register') switchTab('register');
 
-    // ── Tab switching ─────────────────────────────────────────────────────
-    function switchTab(tab) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-      document.getElementById('panel-login').classList.toggle('active', tab === 'login');
-      document.getElementById('panel-register').classList.toggle('active', tab === 'register');
-      clearErrors();
-    }
-    document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
-    document.getElementById('go-register').addEventListener('click', e => { e.preventDefault(); switchTab('register'); });
-    document.getElementById('go-login').addEventListener('click',    e => { e.preventDefault(); switchTab('login'); });
-
-    function clearErrors() {
-      ['login-err','reg-err'].forEach(id => {
-        document.getElementById(id).style.display = 'none';
-        document.getElementById(id).textContent = '';
-      });
-    }
     function showErr(id, msg) {
       const el = document.getElementById(id);
       el.textContent = msg; el.style.display = 'block';
@@ -246,42 +192,6 @@
 
     document.getElementById('login-btn').addEventListener('click', doLogin);
     document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-
-    // ── Register ──────────────────────────────────────────────────────────
-    async function doRegister() {
-      const name  = document.getElementById('r-name').value.trim();
-      const email = document.getElementById('r-email').value.trim();
-      const pass  = document.getElementById('r-pass').value;
-      const pass2 = document.getElementById('r-pass2').value;
-
-      if (!name)                        { showErr('reg-err', 'Please enter your name'); return; }
-      if (!email || !email.includes('@')){ showErr('reg-err', 'Invalid email address'); return; }
-      if (pass.length < 6)              { showErr('reg-err', 'Password must be at least 6 characters'); return; }
-      if (pass !== pass2)               { showErr('reg-err', 'Passwords do not match'); return; }
-
-      const btn = document.getElementById('reg-btn');
-      btn.disabled = true; btn.textContent = 'Creating account...';
-
-      try {
-        const r = await fetch('/api/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password: pass }),
-        });
-        const data = await r.json();
-        if (!r.ok) { showErr('reg-err', data.detail || 'An error occurred'); return; }
-        localStorage.setItem('st_token', data.token);
-        localStorage.setItem('st_name', data.name);
-        window.location.href = '/app';
-      } catch {
-        showErr('reg-err', 'Connection error. Please try again.');
-      } finally {
-        btn.disabled = false; btn.textContent = 'Create Account';
-      }
-    }
-
-    document.getElementById('reg-btn').addEventListener('click', doRegister);
-    document.getElementById('r-pass2').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
   </script>
 </body>
 </html>

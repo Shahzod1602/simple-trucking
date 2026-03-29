@@ -732,7 +732,7 @@
           <div class="field"><label>Confirm New Password</label><input type="password" id="pw-confirm" placeholder="Repeat new password" /></div>
           <button class="btn-blue" id="pw-save-btn" style="margin-top:4px;">Update Password</button>
         </div>
-        <div class="card settings-section">
+        <div class="card settings-section" id="eld-section">
           <div class="settings-title">ELD Integration</div>
           <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Connect your ELD account (Samsara or Motive) to enable automatic ETA calculation when sending ratecons to driver groups.</p>
           <div class="err-banner" id="eld-err"></div>
@@ -763,7 +763,7 @@
             <button class="btn-outline" id="eld-del-btn" style="display:none;">Disconnect ELD</button>
           </div>
         </div>
-        <div class="card settings-section">
+        <div class="card settings-section" id="company-info-section">
           <div class="settings-title">Company Info (for Invoices)</div>
           <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">This info will appear on your invoices.</p>
           <div class="err-banner" id="ci-err"></div>
@@ -1543,9 +1543,12 @@ Rate: {{total_rate_usd}}
       ['pw-current','pw-new','pw-confirm'].forEach(id => document.getElementById(id).value = '');
       loadEldConfig();
       loadCompanyInfo();
-      // Show team section for admin/superadmin
+      // Show admin-only sections
+      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+      document.getElementById('eld-section').style.display = isAdmin ? '' : 'none';
+      document.getElementById('company-info-section').style.display = isAdmin ? '' : 'none';
       const teamSection = document.getElementById('team-section');
-      if (userRole === 'admin' || userRole === 'superadmin') {
+      if (isAdmin) {
         teamSection.style.display = '';
         loadTeamUsers();
       } else {

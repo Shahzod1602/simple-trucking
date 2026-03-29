@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SimpleTrucking — AI Tools for Trucking Dispatchers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f8fafc;
+      --bg2: #f1f5f9;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --primary: #f59e0b;
+      --primary-dark: #d97706;
+      --accent: #f97316;
+      --success: #059669;
+      --glow: rgba(245,158,11,0.12);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 6%; height: 68px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 1.25rem; font-weight: 800; color: #0f172a; text-decoration: none;
+    }
+    .nav-logo .logo-icon {
+      width: 34px; height: 34px; border-radius: 8px;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .nav-links {
+      display: flex; align-items: center; gap: 32px; list-style: none;
+    }
+    .nav-links a {
+      color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .btn-ghost {
+      background: none; border: 1px solid var(--border); color: var(--text);
+      padding: 8px 20px; border-radius: 8px; font-size: 0.875rem; font-weight: 500;
+      cursor: pointer; text-decoration: none; transition: all 0.2s;
+    }
+    .btn-ghost:hover { border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.04); }
+    .btn-primary {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #fff; border: none;
+      padding: 9px 22px; border-radius: 8px; font-size: 0.875rem; font-weight: 600;
+      cursor: pointer; text-decoration: none; transition: opacity 0.2s;
+    }
+    .btn-primary:hover { opacity: 0.88; }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 40px 6%;
+    }
+    .stats-inner {
+      max-width: 960px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-around; gap: 20px;
+      flex-wrap: wrap;
+    }
+    .stat-item { text-align: center; }
+    .stat-num {
+      font-size: 2.2rem; font-weight: 900;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-label { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
+    .stat-divider {
+      width: 1px; height: 48px; background: var(--border);
+    }
+
+    /* ── SECTIONS ── */
+    section { padding: 100px 6%; }
+    .section-label {
+      display: inline-block;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--primary);
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 800; line-height: 1.2;
+      letter-spacing: -0.02em; color: #0f172a;
+      max-width: 640px; margin-bottom: 20px;
+    }
+    .section-sub {
+      font-size: 1.05rem; color: var(--muted); max-width: 520px; line-height: 1.7;
+    }
+    .centered { text-align: center; align-items: center; }
+    .centered .section-title, .centered .section-sub { margin-left: auto; margin-right: auto; }
+
+    /* ── DEMO PREVIEW ── */
+    .demo-preview {
+      max-width: 1100px; margin: 64px auto 0;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 16px 48px rgba(0,0,0,0.1);
+    }
+    .demo-topbar {
+      background: #f8fafc; padding: 14px 20px;
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red { background: #ef4444; }
+    .dot-yellow { background: #f59e0b; }
+    .dot-green { background: #10b981; }
+    .demo-url {
+      margin-left: 16px; background: rgba(0,0,0,0.04);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 4px 16px; font-size: 0.8rem; color: var(--muted);
+    }
+    .demo-body {
+      display: grid; grid-template-columns: 1fr 1fr; min-height: 340px;
+    }
+    .demo-left {
+      padding: 32px; border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .demo-upload-area {
+      flex: 1; border: 2px dashed rgba(245,158,11,0.3);
+      border-radius: 12px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 12px; color: var(--muted); font-size: 0.9rem;
+      background: rgba(245,158,11,0.03);
+      min-height: 180px;
+    }
+    .upload-icon { font-size: 2.5rem; }
+    .demo-file-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2);
+      padding: 8px 14px; border-radius: 8px; font-size: 0.8rem; color: #34d399;
+      font-weight: 600;
+    }
+    .demo-right {
+      padding: 32px; display: flex; flex-direction: column; gap: 14px;
+    }
+    .demo-right-title { font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .field-row {
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .field-label { font-size: 0.72rem; color: var(--muted); font-weight: 500; }
+    .field-value {
+      background: rgba(0,0,0,0.03); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 12px;
+      font-size: 0.85rem; color: var(--text); font-weight: 500;
+    }
+    .field-value.highlight {
+      border-color: rgba(245,158,11,0.3); color: #fbbf24;
+      background: rgba(245,158,11,0.06);
+    }
+    .demo-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* ── FEATURES ── */
+    .features-grid {
+      max-width: 1100px; margin: 64px auto 0;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    .feature-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px;
+      transition: all 0.3s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .feature-card:hover {
+      border-color: rgba(245,158,11,0.4);
+      box-shadow: 0 8px 24px rgba(245,158,11,0.12);
+      transform: translateY(-2px);
+    }
+    .feature-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 18px;
+    }
+    .feature-card h3 { font-size: 1rem; font-weight: 700; color: #0f172a; margin-bottom: 10px; }
+    .feature-card p { font-size: 0.875rem; color: var(--muted); line-height: 1.65; }
+
+    /* ── HOW IT WORKS ── */
+    .how-section { background: var(--bg2); }
+    .steps {
+      max-width: 1000px; margin: 64px auto 0;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px;
+      position: relative;
+    }
+    .steps::before {
+      content: '';
+      position: absolute; top: 28px; left: calc(16.66% + 20px); right: calc(16.66% + 20px);
+      height: 1px; background: linear-gradient(90deg, var(--primary), var(--accent));
+      opacity: 0.3;
+    }
+    .step { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .step-num {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.15));
+      border: 2px solid rgba(245,158,11,0.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; font-weight: 800; color: #fbbf24;
+    }
+    .step h3 { font-size: 1rem; font-weight: 700; color: #0f172a; }
+    .step p { font-size: 0.875rem; color: var(--muted); line-height: 1.65; }
+
+    /* ── INTEGRATIONS ── */
+    .integrations-row {
+      max-width: 900px; margin: 48px auto 0;
+      display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap;
+    }
+    .integration-badge {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--card); border: 1px solid var(--border);
+      padding: 12px 22px; border-radius: 10px;
+      font-size: 0.875rem; font-weight: 600; color: var(--text);
+    }
+    .integration-badge .int-icon { font-size: 1.3rem; }
+
+    /* ── PRICING ── */
+    .pricing-grid {
+      max-width: 960px; margin: 64px auto 0;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    .price-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px;
+      display: flex; flex-direction: column;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .price-card.featured {
+      border-color: rgba(245,158,11,0.4);
+      background: linear-gradient(180deg, rgba(245,158,11,0.06) 0%, var(--card) 100%);
+      box-shadow: 0 0 60px rgba(245,158,11,0.1);
+      position: relative;
+    }
+    .featured-badge {
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #fff; font-size: 0.72rem; font-weight: 700;
+      padding: 4px 16px; border-radius: 100px; white-space: nowrap;
+    }
+    .price-plan { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 12px; }
+    .price-amount { display: flex; align-items: flex-end; gap: 4px; margin-bottom: 8px; }
+    .price-amount .amount { font-size: 2.8rem; font-weight: 900; color: #0f172a; line-height: 1; }
+    .price-amount .period { font-size: 0.875rem; color: var(--muted); margin-bottom: 6px; }
+    .price-desc { font-size: 0.85rem; color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+    .price-divider { height: 1px; background: var(--border); margin-bottom: 24px; }
+    .price-features { list-style: none; display: flex; flex-direction: column; gap: 12px; flex: 1; margin-bottom: 28px; }
+    .price-features li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 0.875rem; color: var(--text);
+    }
+    .price-features li::before { content: '✓'; color: var(--success); font-weight: 700; flex-shrink: 0; }
+    .btn-plan {
+      width: 100%; padding: 12px; border-radius: 9px;
+      font-size: 0.9rem; font-weight: 700; cursor: pointer;
+      text-decoration: none; text-align: center; transition: all 0.2s;
+    }
+    .btn-plan-ghost {
+      background: rgba(0,0,0,0.03); border: 1px solid var(--border); color: var(--text);
+    }
+    .btn-plan-ghost:hover { background: rgba(0,0,0,0.06); }
+    .btn-plan-primary {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      border: none; color: #fff;
+      box-shadow: 0 4px 20px rgba(245,158,11,0.3);
+    }
+    .btn-plan-primary:hover { opacity: 0.88; }
+
+    /* ── TESTIMONIALS ── */
+    .testimonials-section { background: var(--bg2); }
+    .testimonials-grid {
+      max-width: 1000px; margin: 64px auto 0;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    .testimonial-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .stars { color: #f59e0b; font-size: 1rem; margin-bottom: 14px; letter-spacing: 2px; }
+    .testimonial-text { font-size: 0.9rem; color: var(--text); line-height: 1.7; margin-bottom: 20px; font-style: italic; }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .author-avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.9rem; color: #fff;
+    }
+    .author-name { font-size: 0.875rem; font-weight: 700; color: #0f172a; }
+    .author-role { font-size: 0.775rem; color: var(--muted); }
+
+    /* ── CTA SECTION ── */
+    .cta-section {
+      text-align: center; padding: 120px 6%;
+      position: relative; overflow: hidden;
+    }
+    .cta-section::before {
+      content: '';
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 800px; height: 400px;
+      background: radial-gradient(ellipse, rgba(245,158,11,0.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-section h2 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 900; line-height: 1.15;
+      letter-spacing: -0.03em; color: #0f172a; max-width: 680px; margin: 0 auto 20px;
+    }
+    .cta-section p { font-size: 1.05rem; color: var(--muted); margin-bottom: 40px; }
+    .cta-actions { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--bg2); border-top: 1px solid var(--border);
+      padding: 60px 6% 32px;
+    }
+    .footer-top {
+      display: flex; justify-content: space-between; gap: 40px;
+      margin-bottom: 48px; flex-wrap: wrap;
+    }
+    .footer-brand { max-width: 280px; }
+    .footer-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 1.1rem; font-weight: 800; color: #0f172a;
+      text-decoration: none; margin-bottom: 14px;
+    }
+    .footer-logo .logo-icon {
+      width: 30px; height: 30px; border-radius: 7px;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      display: flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+    .footer-brand p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+    .footer-col h4 { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 16px; }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .footer-col ul a { font-size: 0.875rem; color: var(--muted); text-decoration: none; transition: color 0.2s; }
+    .footer-col ul a:hover { color: var(--text); }
+    .footer-bottom {
+      border-top: 1px solid var(--border); padding-top: 28px;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+      font-size: 0.8rem; color: var(--muted);
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      nav { padding: 0 5%; }
+      .nav-links { display: none; }
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .steps { grid-template-columns: 1fr; }
+      .steps::before { display: none; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+      .testimonials-grid { grid-template-columns: 1fr; max-width: 480px; }
+      .demo-body { grid-template-columns: 1fr; }
+      .demo-right { display: none; }
+      .stat-divider { display: none; }
+      .footer-top { flex-direction: column; }
+    }
+    @media (max-width: 600px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .hero { padding: 100px 5% 60px; }
+      section { padding: 72px 5%; }
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.6s ease both; }
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+
+    /* ── HERO SPLIT ── */
+    .hero {
+      min-height: 100vh;
+      display: grid; grid-template-columns: 1fr 1fr;
+      align-items: center; gap: 60px;
+      padding: 120px 8% 80px;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; top: -200px; right: -200px;
+      width: 700px; height: 700px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(245,158,11,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-left { display: flex; flex-direction: column; align-items: flex-start; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2);
+      padding: 6px 14px; border-radius: 100px;
+      font-size: 0.78rem; font-weight: 600; color: #92400e;
+      margin-bottom: 24px;
+    }
+    .hero-badge span { width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; display: inline-block; }
+    .hero h1 {
+      font-size: clamp(2.2rem, 4vw, 3.6rem);
+      font-weight: 900; line-height: 1.1;
+      letter-spacing: -0.03em; color: #0f172a;
+      margin-bottom: 20px;
+    }
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-left p { font-size: 1.05rem; color: var(--muted); margin-bottom: 36px; line-height: 1.7; }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* ── HERO VISUAL ── */
+    .hero-visual { position: relative; display: flex; align-items: center; justify-content: center; }
+    .hero-card {
+      background: #fff; border: 1px solid var(--border); border-radius: 16px;
+      padding: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      width: 100%;
+    }
+    .hero-card-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+      padding-bottom: 16px; border-bottom: 1px solid var(--border);
+    }
+    .hc-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hc-title { font-weight: 700; font-size: 0.9rem; color: #0f172a; }
+    .hc-sub { font-size: 0.75rem; color: var(--muted); }
+    .hc-status {
+      margin-left: auto; background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.2); color: #059669;
+      font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 100px;
+    }
+    .hc-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .hc-field-label { font-size: 0.68rem; color: var(--muted); font-weight: 500; margin-bottom: 3px; }
+    .hc-field-val {
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 6px;
+      padding: 7px 10px; font-size: 0.8rem; font-weight: 600; color: #0f172a;
+    }
+    .hc-field-val.hl { border-color: rgba(245,158,11,0.3); color: #d97706; background: rgba(245,158,11,0.05); }
+    .hc-route {
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+    }
+    .hc-route-row { display: flex; align-items: center; gap: 10px; }
+    .hc-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .hc-dot-from { background: #f59e0b; }
+    .hc-dot-to { background: #10b981; }
+    .hc-line { width: 1px; height: 20px; background: var(--border); margin-left: 4.5px; }
+    .hc-city { font-size: 0.82rem; font-weight: 600; color: #0f172a; }
+    .hc-date { font-size: 0.72rem; color: var(--muted); }
+
+    /* floating badges */
+    .float-badge {
+      position: absolute; background: #fff; border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.78rem; font-weight: 600; color: #0f172a;
+    }
+    .float-badge-1 { top: -20px; right: -16px; }
+    .float-badge-2 { bottom: 10px; left: -24px; }
+    .float-icon { font-size: 1.1rem; }
+
+    /* ── BENTO GRID ── */
+    .bento-grid {
+      max-width: 1100px; margin: 64px auto 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: auto auto;
+      gap: 20px;
+    }
+    .bento-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 32px;
+      transition: all 0.3s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      overflow: hidden; position: relative;
+    }
+    .bento-card:hover { box-shadow: 0 8px 32px rgba(0,0,0,0.1); transform: translateY(-2px); }
+    .bento-card.big { grid-column: span 2; }
+    .bento-card.tall { grid-row: span 2; }
+    .bento-tag {
+      display: inline-block; font-size: 0.7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 3px 10px; border-radius: 100px; margin-bottom: 14px;
+    }
+    .tag-amber { background: rgba(245,158,11,0.1); color: #92400e; }
+    .tag-green { background: rgba(16,185,129,0.1); color: #065f46; }
+    .tag-blue  { background: rgba(59,130,246,0.1); color: #1e3a8a; }
+    .tag-purple{ background: rgba(139,92,246,0.1); color: #4c1d95; }
+    .bento-card h3 { font-size: 1.15rem; font-weight: 800; color: #0f172a; margin-bottom: 10px; }
+    .bento-card > p { font-size: 0.875rem; color: var(--muted); line-height: 1.65; }
+
+    /* bento illustrations */
+    .bento-illus { margin-top: 24px; }
+    .doc-flow {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .doc-box {
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 16px; flex: 1; min-width: 0;
+    }
+    .doc-box-title { font-size: 0.68rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .doc-line { height: 6px; border-radius: 3px; background: var(--border); margin-bottom: 5px; }
+    .doc-line.short { width: 60%; }
+    .doc-line.medium { width: 80%; }
+    .doc-line.hl { background: rgba(245,158,11,0.3); }
+    .flow-arrow {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; box-shadow: 0 4px 12px rgba(245,158,11,0.3);
+    }
+    .extracted-fields { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .ext-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 6px;
+      padding: 6px 10px;
+    }
+    .ext-key { font-size: 0.68rem; color: var(--muted); }
+    .ext-val { font-size: 0.75rem; font-weight: 700; color: #d97706; }
+
+    .status-list { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+    .status-row {
+      display: flex; align-items: center; gap: 10px;
+      background: #f8fafc; border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px;
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .s-green { background: #10b981; }
+    .s-amber { background: #f59e0b; }
+    .s-blue  { background: #3b82f6; }
+    .status-text { font-size: 0.8rem; font-weight: 600; color: #0f172a; flex: 1; }
+    .status-time { font-size: 0.7rem; color: var(--muted); }
+    .status-badge {
+      font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 100px;
+    }
+    .sb-delivered { background: rgba(16,185,129,0.1); color: #059669; }
+    .sb-transit   { background: rgba(245,158,11,0.1); color: #d97706; }
+    .sb-pickup    { background: rgba(59,130,246,0.1); color: #1d4ed8; }
+
+    .chat-list { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+    .chat-bubble {
+      max-width: 85%; padding: 10px 14px; border-radius: 12px;
+      font-size: 0.8rem; line-height: 1.5;
+    }
+    .chat-in {
+      background: #f1f5f9; color: #0f172a; border-radius: 12px 12px 12px 4px;
+      align-self: flex-start;
+    }
+    .chat-out {
+      background: linear-gradient(135deg, #f59e0b, #f97316); color: #fff;
+      border-radius: 12px 12px 4px 12px; align-self: flex-end;
+    }
+    .chat-label { font-size: 0.65rem; color: var(--muted); margin-bottom: 4px; }
+
+    .small-stat { text-align: center; padding: 8px 0; }
+    .small-stat .num { font-size: 2.8rem; font-weight: 900; background: linear-gradient(135deg,#f59e0b,#f97316); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    .small-stat .lbl { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
+
+    .tg-demo {
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; margin-top: 20px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .tg-header { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    .tg-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,#0088cc,#00aced); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; }
+    .tg-name { font-size: 0.82rem; font-weight: 700; color: #0f172a; }
+    .tg-status { font-size: 0.7rem; color: #10b981; }
+    .tg-msg { font-size: 0.78rem; color: var(--muted); }
+    .tg-result { background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.2); border-radius: 8px; padding: 10px; }
+    .tg-result-row { display: flex; justify-content: space-between; font-size: 0.75rem; padding: 3px 0; }
+    .tg-result-key { color: var(--muted); }
+    .tg-result-val { font-weight: 700; color: #0f172a; }
+
+    /* ── TRUST STRIP ── */
+    .trust-strip {
+      background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      padding: 28px 6%;
+    }
+    .trust-inner {
+      max-width: 960px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
+    }
+    .trust-label { font-size: 0.8rem; color: var(--muted); font-weight: 500; margin-right: 8px; white-space: nowrap; }
+    .trust-logo {
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 20px; font-size: 0.82rem; font-weight: 700; color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      nav { padding: 0 5%; }
+      .nav-links { display: none; }
+      .hero { grid-template-columns: 1fr; padding: 100px 5% 60px; gap: 40px; }
+      .hero-visual { display: none; }
+      .bento-grid { grid-template-columns: 1fr; }
+      .bento-card.big { grid-column: span 1; }
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .steps { grid-template-columns: 1fr; }
+      .steps::before { display: none; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+      .testimonials-grid { grid-template-columns: 1fr; max-width: 480px; }
+      .stat-divider { display: none; }
+      .footer-top { flex-direction: column; }
+    }
+    @media (max-width: 600px) {
+      .features-grid { grid-template-columns: 1fr; }
+      section { padding: 72px 5%; }
+      .doc-flow { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a href="#" class="nav-logo">
+      <div class="logo-icon">🚛</div>
+      SimpleTrucking
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+    </ul>
+    <div class="nav-cta">
+      <a href="/login" class="btn-ghost">Log in</a>
+      <a href="#pricing" class="btn-primary">Get started free</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-left fade-up">
+      <div class="hero-badge">
+        <span></span> AI Tools for Trucking Dispatchers
+      </div>
+      <h1>Smarter Dispatching<br><span class="gradient">Powered by AI</span></h1>
+      <p>Extract rate confirmations in seconds, get AI-powered load updates automatically, and let your AI Dispatcher handle routine work — so you focus on moving freight.</p>
+      <div class="hero-actions">
+        <a href="#pricing" class="btn-hero">Start for free →</a>
+        <a href="#how-it-works" class="btn-hero-ghost">See how it works</a>
+      </div>
+    </div>
+
+    <!-- Hero Visual -->
+    <div class="hero-visual fade-up delay-2">
+      <div class="hero-card">
+        <div class="hero-card-header">
+          <div class="hc-icon">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div>
+            <div class="hc-title">ratecon_load_2847.pdf</div>
+            <div class="hc-sub">Extracted in 2.1s</div>
+          </div>
+          <div class="hc-status">✓ Done</div>
+        </div>
+        <div class="hc-fields">
+          <div>
+            <div class="hc-field-label">Load #</div>
+            <div class="hc-field-val hl">#2847</div>
+          </div>
+          <div>
+            <div class="hc-field-label">Total Rate</div>
+            <div class="hc-field-val hl">$3,450.00</div>
+          </div>
+          <div>
+            <div class="hc-field-label">Broker</div>
+            <div class="hc-field-val">Echo Global</div>
+          </div>
+          <div>
+            <div class="hc-field-label">Commodity</div>
+            <div class="hc-field-val">General Freight</div>
+          </div>
+        </div>
+        <div class="hc-route">
+          <div class="hc-route-row">
+            <div class="hc-dot hc-dot-from"></div>
+            <div>
+              <div class="hc-city">Chicago, IL 60601</div>
+              <div class="hc-date">Pickup · Jan 18, 08:00</div>
+            </div>
+          </div>
+          <div class="hc-line"></div>
+          <div class="hc-route-row">
+            <div class="hc-dot hc-dot-to"></div>
+            <div>
+              <div class="hc-city">Dallas, TX 75201</div>
+              <div class="hc-date">Delivery · Jan 20, 17:00</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="float-badge float-badge-1">
+        <span class="float-icon">⚡</span> AI extracted in 2.1s
+      </div>
+      <div class="float-badge float-badge-2">
+        <span class="float-icon">🤖</span> AI Dispatcher online
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <div class="stats-bar">
+    <div class="stats-inner">
+      <div class="stat-item">
+        <div class="stat-num">2.1s</div>
+        <div class="stat-label">RateCon extracted in</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-num">99%</div>
+        <div class="stat-label">Extraction accuracy</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-num">3</div>
+        <div class="stat-label">AI-powered tools</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-num">10x</div>
+        <div class="stat-label">Faster than manual work</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRUST STRIP -->
+  <div class="trust-strip">
+    <div class="trust-inner">
+      <span class="trust-label">Trusted by dispatch companies across the US</span>
+      <div class="trust-logo">MJ Dispatch</div>
+      <div class="trust-logo">FastLane Carriers</div>
+      <div class="trust-logo">K&amp;D Freight</div>
+      <div class="trust-logo">Apex Logistics</div>
+      <div class="trust-logo">ProLoad Inc.</div>
+    </div>
+  </div>
+
+  <!-- FEATURES BENTO -->
+  <section id="features">
+    <div style="text-align:center">
+      <div class="section-label">Features</div>
+      <h2 class="section-title" style="margin:0 auto 16px">Three AI tools, one platform</h2>
+      <p class="section-sub" style="margin:0 auto">Built for trucking dispatchers. Every feature saves real time every single day.</p>
+    </div>
+
+    <div class="bento-grid">
+
+      <!-- RateCon Extractor — big card -->
+      <div class="bento-card big">
+        <div class="bento-tag tag-amber">RateCon Extractor</div>
+        <h3>Upload any ratecon — get structured data instantly</h3>
+        <p>PDF, scanned image, photo, even a blurry fax. AI reads it and returns load number, rate, origin, destination, broker, and dates. No typing ever.</p>
+        <div class="bento-illus">
+          <div class="doc-flow">
+            <div class="doc-box">
+              <div class="doc-box-title">ratecon.pdf</div>
+              <div class="doc-line medium"></div>
+              <div class="doc-line short"></div>
+              <div class="doc-line medium"></div>
+              <div class="doc-line short"></div>
+              <div class="doc-line medium"></div>
+            </div>
+            <div class="flow-arrow">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="extracted-fields">
+              <div class="ext-row"><span class="ext-key">Load #</span><span class="ext-val">#2847</span></div>
+              <div class="ext-row"><span class="ext-key">Rate</span><span class="ext-val">$3,450</span></div>
+              <div class="ext-row"><span class="ext-key">Origin</span><span class="ext-val">Chicago, IL</span></div>
+              <div class="ext-row"><span class="ext-key">Dest</span><span class="ext-val">Dallas, TX</span></div>
+              <div class="ext-row"><span class="ext-key">Broker</span><span class="ext-val">Echo Global</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Telegram Bot -->
+      <div class="bento-card">
+        <div class="bento-tag tag-blue">Telegram Bot</div>
+        <h3>Forward ratecons from anywhere</h3>
+        <p>Send a photo or PDF to your bot. Get back structured data in seconds. Works on phone, tablet, or desktop.</p>
+        <div class="tg-demo">
+          <div class="tg-header">
+            <div class="tg-avatar">✈</div>
+            <div>
+              <div class="tg-name">SimpleTrucking Bot</div>
+              <div class="tg-status">● online</div>
+            </div>
+          </div>
+          <div class="tg-msg">📎 ratecon_2847.pdf sent</div>
+          <div class="tg-result">
+            <div class="tg-result-row"><span class="tg-result-key">Load #</span><span class="tg-result-val">#2847</span></div>
+            <div class="tg-result-row"><span class="tg-result-key">Rate</span><span class="tg-result-val">$3,450.00</span></div>
+            <div class="tg-result-row"><span class="tg-result-key">Route</span><span class="tg-result-val">CHI → DAL</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Updater — tall card -->
+      <div class="bento-card tall">
+        <div class="bento-tag tag-green">AI Updater</div>
+        <h3>Load statuses update themselves</h3>
+        <p>AI tracks every load and posts status updates automatically — picked up, in transit, delivered. Your TMS stays current without a single check call.</p>
+        <div class="status-list">
+          <div class="status-row">
+            <div class="status-dot s-green"></div>
+            <div class="status-text">Load #2847</div>
+            <div class="status-time">2 min ago</div>
+            <div class="status-badge sb-delivered">Delivered</div>
+          </div>
+          <div class="status-row">
+            <div class="status-dot s-amber"></div>
+            <div class="status-text">Load #2846</div>
+            <div class="status-time">1 hr ago</div>
+            <div class="status-badge sb-transit">In Transit</div>
+          </div>
+          <div class="status-row">
+            <div class="status-dot s-blue"></div>
+            <div class="status-text">Load #2845</div>
+            <div class="status-time">3 hr ago</div>
+            <div class="status-badge sb-pickup">Picked Up</div>
+          </div>
+          <div class="status-row">
+            <div class="status-dot s-green"></div>
+            <div class="status-text">Load #2844</div>
+            <div class="status-time">6 hr ago</div>
+            <div class="status-badge sb-delivered">Delivered</div>
+          </div>
+          <div class="status-row">
+            <div class="status-dot s-amber"></div>
+            <div class="status-text">Load #2843</div>
+            <div class="status-time">8 hr ago</div>
+            <div class="status-badge sb-transit">In Transit</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Dispatcher — big card -->
+      <div class="bento-card big">
+        <div class="bento-tag tag-purple">AI Dispatcher</div>
+        <h3>Your AI co-dispatcher — works 24/7, never takes a break</h3>
+        <p>Handles check calls, finds available loads, drafts broker emails, answers driver questions. All automatically, around the clock.</p>
+        <div class="chat-list">
+          <div>
+            <div class="chat-label">Driver</div>
+            <div class="chat-bubble chat-in">Hey, I just unloaded in Dallas. What's my next load?</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end">
+            <div class="chat-label" style="text-align:right">AI Dispatcher</div>
+            <div class="chat-bubble chat-out">Great! Load #2851 is ready — pickup in Fort Worth, TX at 14:00. Rate: $2,800. Broker: Coyote. Docs sent to your Telegram. 🚛</div>
+          </div>
+          <div>
+            <div class="chat-label">Driver</div>
+            <div class="chat-bubble chat-in">Perfect, heading there now</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stat card -->
+      <div class="bento-card" style="display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+        <div class="bento-tag tag-amber">Speed</div>
+        <div class="small-stat">
+          <div class="num">2.1s</div>
+          <div class="lbl">Average extraction time</div>
+        </div>
+        <div style="margin-top:16px;font-size:0.8rem;color:var(--muted);line-height:1.5">Even blurry scans and low-quality fax copies extracted correctly</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how-it-works" class="how-section">
+    <div style="text-align:center">
+      <div class="section-label">How it works</div>
+      <h2 class="section-title" style="margin:0 auto 16px">Up and running in 5 minutes</h2>
+      <p class="section-sub" style="margin:0 auto">No training. No complex setup. Connect your workflow and SimpleTrucking handles the rest.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Upload your ratecon</h3>
+        <p>Drop a PDF or photo into the web app, or forward it to your Telegram bot. Any format brokers send — we handle it.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke="#d97706" stroke-width="2"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" stroke="#d97706" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h3>AI reads &amp; extracts</h3>
+        <p>Our AI reads the document in under 3 seconds — pulling load number, rate, route, dates, broker, and commodity.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Data flows to your TMS</h3>
+        <p>Copy structured data, export JSON, or push directly to your TMS via REST API. AI Updater keeps statuses current automatically.</p>
+      </div>
+    </div>
+
+    <div style="text-align:center; margin-top:72px">
+      <div class="section-label">Works with</div>
+      <div class="integrations-row">
+        <div class="integration-badge">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#0088cc"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+          Telegram
+        </div>
+        <div class="integration-badge">
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          PDF Files
+        </div>
+        <div class="integration-badge">
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke="#8b5cf6" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="#8b5cf6"/><polyline points="21,15 16,10 5,21" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Images
+        </div>
+        <div class="integration-badge">
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          REST API
+        </div>
+        <div class="integration-badge">
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" stroke="#10b981" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="#10b981" stroke-width="2" stroke-linecap="round"/></svg>
+          Any TMS
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section id="pricing">
+    <div style="text-align:center">
+      <div class="section-label">Pricing</div>
+      <h2 class="section-title" style="margin:0 auto 16px">Simple, transparent pricing</h2>
+      <p class="section-sub" style="margin:0 auto">Start free. Scale as you grow. No hidden fees, no contracts.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <div class="price-plan">Starter</div>
+        <div class="price-amount">
+          <span class="amount">$0</span>
+          <span class="period">/mo</span>
+        </div>
+        <div class="price-desc">Perfect for trying it out or small operations with low volume.</div>
+        <div class="price-divider"></div>
+        <ul class="price-features">
+          <li>50 extractions / month</li>
+          <li>PDF &amp; image uploads</li>
+          <li>1 dispatcher account</li>
+          <li>Telegram bot access</li>
+          <li>JSON export</li>
+        </ul>
+        <a href="#" class="btn-plan btn-plan-ghost">Get started free</a>
+      </div>
+
+      <div class="price-card featured">
+        <div class="featured-badge">Most popular</div>
+        <div class="price-plan">Professional</div>
+        <div class="price-amount">
+          <span class="amount">$99</span>
+          <span class="period">/mo</span>
+        </div>
+        <div class="price-desc">For growing dispatch companies that need reliable, fast extraction daily.</div>
+        <div class="price-divider"></div>
+        <ul class="price-features">
+          <li>1,000 extractions / month</li>
+          <li>All file formats</li>
+          <li>5 dispatcher accounts</li>
+          <li>Telegram bot + AI Dispatcher</li>
+          <li>AI Updater (auto status)</li>
+          <li>REST API access</li>
+          <li>Priority support</li>
+        </ul>
+        <a href="#" class="btn-plan btn-plan-primary">Start free trial</a>
+      </div>
+
+      <div class="price-card">
+        <div class="price-plan">Enterprise</div>
+        <div class="price-amount">
+          <span class="amount" style="font-size:2rem">Custom</span>
+        </div>
+        <div class="price-desc">For large carriers and dispatch networks with high volume needs.</div>
+        <div class="price-divider"></div>
+        <ul class="price-features">
+          <li>Unlimited extractions</li>
+          <li>Unlimited dispatcher accounts</li>
+          <li>Custom API integration</li>
+          <li>Dedicated account manager</li>
+          <li>SLA guarantee</li>
+          <li>On-premise option</li>
+        </ul>
+        <a href="mailto:hello@simpletrucking.online" class="btn-plan btn-plan-ghost">Contact us</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- TESTIMONIALS -->
+  <section class="testimonials-section">
+    <div style="text-align:center">
+      <div class="section-label">Testimonials</div>
+      <h2 class="section-title" style="margin:0 auto 16px">Dispatchers love SimpleTrucking</h2>
+      <p class="section-sub" style="margin:0 auto">Real feedback from trucking professionals using our AI tools every day.</p>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-text">"We were manually entering ratecons for hours every day. Now it takes minutes. The RateCon Extractor alone saves our team 3+ hours a week."</p>
+        <div class="testimonial-author">
+          <div class="author-avatar">MJ</div>
+          <div>
+            <div class="author-name">Mike Johnson</div>
+            <div class="author-role">Owner, MJ Dispatch LLC</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-text">"AI Updater eliminated our manual status calls completely. Our TMS updates itself. I don't know how we managed without it before."</p>
+        <div class="testimonial-author">
+          <div class="author-avatar">SR</div>
+          <div>
+            <div class="author-name">Sarah Rivera</div>
+            <div class="author-role">Lead Dispatcher, FastLane Carriers</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-text">"The AI Dispatcher handles our overnight check calls now. We wake up and everything is already updated. It's like having a dispatcher that never sleeps."</p>
+        <div class="testimonial-author">
+          <div class="author-avatar">DK</div>
+          <div>
+            <div class="author-name">David Kim</div>
+            <div class="author-role">Operations Manager, K&amp;D Freight</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <h2>Give your dispatch team<br><span class="gradient">an AI advantage</span></h2>
+    <p>RateCon Extractor · AI Updater · AI Dispatcher — all in one platform. Free to start, no credit card needed.</p>
+    <div class="cta-actions">
+      <a href="#pricing" class="btn-hero">Get started free →</a>
+      <a href="mailto:hello@simpletrucking.online" class="btn-hero-ghost">Talk to us</a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a href="#" class="footer-logo">
+          <div class="logo-icon">🚛</div>
+          SimpleTrucking
+        </a>
+        <p>RateCon Extractor, AI Updater, and AI Dispatcher — three AI tools that save trucking dispatchers hours every day.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="/docs">API Docs</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="#">About</a></li>
+          <li><a href="mailto:hello@simpletrucking.online">Contact</a></li>
+          <li><a href="#">Blog</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="#">Privacy Policy</a></li>
+          <li><a href="#">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2025 SimpleTrucking · simpletrucking.online</span>
+      <span>Built for trucking dispatchers ❤️</span>
+    </div>
+  </footer>
+
+</body>
+</html>

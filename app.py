@@ -101,6 +101,11 @@ def require_company_admin(authorization: str | None) -> dict:
 # ── Pages ─────────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
+async def landing():
+    return FileResponse("templates/landing.html")
+
+
+@app.get("/app", response_class=HTMLResponse)
 async def index():
     return FileResponse("templates/index.html")
 

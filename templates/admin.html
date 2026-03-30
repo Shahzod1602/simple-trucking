@@ -6,6 +6,7 @@
   <title>Super Admin — SimpleTrucking</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
   <style>
     :root {
       --bg: #0a0f1e;
@@ -216,7 +217,7 @@
 <div class="topbar">
   <div class="brand">
     <div class="brand-icon">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <svg width="20" height="15" viewBox="0 0 24 18" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="1" width="14" height="10" rx="1.5" fill="white" opacity="0.95"/><path d="M14 3.5 L14 11 L24 11 L24 7.5 L20 3.5 Z" fill="white" opacity="0.95"/><path d="M15.5 4.5 L19.5 4.5 L22.5 7.2 L15.5 7.2 Z" fill="rgba(255,150,0,0.55)"/><rect x="1" y="11" width="23" height="1" rx="0.5" fill="rgba(255,255,255,0.35)"/><circle cx="4.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="4.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/><circle cx="9.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="9.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/><circle cx="20.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="20.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/></svg>
     </div>
     <span class="brand-name">SimpleTrucking</span>
     <span class="badge">Super Admin</span>
@@ -232,25 +233,25 @@
   <!-- Stats -->
   <div class="stats-grid">
     <div class="stat-card blue">
-      <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></div>
+      <div class="stat-icon"><i class="ph-bold ph-buildings" style="font-size:20px;color:#2563eb;"></i></div>
       <div class="stat-label">Companies</div>
       <div class="stat-value blue" id="s-companies">—</div>
       <div class="stat-sub">registered</div>
     </div>
     <div class="stat-card green">
-      <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="stat-icon"><i class="ph-bold ph-shield-star" style="font-size:20px;color:#10b981;"></i></div>
       <div class="stat-label">Admins</div>
       <div class="stat-value green" id="s-admins">—</div>
       <div class="stat-sub">company admins</div>
     </div>
     <div class="stat-card amber">
-      <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+      <div class="stat-icon"><i class="ph-bold ph-users" style="font-size:20px;color:#f59e0b;"></i></div>
       <div class="stat-label">Users</div>
       <div class="stat-value amber" id="s-users">—</div>
       <div class="stat-sub">dispatchers</div>
     </div>
     <div class="stat-card purple">
-      <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="stat-icon"><i class="ph-bold ph-currency-dollar" style="font-size:20px;color:#8b5cf6;"></i></div>
       <div class="stat-label">Revenue</div>
       <div class="stat-value purple" id="s-revenue">—</div>
       <div class="stat-sub" id="s-delivered-sub">— delivered</div>

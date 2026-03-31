@@ -2930,6 +2930,11 @@ Rate: {{total_rate_usd}}
           const driverCell = t.driver ? esc(t.driver.name) : '<span style="color:var(--text-muted)">—</span>';
           const codriverCell = t.codriver ? esc(t.codriver.name) : '<span style="color:var(--text-muted)">—</span>';
           const speedCell = t.speed_mph != null ? `${Math.round(t.speed_mph)} mph` : '<span style="color:var(--text-muted)">—</span>';
+          const statusCell = t.speed_mph == null
+            ? '<span style="color:var(--text-muted)">—</span>'
+            : t.speed_mph > 3
+              ? '<span style="color:#22c55e;font-weight:600;">🟢 Rolling</span>'
+              : '<span style="color:#ef4444;font-weight:600;">🔴 Stopped</span>';
           const locationCell = (t.lat != null && t.lon != null)
             ? `<a href="https://www.google.com/maps?q=${t.lat},${t.lon}" target="_blank" style="color:var(--primary);text-decoration:none;">${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}</a>`
             : '<span style="color:var(--text-muted)">—</span>';
@@ -2939,6 +2944,7 @@ Rate: {{total_rate_usd}}
             <td style="color:var(--text-muted);font-size:0.82rem;">${esc(t.vin || '—')}</td>
             <td>${driverCell}</td>
             <td>${codriverCell}</td>
+            <td>${statusCell}</td>
             <td>${speedCell}</td>
             <td>${locationCell}</td>
             <td style="color:var(--text-muted);font-size:0.8rem;">${ts}</td>
@@ -2952,6 +2958,7 @@ Rate: {{total_rate_usd}}
                 <th>VIN</th>
                 <th>Driver</th>
                 <th>Co-Driver</th>
+                <th>Status</th>
                 <th>Speed</th>
                 <th>Location</th>
                 <th>Last Update</th>

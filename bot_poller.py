@@ -46,7 +46,7 @@ def _build_status_message(load: dict, eld_cfg: dict) -> str | None:
         if next_address:
             destination = routing.geocode(next_address, gmaps_key)
             if destination:
-                route = routing.get_route({"lat": lat, "lon": lon}, destination)
+                route = routing.get_route({"lat": lat, "lon": lon}, destination, gmaps_key)
                 miles_left = f"{round(route['distance_meters'] / 1609.34, 1)} mi"
 
         addr_parts = [p.strip() for p in (next_address or "").split(",")]

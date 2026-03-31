@@ -822,7 +822,7 @@ async def api_eta(
         destination = routing.geocode(address, gmaps_key)
         if not destination:
             raise HTTPException(status_code=400, detail=f"Could not geocode address: {address}")
-        eta = routing.calculate_eta(origin, destination, buffer_hours=buffer)
+        eta = routing.calculate_eta(origin, destination, buffer_hours=buffer, api_key=gmaps_key)
         return eta
     except HTTPException:
         raise
@@ -972,7 +972,7 @@ async def api_load_eta(
         destination = routing.geocode(next_address, gmaps_key)
         if not destination:
             raise HTTPException(status_code=400, detail=f"Could not geocode: {next_address}")
-        eta = routing.calculate_eta(origin, destination)
+        eta = routing.calculate_eta(origin, destination, api_key=gmaps_key)
         database.update_load_eta(load_id, eta["eta_utc"], eta["distance_miles"])
         return {"ok": True, "eta_utc": eta["eta_utc"], "eta_display": eta["eta_display"], "distance_miles": eta["distance_miles"]}
     except HTTPException:
@@ -1030,7 +1030,7 @@ async def api_load_send_status(
             gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
             destination = routing.geocode(next_address, gmaps_key)
             if destination:
-                route = routing.get_route({"lat": lat, "lon": lon}, destination)
+                route = routing.get_route({"lat": lat, "lon": lon}, destination, gmaps_key)
                 miles_left = f"{round(route['distance_meters'] / 1609.34, 1)} mi"
 
         # Parse heading from next stop address: "STREET, CITY, STATE, ZIP"

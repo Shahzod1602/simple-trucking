@@ -1,5 +1,5 @@
 """
-Geocoding (Google Maps or Nominatim fallback) and routing (OSRM).
+Geocoding (Google Maps or Nominatim fallback) and routing (Google Maps or OSRM fallback).
 """
 
 import os
@@ -14,9 +14,13 @@ OSRM = "https://router.project-osrm.org/route/v1/driving"
 HEADERS = {"User-Agent": "SimpleTruckingETA/1.0"}
 
 
+def _get_gmaps_key(api_key: str | None = None) -> str:
+    return (api_key or os.environ.get("GOOGLE_MAPS_API_KEY", "")).strip()
+
+
 def _geocode_google(address: str, api_key: str | None = None) -> dict | None:
     """Geocode using Google Maps API."""
-    key = api_key or os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    key = _get_gmaps_key(api_key)
     if not key:
         return None
     resp = httpx.get(
@@ -85,11 +89,45 @@ def reverse_geocode(lat: float, lon: float) -> str | None:
     return ", ".join(p for p in parts if p) or data.get("display_name")
 
 
-def get_route(origin: dict, destination: dict) -> dict:
+def _get_route_google(origin: dict, destination: dict, api_key: str) -> dict | None:
+    """Calculate route using Google Maps Distance Matrix API."""
+    resp = httpx.get(
+        "https://maps.googleapis.com/maps/api/distancematrix/json",
+        params={
+            "origins": f"{origin['lat']},{origin['lon']}",
+            "destinations": f"{destination['lat']},{destination['lon']}",
+            "mode": "driving",
+            "key": api_key,
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    try:
+        element = data["rows"][0]["elements"][0]
+        if element.get("status") != "OK":
+            return None
+        return {
+            "duration_seconds": int(element["duration"]["value"]),
+            "distance_meters": int(element["distance"]["value"]),
+        }
+    except (KeyError, IndexError):
+        return None
+
+
+def get_route(origin: dict, destination: dict, api_key: str | None = None) -> dict:
     """
     Calculate route between two {lat, lon} points.
+    Uses Google Maps Distance Matrix if key available, otherwise OSRM.
     Returns {duration_seconds, distance_meters}.
     """
+    key = _get_gmaps_key(api_key)
+    if key:
+        result = _get_route_google(origin, destination, key)
+        if result:
+            return result
+
+    # OSRM fallback
     coords = f"{origin['lon']},{origin['lat']};{destination['lon']},{destination['lat']}"
     resp = httpx.get(
         f"{OSRM}/{coords}",
@@ -113,7 +151,7 @@ def calculate_eta(origin: dict, destination: dict, buffer_hours: float = 0, api_
     Full ETA calculation from origin {lat,lon} to destination {lat,lon}.
     Returns {eta_utc, duration_minutes, distance_miles, buffer_hours}.
     """
-    route = get_route(origin, destination)
+    route = get_route(origin, destination, api_key)
     duration_sec = route["duration_seconds"]
     buffer_sec = int(buffer_hours * 3600)
     total_sec = duration_sec + buffer_sec

@@ -1233,7 +1233,7 @@ Rate: {{total_rate_usd}}
       document.getElementById('page-' + page).classList.add('active');
       document.getElementById('mob-title').textContent = pageTitles[page] || page;
       const content = document.querySelector('.content');
-      if (page === 'loads' || page === 'analytics' || page === 'map') content.classList.add('wide');
+      if (page === 'loads' || page === 'analytics' || page === 'map' || page === 'trucks') content.classList.add('wide');
       else content.classList.remove('wide');
       closeSidebar();
       if (page === 'loads')     loadLoadsPage();

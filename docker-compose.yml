@@ -11,3 +11,6 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./ratecon.db:/app/ratecon.db
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4

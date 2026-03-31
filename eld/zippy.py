@@ -1,4 +1,5 @@
 import httpx
+from datetime import datetime, timedelta, timezone
 
 BASE = "https://read.zippyeld.com/api/v2"
 
@@ -26,6 +27,26 @@ class ZippyClient:
             if u.get("vin")
         ]
 
+    def _get_latest_speed(self, vehicle_id: str) -> float | None:
+        """Fetch latest speed from Trackings API (last 15 min)."""
+        now = datetime.now(timezone.utc)
+        from_ts = (now - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        to_ts = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        try:
+            resp = httpx.get(
+                f"https://read.zippyeld.com/api/externalservice/trackings/{self.usdot}/{vehicle_id}/",
+                headers=self.headers,
+                params={"from": from_ts, "to": to_ts},
+                timeout=8,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data and isinstance(data, list):
+                return data[-1].get("speed")
+        except Exception:
+            pass
+        return None
+
     def get_trucks(self) -> list[dict]:
         """Returns list of trucks with driver/codriver assignment and real-time location."""
         assignments_resp = httpx.get(
@@ -48,21 +69,23 @@ class ZippyClient:
         result = []
         for u in units:
             vin = u.get("vin") or ""
+            vehicle_id = u.get("id") or vin
             d = u.get("driver") or {}
             cd = u.get("codriver") or {}
             driver_name = f"{d.get('first_name', '')} {d.get('second_name', '')}".strip()
             codriver_name = f"{cd.get('first_name', '')} {cd.get('second_name', '')}".strip()
             loc = loc_by_vin.get(vin, {})
             coords = loc.get("coordinates") or {}
+            speed = self._get_latest_speed(vehicle_id)
             result.append({
-                "id": u.get("id") or vin,
+                "id": vehicle_id,
                 "truck_number": u.get("truck_number") or vin,
                 "vin": vin,
                 "driver": {"id": str(d["id"]), "name": driver_name} if d.get("id") else None,
                 "codriver": {"id": str(cd["id"]), "name": codriver_name} if cd.get("id") else None,
                 "lat": float(coords["lat"]) if coords.get("lat") is not None else None,
                 "lon": float(coords["lng"]) if coords.get("lng") is not None else None,
-                "speed_mph": float(coords["speed"]) if coords.get("speed") is not None else None,
+                "speed_mph": float(speed) if speed is not None else None,
                 "timestamp": loc.get("timestamp"),
             })
         return result

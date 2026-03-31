@@ -129,6 +129,10 @@ def init_db():
             )
         """)
 
+        ci_cols = {row[1] for row in conn.execute("PRAGMA table_info(company_info)")}
+        if "google_maps_key" not in ci_cols:
+            conn.execute("ALTER TABLE company_info ADD COLUMN google_maps_key TEXT")
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS load_pods (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -677,6 +681,27 @@ def save_company_info(dispatcher_id: int, data: dict) -> None:
                 {', '.join(f'{f} = excluded.{f}' for f in fields)},
                 updated_at = excluded.updated_at""",
             (dispatcher_id, *[data.get(f) for f in fields], now),
+        )
+
+
+def get_google_maps_key(dispatcher_id: int) -> str | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT google_maps_key FROM company_info WHERE dispatcher_id = ?", (dispatcher_id,)
+        ).fetchone()
+        return row["google_maps_key"] if row else None
+
+
+def save_google_maps_key(dispatcher_id: int, key: str) -> None:
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO company_info (dispatcher_id, google_maps_key, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(dispatcher_id) DO UPDATE SET
+               google_maps_key = excluded.google_maps_key,
+               updated_at = excluded.updated_at""",
+            (dispatcher_id, key, now),
         )
 
 

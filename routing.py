@@ -14,14 +14,14 @@ OSRM = "https://router.project-osrm.org/route/v1/driving"
 HEADERS = {"User-Agent": "SimpleTruckingETA/1.0"}
 
 
-def _geocode_google(address: str) -> dict | None:
+def _geocode_google(address: str, api_key: str | None = None) -> dict | None:
     """Geocode using Google Maps API."""
-    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
-    if not api_key:
+    key = api_key or os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    if not key:
         return None
     resp = httpx.get(
         "https://maps.googleapis.com/maps/api/geocode/json",
-        params={"address": address, "key": api_key},
+        params={"address": address, "key": key},
         timeout=10,
     )
     resp.raise_for_status()
@@ -32,16 +32,16 @@ def _geocode_google(address: str) -> dict | None:
     return None
 
 
-def geocode(address: str, _depth: int = 0) -> dict | None:
+def geocode(address: str, api_key: str | None = None, _depth: int = 0) -> dict | None:
     """Convert address string to {lat, lon}.
-    Uses Google Maps if GOOGLE_MAPS_API_KEY is set, otherwise Nominatim with fallback.
+    Uses Google Maps if api_key or GOOGLE_MAPS_API_KEY is set, otherwise Nominatim with fallback.
     """
     if _depth > 3 or not address.strip():
         return None
 
     # Try Google Maps first (much more accurate)
     if _depth == 0:
-        result = _geocode_google(address)
+        result = _geocode_google(address, api_key)
         if result:
             return result
 
@@ -60,7 +60,7 @@ def geocode(address: str, _depth: int = 0) -> dict | None:
     # Strip first token and retry
     parts = address.split(", ", 1)
     if len(parts) > 1:
-        return geocode(parts[1], _depth + 1)
+        return geocode(parts[1], api_key, _depth + 1)
     return None
 
 
@@ -108,7 +108,7 @@ def get_route(origin: dict, destination: dict) -> dict:
     }
 
 
-def calculate_eta(origin: dict, destination: dict, buffer_hours: float = 0) -> dict:
+def calculate_eta(origin: dict, destination: dict, buffer_hours: float = 0, api_key: str | None = None) -> dict:
     """
     Full ETA calculation from origin {lat,lon} to destination {lat,lon}.
     Returns {eta_utc, duration_minutes, distance_miles, buffer_hours}.

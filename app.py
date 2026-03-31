@@ -726,6 +726,31 @@ async def api_eld_drivers(authorization: str | None = Header(default=None)):
         raise HTTPException(status_code=502, detail=f"ELD error: {e}")
 
 
+@app.get("/api/settings/google-maps")
+async def api_gmaps_get(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    key = database.get_google_maps_key(dispatcher["id"])
+    return {"configured": bool(key), "masked": f"...{key[-4:]}" if key else None}
+
+
+class GoogleMapsBody(BaseModel):
+    api_key: str
+
+
+@app.post("/api/settings/google-maps")
+async def api_gmaps_save(body: GoogleMapsBody, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    database.save_google_maps_key(dispatcher["id"], body.api_key.strip())
+    return {"ok": True}
+
+
+@app.delete("/api/settings/google-maps")
+async def api_gmaps_delete(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    database.save_google_maps_key(dispatcher["id"], "")
+    return {"ok": True}
+
+
 @app.get("/api/trucks")
 async def api_trucks(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
@@ -793,7 +818,8 @@ async def api_eta(
         origin = client.get_driver_location(group["eld_driver_id"])
         if not origin:
             raise HTTPException(status_code=404, detail="Driver location not available")
-        destination = routing.geocode(address)
+        gmaps_key = database.get_google_maps_key(dispatcher["id"])
+        destination = routing.geocode(address, gmaps_key)
         if not destination:
             raise HTTPException(status_code=400, detail=f"Could not geocode address: {address}")
         eta = routing.calculate_eta(origin, destination, buffer_hours=buffer)
@@ -942,7 +968,8 @@ async def api_load_eta(
         origin = client.get_driver_location(load["driver_eld_id"])
         if not origin:
             raise HTTPException(status_code=404, detail="Driver location not available")
-        destination = routing.geocode(next_address)
+        gmaps_key = database.get_google_maps_key(dispatcher["id"])
+        destination = routing.geocode(next_address, gmaps_key)
         if not destination:
             raise HTTPException(status_code=400, detail=f"Could not geocode: {next_address}")
         eta = routing.calculate_eta(origin, destination)
@@ -1000,7 +1027,8 @@ async def api_load_send_status(
         heading = ""
 
         if next_address:
-            destination = routing.geocode(next_address)
+            gmaps_key = database.get_google_maps_key(dispatcher["id"])
+            destination = routing.geocode(next_address, gmaps_key)
             if destination:
                 route = routing.get_route({"lat": lat, "lon": lon}, destination)
                 miles_left = f"{round(route['distance_meters'] / 1609.34, 1)} mi"

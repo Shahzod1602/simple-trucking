@@ -818,6 +818,21 @@
             <button class="btn-outline" id="eld-del-btn" style="display:none;">Disconnect ELD</button>
           </div>
         </div>
+        <div class="card settings-section" id="gmaps-section">
+          <div class="settings-title">Google Maps API</div>
+          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Used for accurate geocoding and ETA calculations. Without it, Nominatim (OpenStreetMap) is used as fallback.</p>
+          <div class="err-banner" id="gmaps-err"></div>
+          <div class="ok-banner" id="gmaps-ok"></div>
+          <div class="field">
+            <label>API Key</label>
+            <input type="password" id="gmaps-apikey" placeholder="AIza..." autocomplete="new-password" />
+          </div>
+          <div id="gmaps-current" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;display:none;"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+            <button class="btn-blue" id="gmaps-save-btn">Save API Key</button>
+            <button class="btn-outline" id="gmaps-del-btn" style="display:none;">Remove Key</button>
+          </div>
+        </div>
         <div class="card settings-section" id="company-info-section" style="display:none">
           <div class="settings-title">Company Info (for Invoices)</div>
           <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">This info will appear on your invoices.</p>
@@ -1613,6 +1628,7 @@ Rate: {{total_rate_usd}}
       ['pw-err','pw-ok'].forEach(id => document.getElementById(id).style.display = 'none');
       ['pw-current','pw-new','pw-confirm'].forEach(id => document.getElementById(id).value = '');
       loadEldConfig();
+      loadGmapsConfig();
       loadCompanyInfo();
       // Show admin-only sections
       const isAdmin = userRole === 'admin' || userRole === 'superadmin';
@@ -2016,6 +2032,59 @@ Rate: {{total_rate_usd}}
       document.getElementById('eld-del-btn').style.display = 'none';
       ['eld-err','eld-ok'].forEach(id => document.getElementById(id).style.display = 'none');
       toast('ELD disconnected');
+    });
+
+    async function loadGmapsConfig() {
+      if (!token) return;
+      try {
+        const r = await fetch('/api/settings/google-maps', { headers: authH() });
+        if (!r.ok) return;
+        const d = await r.json();
+        ['gmaps-err','gmaps-ok'].forEach(id => document.getElementById(id).style.display = 'none');
+        const cur = document.getElementById('gmaps-current');
+        const delBtn = document.getElementById('gmaps-del-btn');
+        if (d.configured) {
+          cur.textContent = `Current key: ${d.masked}`;
+          cur.style.display = 'block';
+          delBtn.style.display = 'inline-block';
+        } else {
+          cur.style.display = 'none';
+          delBtn.style.display = 'none';
+        }
+      } catch {}
+    }
+
+    document.getElementById('gmaps-save-btn').addEventListener('click', async () => {
+      const key = document.getElementById('gmaps-apikey').value.trim();
+      const errEl = document.getElementById('gmaps-err');
+      const okEl  = document.getElementById('gmaps-ok');
+      errEl.style.display = 'none'; okEl.style.display = 'none';
+      if (!key) { errEl.textContent = 'API key is required'; errEl.style.display = 'block'; return; }
+      const btn = document.getElementById('gmaps-save-btn');
+      btn.disabled = true; btn.textContent = 'Saving...';
+      try {
+        const r = await fetch('/api/settings/google-maps', {
+          method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: key }),
+        });
+        const d = await r.json();
+        if (!r.ok) { errEl.textContent = d.detail || 'Error'; errEl.style.display = 'block'; return; }
+        okEl.textContent = 'Google Maps API key saved!'; okEl.style.display = 'block';
+        document.getElementById('gmaps-apikey').value = '';
+        loadGmapsConfig();
+        toast('Google Maps API key saved', 'success');
+      } catch { errEl.textContent = 'Connection error'; errEl.style.display = 'block'; }
+      finally { btn.disabled = false; btn.textContent = 'Save API Key'; }
+    });
+
+    document.getElementById('gmaps-del-btn').addEventListener('click', async () => {
+      if (!confirm('Remove Google Maps API key?')) return;
+      await fetch('/api/settings/google-maps', { method: 'DELETE', headers: authH() });
+      document.getElementById('gmaps-apikey').value = '';
+      document.getElementById('gmaps-current').style.display = 'none';
+      document.getElementById('gmaps-del-btn').style.display = 'none';
+      ['gmaps-err','gmaps-ok'].forEach(id => document.getElementById(id).style.display = 'none');
+      toast('Google Maps key removed');
     });
 
     document.getElementById('pw-save-btn').addEventListener('click', async () => {

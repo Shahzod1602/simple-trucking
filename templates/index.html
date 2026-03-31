@@ -818,21 +818,6 @@
             <button class="btn-outline" id="eld-del-btn" style="display:none;">Disconnect ELD</button>
           </div>
         </div>
-        <div class="card settings-section" id="gmaps-section">
-          <div class="settings-title">Google Maps API</div>
-          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Used for accurate geocoding and ETA calculations. Without it, Nominatim (OpenStreetMap) is used as fallback.</p>
-          <div class="err-banner" id="gmaps-err"></div>
-          <div class="ok-banner" id="gmaps-ok"></div>
-          <div class="field">
-            <label>API Key</label>
-            <input type="password" id="gmaps-apikey" placeholder="AIza..." autocomplete="new-password" />
-          </div>
-          <div id="gmaps-current" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;display:none;"></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-            <button class="btn-blue" id="gmaps-save-btn">Save API Key</button>
-            <button class="btn-outline" id="gmaps-del-btn" style="display:none;">Remove Key</button>
-          </div>
-        </div>
         <div class="card settings-section" id="company-info-section" style="display:none">
           <div class="settings-title">Company Info (for Invoices)</div>
           <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">This info will appear on your invoices.</p>
@@ -1628,7 +1613,6 @@ Rate: {{total_rate_usd}}
       ['pw-err','pw-ok'].forEach(id => document.getElementById(id).style.display = 'none');
       ['pw-current','pw-new','pw-confirm'].forEach(id => document.getElementById(id).value = '');
       loadEldConfig();
-      loadGmapsConfig();
       loadCompanyInfo();
       // Show admin-only sections
       const isAdmin = userRole === 'admin' || userRole === 'superadmin';
@@ -2054,7 +2038,7 @@ Rate: {{total_rate_usd}}
       } catch {}
     }
 
-    document.getElementById('gmaps-save-btn').addEventListener('click', async () => {
+    async function saveGmapsKey() {
       const key = document.getElementById('gmaps-apikey').value.trim();
       const errEl = document.getElementById('gmaps-err');
       const okEl  = document.getElementById('gmaps-ok');
@@ -2075,9 +2059,9 @@ Rate: {{total_rate_usd}}
         toast('Google Maps API key saved', 'success');
       } catch { errEl.textContent = 'Connection error'; errEl.style.display = 'block'; }
       finally { btn.disabled = false; btn.textContent = 'Save API Key'; }
-    });
+    }
 
-    document.getElementById('gmaps-del-btn').addEventListener('click', async () => {
+    async function deleteGmapsKey() {
       if (!confirm('Remove Google Maps API key?')) return;
       await fetch('/api/settings/google-maps', { method: 'DELETE', headers: authH() });
       document.getElementById('gmaps-apikey').value = '';
@@ -2085,7 +2069,7 @@ Rate: {{total_rate_usd}}
       document.getElementById('gmaps-del-btn').style.display = 'none';
       ['gmaps-err','gmaps-ok'].forEach(id => document.getElementById(id).style.display = 'none');
       toast('Google Maps key removed');
-    });
+    }
 
     document.getElementById('pw-save-btn').addEventListener('click', async () => {
       const cur     = document.getElementById('pw-current').value;
@@ -2227,8 +2211,31 @@ Rate: {{total_rate_usd}}
 
     function renderAdmin(dispatchers) {
       const el = document.getElementById('admin-content');
-      el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="count-label">${dispatchers.length} dispatcher${dispatchers.length!==1?'s':''}</span><button class="btn-outline" id="admin-refresh">↻ Refresh</button></div><div class="dispatcher-list" id="disp-list"></div>`;
+      el.innerHTML = `
+        <div class="card settings-section" style="margin-bottom:16px;">
+          <div class="settings-title">Google Maps API</div>
+          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Global API key used by all users for geocoding and ETA calculations.</p>
+          <div class="err-banner" id="gmaps-err"></div>
+          <div class="ok-banner" id="gmaps-ok"></div>
+          <div class="field">
+            <label>API Key</label>
+            <input type="password" id="gmaps-apikey" placeholder="AIza..." autocomplete="new-password" />
+          </div>
+          <div id="gmaps-current" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;display:none;"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+            <button class="btn-blue" id="gmaps-save-btn">Save API Key</button>
+            <button class="btn-outline" id="gmaps-del-btn" style="display:none;">Remove Key</button>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <span class="count-label">${dispatchers.length} dispatcher${dispatchers.length!==1?'s':''}</span>
+          <button class="btn-outline" id="admin-refresh">↻ Refresh</button>
+        </div>
+        <div class="dispatcher-list" id="disp-list"></div>`;
+      loadGmapsConfig();
       document.getElementById('admin-refresh').addEventListener('click', loadAdmin);
+      document.getElementById('gmaps-save-btn').addEventListener('click', saveGmapsKey);
+      document.getElementById('gmaps-del-btn').addEventListener('click', deleteGmapsKey);
       const list = document.getElementById('disp-list');
       dispatchers.forEach(d => list.appendChild(makeDispCard(d)));
     }

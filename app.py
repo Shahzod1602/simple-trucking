@@ -728,8 +728,8 @@ async def api_eld_drivers(authorization: str | None = Header(default=None)):
 
 @app.get("/api/settings/google-maps")
 async def api_gmaps_get(authorization: str | None = Header(default=None)):
-    dispatcher = require_dispatcher(authorization)
-    key = database.get_google_maps_key(dispatcher["id"])
+    require_superadmin(authorization)
+    key = database.get_global_setting("google_maps_key")
     return {"configured": bool(key), "masked": f"...{key[-4:]}" if key else None}
 
 
@@ -739,15 +739,15 @@ class GoogleMapsBody(BaseModel):
 
 @app.post("/api/settings/google-maps")
 async def api_gmaps_save(body: GoogleMapsBody, authorization: str | None = Header(default=None)):
-    dispatcher = require_dispatcher(authorization)
-    database.save_google_maps_key(dispatcher["id"], body.api_key.strip())
+    require_superadmin(authorization)
+    database.set_global_setting("google_maps_key", body.api_key.strip())
     return {"ok": True}
 
 
 @app.delete("/api/settings/google-maps")
 async def api_gmaps_delete(authorization: str | None = Header(default=None)):
-    dispatcher = require_dispatcher(authorization)
-    database.save_google_maps_key(dispatcher["id"], "")
+    require_superadmin(authorization)
+    database.set_global_setting("google_maps_key", "")
     return {"ok": True}
 
 
@@ -818,7 +818,7 @@ async def api_eta(
         origin = client.get_driver_location(group["eld_driver_id"])
         if not origin:
             raise HTTPException(status_code=404, detail="Driver location not available")
-        gmaps_key = database.get_google_maps_key(dispatcher["id"])
+        gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
         destination = routing.geocode(address, gmaps_key)
         if not destination:
             raise HTTPException(status_code=400, detail=f"Could not geocode address: {address}")
@@ -968,7 +968,7 @@ async def api_load_eta(
         origin = client.get_driver_location(load["driver_eld_id"])
         if not origin:
             raise HTTPException(status_code=404, detail="Driver location not available")
-        gmaps_key = database.get_google_maps_key(dispatcher["id"])
+        gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
         destination = routing.geocode(next_address, gmaps_key)
         if not destination:
             raise HTTPException(status_code=400, detail=f"Could not geocode: {next_address}")
@@ -1027,7 +1027,7 @@ async def api_load_send_status(
         heading = ""
 
         if next_address:
-            gmaps_key = database.get_google_maps_key(dispatcher["id"])
+            gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
             destination = routing.geocode(next_address, gmaps_key)
             if destination:
                 route = routing.get_route({"lat": lat, "lon": lon}, destination)

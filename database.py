@@ -134,6 +134,14 @@ def init_db():
             conn.execute("ALTER TABLE company_info ADD COLUMN google_maps_key TEXT")
 
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS global_settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS load_pods (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
@@ -681,6 +689,24 @@ def save_company_info(dispatcher_id: int, data: dict) -> None:
                 {', '.join(f'{f} = excluded.{f}' for f in fields)},
                 updated_at = excluded.updated_at""",
             (dispatcher_id, *[data.get(f) for f in fields], now),
+        )
+
+
+def get_global_setting(key: str) -> str | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT value FROM global_settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else None
+
+
+def set_global_setting(key: str, value: str) -> None:
+    now = datetime.utcnow().isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO global_settings (key, value, updated_at) VALUES (?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at""",
+            (key, value, now),
         )
 
 

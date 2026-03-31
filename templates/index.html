@@ -789,34 +789,35 @@
         </div>
         <div class="card settings-section" id="eld-section" style="display:none">
           <div class="settings-title">ELD Integration</div>
-          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Connect your ELD account (Samsara or Motive) to enable automatic ETA calculation when sending ratecons to driver groups.</p>
+          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Connect one or more ELD accounts to enable automatic ETA calculation and truck tracking.</p>
           <div class="err-banner" id="eld-err"></div>
           <div class="ok-banner" id="eld-ok"></div>
-          <div class="field">
-            <label>Provider</label>
-            <select id="eld-provider">
-              <option value="">Select provider...</option>
-              <option value="samsara">Samsara</option>
-              <option value="motive">Motive (KeepTrucking)</option>
-              <option value="zippyeld">ZippyELD</option>
-              <option value="evoeld">EVO ELD</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>API Key</label>
-            <input type="password" id="eld-apikey" placeholder="Enter API key" autocomplete="new-password" />
-          </div>
-          <div class="field" id="eld-provider-token-field" style="display:none;">
-            <label>Provider Token</label>
-            <input type="password" id="eld-provider-token" placeholder="Enter provider token" autocomplete="new-password" />
-          </div>
-          <div class="field" id="eld-company-field" style="display:none;">
-            <label>USDOT Number</label>
-            <input type="text" id="eld-company" placeholder="Enter USDOT number" autocomplete="off" />
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-            <button class="btn-blue" id="eld-save-btn">Save Configuration</button>
-            <button class="btn-outline" id="eld-del-btn" style="display:none;">Disconnect ELD</button>
+          <div id="eld-connected-list" style="margin-bottom:16px;"></div>
+          <div style="border-top:1px solid var(--border);padding-top:16px;">
+            <div style="font-size:0.85rem;font-weight:600;margin-bottom:12px;color:var(--text-muted);">Add Provider</div>
+            <div class="field">
+              <label>Provider</label>
+              <select id="eld-provider">
+                <option value="">Select provider...</option>
+                <option value="samsara">Samsara</option>
+                <option value="motive">Motive (KeepTrucking)</option>
+                <option value="zippyeld">ZippyELD</option>
+                <option value="evoeld">EVO ELD</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>API Key</label>
+              <input type="password" id="eld-apikey" placeholder="Enter API key" autocomplete="new-password" />
+            </div>
+            <div class="field" id="eld-provider-token-field" style="display:none;">
+              <label>Provider Token</label>
+              <input type="password" id="eld-provider-token" placeholder="Enter provider token" autocomplete="new-password" />
+            </div>
+            <div class="field" id="eld-company-field" style="display:none;">
+              <label>USDOT Number</label>
+              <input type="text" id="eld-company" placeholder="Enter USDOT number" autocomplete="off" />
+            </div>
+            <button class="btn-blue" id="eld-save-btn">Connect Provider</button>
           </div>
         </div>
         <div class="card settings-section" id="company-info-section" style="display:none">
@@ -1944,28 +1945,44 @@ Rate: {{total_rate_usd}}
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    const ELD_PROVIDER_NAMES = { samsara: 'Samsara', motive: 'Motive (KeepTrucking)', zippyeld: 'ZippyELD', evoeld: 'EVO ELD' };
+
+    function renderEldList(configs) {
+      const container = document.getElementById('eld-connected-list');
+      if (!configs || !configs.length) {
+        container.innerHTML = '<p style="font-size:0.83rem;color:var(--text-muted);">No ELD providers connected yet.</p>';
+        return;
+      }
+      container.innerHTML = `
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:10px;color:var(--text-muted);">Connected Providers</div>
+        ${configs.map(c => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card-inner,var(--bg));border:1px solid var(--border);border-radius:9px;margin-bottom:8px;gap:12px;">
+            <div style="min-width:0;">
+              <span style="font-weight:600;">${esc(ELD_PROVIDER_NAMES[c.provider] || c.provider)}</span>
+              <span style="font-size:0.78rem;color:var(--text-muted);margin-left:10px;">Key: ${esc(c.api_key)}</span>
+              ${c.company ? `<span style="font-size:0.78rem;color:var(--text-muted);margin-left:8px;">DOT: ${esc(c.company)}</span>` : ''}
+            </div>
+            <button class="btn-outline" style="font-size:0.78rem;padding:5px 12px;white-space:nowrap;flex-shrink:0;" onclick="disconnectEld('${esc(c.provider)}')">Disconnect</button>
+          </div>
+        `).join('')}
+      `;
+    }
+
     async function loadEldConfig() {
       if (!token) return;
       try {
         const r = await fetch('/api/eld/config', { headers: authH() });
         if (!r.ok) return;
         const d = await r.json();
-        ['eld-err','eld-ok'].forEach(id => document.getElementById(id).style.display = 'none');
-        if (d.provider) {
-          document.getElementById('eld-provider').value = d.provider;
-          document.getElementById('eld-apikey').placeholder = d.api_key; // shows ••••••••
-          const needsToken = d.provider === 'zippyeld' || d.provider === 'evoeld';
-          document.getElementById('eld-provider-token-field').style.display = needsToken ? 'block' : 'none';
-          document.getElementById('eld-company-field').style.display = needsToken ? 'block' : 'none';
-          if (needsToken) {
-            if (d.provider_token) document.getElementById('eld-provider-token').placeholder = d.provider_token;
-            document.getElementById('eld-company').value = d.company || '';
-          }
-          document.getElementById('eld-del-btn').style.display = 'inline-block';
-        } else {
-          document.getElementById('eld-del-btn').style.display = 'none';
-        }
+        renderEldList(d.configs || []);
       } catch {}
+    }
+
+    async function disconnectEld(provider) {
+      if (!confirm(`Disconnect ${ELD_PROVIDER_NAMES[provider] || provider}?`)) return;
+      await fetch(`/api/eld/config?provider=${encodeURIComponent(provider)}`, { method: 'DELETE', headers: authH() });
+      toast('ELD disconnected');
+      loadEldConfig();
     }
 
     document.getElementById('eld-provider').addEventListener('change', function() {
@@ -1987,7 +2004,7 @@ Rate: {{total_rate_usd}}
       if ((provider === 'zippyeld' || provider === 'evoeld') && !providerToken) { errEl.textContent = 'Provider Token is required'; errEl.style.display = 'block'; return; }
       if ((provider === 'zippyeld' || provider === 'evoeld') && !company) { errEl.textContent = 'USDOT number is required'; errEl.style.display = 'block'; return; }
       const btn = document.getElementById('eld-save-btn');
-      btn.disabled = true; btn.textContent = 'Saving...';
+      btn.disabled = true; btn.textContent = 'Connecting...';
       try {
         const r = await fetch('/api/eld/config', {
           method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
@@ -1995,28 +2012,17 @@ Rate: {{total_rate_usd}}
         });
         const d = await r.json();
         if (!r.ok) { errEl.textContent = d.detail || 'Error'; errEl.style.display = 'block'; return; }
-        okEl.textContent = 'ELD connected successfully!'; okEl.style.display = 'block';
+        okEl.textContent = `${ELD_PROVIDER_NAMES[provider] || provider} connected!`; okEl.style.display = 'block';
+        document.getElementById('eld-provider').value = '';
         document.getElementById('eld-apikey').value = '';
         document.getElementById('eld-provider-token').value = '';
-        document.getElementById('eld-del-btn').style.display = 'inline-block';
+        document.getElementById('eld-company').value = '';
+        document.getElementById('eld-provider-token-field').style.display = 'none';
+        document.getElementById('eld-company-field').style.display = 'none';
         toast('ELD connected', 'success');
+        loadEldConfig();
       } catch { errEl.textContent = 'Connection error'; errEl.style.display = 'block'; }
-      finally { btn.disabled = false; btn.textContent = 'Save Configuration'; }
-    });
-
-    document.getElementById('eld-del-btn').addEventListener('click', async () => {
-      if (!confirm('Disconnect ELD integration?')) return;
-      await fetch('/api/eld/config', { method: 'DELETE', headers: authH() });
-      document.getElementById('eld-provider').value = '';
-      document.getElementById('eld-apikey').value = '';
-      document.getElementById('eld-apikey').placeholder = 'Enter API key';
-      document.getElementById('eld-provider-token').value = '';
-      document.getElementById('eld-company').value = '';
-      document.getElementById('eld-provider-token-field').style.display = 'none';
-      document.getElementById('eld-company-field').style.display = 'none';
-      document.getElementById('eld-del-btn').style.display = 'none';
-      ['eld-err','eld-ok'].forEach(id => document.getElementById(id).style.display = 'none');
-      toast('ELD disconnected');
+      finally { btn.disabled = false; btn.textContent = 'Connect Provider'; }
     });
 
     async function loadGmapsConfig() {

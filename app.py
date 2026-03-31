@@ -686,8 +686,8 @@ async def api_eld_save_config(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    if body.provider not in ("samsara", "motive", "zippyeld"):
-        raise HTTPException(status_code=400, detail="Invalid provider. Use: samsara, motive, zippyeld")
+    if body.provider not in ("samsara", "motive", "zippyeld", "evoeld"):
+        raise HTTPException(status_code=400, detail="Invalid provider. Use: samsara, motive, zippyeld, evoeld")
     if not body.api_key.strip():
         raise HTTPException(status_code=400, detail="API key is required")
     company = body.company.strip() if body.company else None

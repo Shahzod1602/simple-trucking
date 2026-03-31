@@ -799,6 +799,7 @@
               <option value="samsara">Samsara</option>
               <option value="motive">Motive (KeepTrucking)</option>
               <option value="zippyeld">ZippyELD</option>
+              <option value="evoeld">EVO ELD</option>
             </select>
           </div>
           <div class="field">
@@ -1953,10 +1954,10 @@ Rate: {{total_rate_usd}}
         if (d.provider) {
           document.getElementById('eld-provider').value = d.provider;
           document.getElementById('eld-apikey').placeholder = d.api_key; // shows ••••••••
-          const isZippy = d.provider === 'zippyeld';
-          document.getElementById('eld-provider-token-field').style.display = isZippy ? 'block' : 'none';
-          document.getElementById('eld-company-field').style.display = isZippy ? 'block' : 'none';
-          if (isZippy) {
+          const needsToken = d.provider === 'zippyeld' || d.provider === 'evoeld';
+          document.getElementById('eld-provider-token-field').style.display = needsToken ? 'block' : 'none';
+          document.getElementById('eld-company-field').style.display = needsToken ? 'block' : 'none';
+          if (needsToken) {
             if (d.provider_token) document.getElementById('eld-provider-token').placeholder = d.provider_token;
             document.getElementById('eld-company').value = d.company || '';
           }
@@ -1968,9 +1969,9 @@ Rate: {{total_rate_usd}}
     }
 
     document.getElementById('eld-provider').addEventListener('change', function() {
-      const isZippy = this.value === 'zippyeld';
-      document.getElementById('eld-provider-token-field').style.display = isZippy ? 'block' : 'none';
-      document.getElementById('eld-company-field').style.display = isZippy ? 'block' : 'none';
+      const needsToken = this.value === 'zippyeld' || this.value === 'evoeld';
+      document.getElementById('eld-provider-token-field').style.display = needsToken ? 'block' : 'none';
+      document.getElementById('eld-company-field').style.display = needsToken ? 'block' : 'none';
     });
 
     document.getElementById('eld-save-btn').addEventListener('click', async () => {
@@ -1983,8 +1984,8 @@ Rate: {{total_rate_usd}}
       errEl.style.display = 'none'; okEl.style.display = 'none';
       if (!provider) { errEl.textContent = 'Select a provider'; errEl.style.display = 'block'; return; }
       if (!apiKey) { errEl.textContent = 'API key is required'; errEl.style.display = 'block'; return; }
-      if (provider === 'zippyeld' && !providerToken) { errEl.textContent = 'Provider Token is required'; errEl.style.display = 'block'; return; }
-      if (provider === 'zippyeld' && !company) { errEl.textContent = 'USDOT number is required'; errEl.style.display = 'block'; return; }
+      if ((provider === 'zippyeld' || provider === 'evoeld') && !providerToken) { errEl.textContent = 'Provider Token is required'; errEl.style.display = 'block'; return; }
+      if ((provider === 'zippyeld' || provider === 'evoeld') && !company) { errEl.textContent = 'USDOT number is required'; errEl.style.display = 'block'; return; }
       const btn = document.getElementById('eld-save-btn');
       btn.disabled = true; btn.textContent = 'Saving...';
       try {

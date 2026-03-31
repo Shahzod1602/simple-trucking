@@ -1,6 +1,7 @@
 from .samsara import SamsaraClient
 from .motive import MotiveClient
 from .zippy import ZippyClient
+from .evo import EvoClient
 
 
 def get_client(provider: str, api_key: str, company: str | None = None, provider_token: str | None = None):
@@ -14,4 +15,10 @@ def get_client(provider: str, api_key: str, company: str | None = None, provider
         if not company:
             raise ValueError("ZippyELD requires a USDOT number")
         return ZippyClient(api_key, provider_token, company)
+    elif provider == "evoeld":
+        if not provider_token:
+            raise ValueError("EVO ELD requires a Provider Token")
+        if not company:
+            raise ValueError("EVO ELD requires a USDOT number")
+        return EvoClient(api_key, provider_token, company)
     raise ValueError(f"Unknown ELD provider: {provider}")

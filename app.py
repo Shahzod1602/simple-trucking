@@ -726,6 +726,29 @@ async def api_eld_drivers(authorization: str | None = Header(default=None)):
         raise HTTPException(status_code=502, detail=f"ELD error: {e}")
 
 
+@app.get("/api/trucks")
+async def api_trucks(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    cfg = database.get_eld_config(dispatcher["id"])
+    if not cfg:
+        raise HTTPException(status_code=400, detail="ELD not configured. Add API key in Settings.")
+    try:
+        from eld import get_client
+        import httpx
+        client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
+        trucks = client.get_trucks()
+        return {"trucks": trucks}
+    except httpx.HTTPStatusError as e:
+        body = ""
+        try:
+            body = e.response.json()
+        except Exception:
+            body = e.response.text
+        raise HTTPException(status_code=502, detail=f"ELD API error {e.response.status_code}: {body}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"ELD error: {e}")
+
+
 class AssignDriverBody(BaseModel):
     eld_driver_id: str | None = None
     eld_driver_name: str | None = None

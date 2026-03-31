@@ -22,6 +22,35 @@ class MotiveClient:
             for u in users
         ]
 
+    def get_trucks(self) -> list[dict]:
+        """Returns list of trucks with driver assignment and real-time location."""
+        resp = httpx.get(
+            f"{BASE}/vehicles/current_locations",
+            headers=self.headers,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        vehicles = resp.json().get("vehicles", [])
+        result = []
+        for v in vehicles:
+            loc = v.get("current_location") or {}
+            driver = v.get("current_driver") or {}
+            truck = v.get("vehicle") or {}
+            speed_kmh = loc.get("speed") or 0
+            driver_name = f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip()
+            result.append({
+                "id": str(truck.get("id", "")),
+                "truck_number": truck.get("number") or truck.get("name") or str(truck.get("id", "")),
+                "vin": truck.get("vin") or "",
+                "driver": {"id": str(driver["id"]), "name": driver_name} if driver.get("id") else None,
+                "codriver": None,
+                "lat": loc.get("lat"),
+                "lon": loc.get("lon"),
+                "speed_mph": round(speed_kmh * 0.621371, 1) if speed_kmh else None,
+                "timestamp": loc.get("recorded_at"),
+            })
+        return result
+
     def get_driver_location(self, driver_id: str) -> dict | None:
         """Returns {lat, lon, speed_mph} for a driver via their assigned vehicle."""
         resp = httpx.get(

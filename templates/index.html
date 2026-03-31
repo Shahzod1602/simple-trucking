@@ -562,6 +562,9 @@
       <button class="nav-item" data-page="map">
         <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg></span> Map
       </button>
+      <button class="nav-item" data-page="trucks">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></span> Trucks
+      </button>
       <button class="nav-item" data-page="groups">
         <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Groups
       </button>
@@ -942,6 +945,18 @@
         <div id="map-container"></div>
       </div>
 
+      <!-- ── Trucks ── -->
+      <div class="page" id="page-trucks">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">My Trucks</h1>
+            <p class="page-subtitle">Fleet units from ELD with real-time info</p>
+          </div>
+          <button class="btn-outline" onclick="loadTrucksPage()">↺ Refresh</button>
+        </div>
+        <div id="trucks-content"></div>
+      </div>
+
       <!-- ── Telegram ── -->
       <div class="page" id="page-telegram">
         <div id="tg-layout">
@@ -1211,7 +1226,7 @@ Rate: {{total_rate_usd}}
     }
 
     // ── Navigation ────────────────────────────────────────────────────────
-    const pageTitles = { extract:'Extract', loads:'Loads', groups:'Groups', history:'History', settings:'Settings', admin:'Admin', analytics:'Analytics', map:'Map', telegram:'Telegram', paystructure:'Pay Structure' };
+    const pageTitles = { extract:'Extract', loads:'Loads', groups:'Groups', history:'History', settings:'Settings', admin:'Admin', analytics:'Analytics', map:'Map', trucks:'Trucks', telegram:'Telegram', paystructure:'Pay Structure' };
     function goTo(page) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
@@ -1229,6 +1244,7 @@ Rate: {{total_rate_usd}}
       if (page === 'users')     loadUsersPage();
       if (page === 'analytics') loadAnalyticsPage();
       if (page === 'map')       loadMapPage();
+      if (page === 'trucks')    loadTrucksPage();
       if (page === 'telegram')    loadTgGroups();
       if (page === 'paystructure') loadPayStructurePage();
     }
@@ -2818,6 +2834,60 @@ Rate: {{total_rate_usd}}
         toast('Auto-refresh off');
       }
     });
+
+    async function loadTrucksPage() {
+      const el = document.getElementById('trucks-content');
+      el.innerHTML = '<p style="color:var(--text-muted);padding:1rem;">Loading trucks...</p>';
+      try {
+        const r = await fetch('/api/trucks', { headers: authH() });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ detail: r.statusText }));
+          el.innerHTML = `<p style="color:var(--danger);padding:1rem;">${esc(err.detail || 'Failed to load trucks')}</p>`;
+          return;
+        }
+        const { trucks } = await r.json();
+        if (!trucks.length) {
+          el.innerHTML = '<p style="color:var(--text-muted);padding:1rem;">No trucks found. Make sure ELD is configured in Settings.</p>';
+          return;
+        }
+        const rows = trucks.map(t => {
+          const driverCell = t.driver ? esc(t.driver.name) : '<span style="color:var(--text-muted)">—</span>';
+          const codriverCell = t.codriver ? esc(t.codriver.name) : '<span style="color:var(--text-muted)">—</span>';
+          const speedCell = t.speed_mph != null ? `${Math.round(t.speed_mph)} mph` : '<span style="color:var(--text-muted)">—</span>';
+          const locationCell = (t.lat != null && t.lon != null)
+            ? `<a href="https://www.google.com/maps?q=${t.lat},${t.lon}" target="_blank" style="color:var(--primary);text-decoration:none;">${t.lat.toFixed(4)}, ${t.lon.toFixed(4)}</a>`
+            : '<span style="color:var(--text-muted)">—</span>';
+          const ts = t.timestamp ? new Date(t.timestamp).toLocaleString() : '—';
+          return `<tr>
+            <td style="font-weight:600;">${esc(t.truck_number)}</td>
+            <td style="color:var(--text-muted);font-size:0.82rem;">${esc(t.vin || '—')}</td>
+            <td>${driverCell}</td>
+            <td>${codriverCell}</td>
+            <td>${speedCell}</td>
+            <td>${locationCell}</td>
+            <td style="color:var(--text-muted);font-size:0.8rem;">${ts}</td>
+          </tr>`;
+        }).join('');
+        el.innerHTML = `
+          <div style="overflow-x:auto;">
+            <table class="loads-table" style="width:100%;">
+              <thead><tr>
+                <th>Truck #</th>
+                <th>VIN</th>
+                <th>Driver</th>
+                <th>Co-Driver</th>
+                <th>Speed</th>
+                <th>Location</th>
+                <th>Last Update</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.75rem;">${trucks.length} truck${trucks.length !== 1 ? 's' : ''} · Updated ${new Date().toLocaleTimeString()}</p>`;
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger);padding:1rem;">Error: ${esc(String(e))}</p>`;
+      }
+    }
 
     // ── ETA alert polling ─────────────────────────────────────────────────
     let knownAlertIds = new Set();

@@ -19,6 +19,32 @@ class SamsaraClient:
         data = resp.json().get("data", [])
         return [{"id": d["id"], "name": d["name"]} for d in data]
 
+    def get_trucks(self) -> list[dict]:
+        """Returns list of trucks with driver assignment and real-time location."""
+        resp = httpx.get(
+            f"{BASE}/fleet/vehicles/locations",
+            headers=self.headers,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        vehicles = resp.json().get("data", [])
+        result = []
+        for v in vehicles:
+            loc = v.get("location") or {}
+            driver = v.get("driver") or {}
+            result.append({
+                "id": str(v.get("id", "")),
+                "truck_number": v.get("name") or str(v.get("id", "")),
+                "vin": v.get("vin") or "",
+                "driver": {"id": str(driver["id"]), "name": driver.get("name", "")} if driver.get("id") else None,
+                "codriver": None,
+                "lat": loc.get("latitude"),
+                "lon": loc.get("longitude"),
+                "speed_mph": loc.get("speedMilesPerHour"),
+                "timestamp": loc.get("time"),
+            })
+        return result
+
     def get_driver_location(self, driver_id: str) -> dict | None:
         """Returns {lat, lon, speed_mph} for a driver's current vehicle location."""
         resp = httpx.get(

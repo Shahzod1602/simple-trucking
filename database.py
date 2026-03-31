@@ -347,8 +347,19 @@ def delete_dispatcher(dispatcher_id: int) -> bool:
 
 def get_eld_config(dispatcher_id: int) -> dict | None:
     with get_conn() as conn:
+        # Try own config first, then fall back to any config in the same company
         row = conn.execute(
             "SELECT * FROM eld_configs WHERE dispatcher_id = ?", (dispatcher_id,)
+        ).fetchone()
+        if row:
+            return dict(row)
+        row = conn.execute(
+            """SELECT ec.* FROM eld_configs ec
+               JOIN dispatchers d ON d.id = ec.dispatcher_id
+               WHERE d.company_id = (SELECT company_id FROM dispatchers WHERE id = ?)
+               AND d.company_id IS NOT NULL
+               LIMIT 1""",
+            (dispatcher_id,),
         ).fetchone()
         return dict(row) if row else None
 

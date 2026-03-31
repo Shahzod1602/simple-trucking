@@ -42,8 +42,9 @@ def _build_status_message(load: dict, eld_cfg: dict) -> str | None:
         )
 
         miles_left = "N/A"
+        gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
         if next_address:
-            destination = routing.geocode(next_address)
+            destination = routing.geocode(next_address, gmaps_key)
             if destination:
                 route = routing.get_route({"lat": lat, "lon": lon}, destination)
                 miles_left = f"{round(route['distance_meters'] / 1609.34, 1)} mi"

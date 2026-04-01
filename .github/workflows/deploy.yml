@@ -20,6 +20,11 @@ jobs:
             set -e
             cd /opt/simple-trucking
             git pull origin main
+            docker compose down --remove-orphans || true
             docker rm -f ratecon_app || true
+            PORT_8002_CONTAINERS="$(docker ps -q --filter publish=8002)"
+            if [ -n "$PORT_8002_CONTAINERS" ]; then
+              docker rm -f $PORT_8002_CONTAINERS || true
+            fi
             docker compose up --build -d
             docker image prune -f

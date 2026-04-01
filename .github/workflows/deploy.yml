@@ -17,7 +17,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
+            set -e
             cd /opt/simple-trucking
             git pull origin main
+            docker rm -f ratecon_app || true
             docker compose up --build -d
             docker image prune -f

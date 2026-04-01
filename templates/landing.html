@@ -661,21 +661,122 @@
     .step p { font-size: 0.875rem; color: var(--muted2); line-height: 1.7; }
 
     /* integrations */
-    .integrations-row {
-      max-width: 900px; margin: 48px auto 0;
-      display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap;
+    .integrations-orbit {
+      max-width: 860px;
+      margin: 56px auto 0;
+      height: 540px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .integration-badge {
-      display: flex; align-items: center; gap: 8px;
-      background: var(--card); border: 1px solid var(--border);
-      padding: 10px 20px; border-radius: 10px;
-      font-size: 0.85rem; font-weight: 600; color: var(--muted2);
-      transition: all 0.2s;
+    .orbit-ring {
+      position: absolute;
+      border: 1px dashed var(--border);
+      border-radius: 50%;
     }
-    .integration-badge:hover {
-      border-color: var(--border-lit); color: var(--text);
+    .ring-1 { width: 320px; height: 320px; }
+    .ring-2 { width: 450px; height: 450px; }
+    .ring-3 { width: 580px; height: 580px; opacity: 0.8; }
+
+    .orbit-center {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: radial-gradient(circle at 30% 30%, rgba(245,158,11,0.12), rgba(255,106,0,0.03) 48%, rgba(0,0,0,0) 70%), var(--card);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      box-shadow: 0 0 36px rgba(245,158,11,0.12);
+      padding: 20px;
     }
-    .integration-badge .int-icon { font-size: 1.2rem; }
+    .orbit-center-logo {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2rem;
+      line-height: 1;
+      margin-bottom: 10px;
+      box-shadow: 0 0 20px rgba(245,158,11,0.35);
+    }
+    .orbit-center-title {
+      font-size: 1.6rem;
+      line-height: 1;
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 0.03em;
+      color: var(--text);
+    }
+    .orbit-center-sub {
+      margin-top: 6px;
+      font-size: 0.74rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-family: 'DM Mono', monospace;
+    }
+
+    .integration-node {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      transform: translate(-50%, -50%);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 13px 8px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--muted2);
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.2);
+    }
+    .integration-node:hover {
+      border-color: var(--border-lit);
+      color: var(--text);
+      transform: translate(-50%, -50%) translateY(-2px);
+    }
+    .integration-mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.02em;
+      font-family: 'DM Mono', monospace;
+    }
+    .mk-sam { background: #165dff; }
+    .mk-mot { background: #111827; }
+    .mk-zip { background: #f97316; }
+    .mk-evo { background: #7c3aed; }
+    .mk-tg  { background: #0ea5e9; }
+    .mk-gm  { background: #22c55e; }
+    .mk-api { background: #0284c7; }
+    .mk-pdf { background: #dc2626; }
+    .mk-img { background: #8b5cf6; }
+    .mk-tms { background: #0f766e; }
+    .mk-bot { background: #475569; }
+    .mk-inv { background: #ca8a04; }
 
     /* ── PRICING ── */
     .pricing-grid {
@@ -900,6 +1001,35 @@
       .testimonials-grid { grid-template-columns: 1fr; max-width: 480px; }
       .stat-divider { display: none; }
       .footer-top { flex-direction: column; }
+      .integrations-orbit {
+        height: auto;
+        margin-top: 44px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(140px, 1fr));
+        gap: 12px;
+      }
+      .orbit-ring { display: none; }
+      .orbit-center {
+        position: relative;
+        left: auto;
+        top: auto;
+        transform: none;
+        width: 100%;
+        height: auto;
+        border-radius: 14px;
+        grid-column: 1 / -1;
+        padding: 18px 12px;
+      }
+      .orbit-center-logo { width: 42px; height: 42px; font-size: 1.6rem; border-radius: 12px; }
+      .integration-node {
+        position: relative;
+        left: auto;
+        top: auto;
+        transform: none;
+        width: 100%;
+        justify-content: flex-start;
+      }
+      .integration-node:hover { transform: translateY(-2px); }
     }
     @media (max-width: 600px) {
       section { padding: 80px 5%; }
@@ -1218,26 +1348,52 @@
 
     <div style="text-align:center; margin-top:80px" class="reveal">
       <div class="section-label">Works with</div>
-      <div class="integrations-row">
-        <div class="integration-badge">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="#0088cc"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
-          Telegram
+      <div class="integrations-orbit">
+        <div class="orbit-ring ring-1"></div>
+        <div class="orbit-ring ring-2"></div>
+        <div class="orbit-ring ring-3"></div>
+
+        <div class="orbit-center">
+          <div class="orbit-center-logo">S</div>
+          <div class="orbit-center-title">SimpleTrucking</div>
+          <div class="orbit-center-sub">Integration Hub</div>
         </div>
-        <div class="integration-badge">
-          <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          PDF Files
+
+        <div class="integration-node" style="--x:50%;--y:6%;">
+          <span class="integration-mark mk-sam">SA</span>Samsara
         </div>
-        <div class="integration-badge">
-          <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke="#a78bfa" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="#a78bfa"/><polyline points="21,15 16,10 5,21" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Images
+        <div class="integration-node" style="--x:74%;--y:14%;">
+          <span class="integration-mark mk-mot">MO</span>Motive
         </div>
-        <div class="integration-badge">
-          <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="#4f8ef7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="#4f8ef7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          REST API
+        <div class="integration-node" style="--x:84%;--y:31%;">
+          <span class="integration-mark mk-tg">TG</span>Telegram Bot
         </div>
-        <div class="integration-badge">
-          <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" stroke="#00d97e" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="#00d97e" stroke-width="2" stroke-linecap="round"/></svg>
-          Any TMS
+        <div class="integration-node" style="--x:89%;--y:51%;">
+          <span class="integration-mark mk-gm">GM</span>Google Maps ETA
+        </div>
+        <div class="integration-node" style="--x:81%;--y:72%;">
+          <span class="integration-mark mk-api">API</span>REST API
+        </div>
+        <div class="integration-node" style="--x:65%;--y:86%;">
+          <span class="integration-mark mk-tms">TMS</span>Any TMS
+        </div>
+        <div class="integration-node" style="--x:49%;--y:93%;">
+          <span class="integration-mark mk-bot">AI</span>AI Dispatcher
+        </div>
+        <div class="integration-node" style="--x:34%;--y:86%;">
+          <span class="integration-mark mk-inv">INV</span>Invoice PDF
+        </div>
+        <div class="integration-node" style="--x:19%;--y:72%;">
+          <span class="integration-mark mk-img">IMG</span>Image Uploads
+        </div>
+        <div class="integration-node" style="--x:11%;--y:51%;">
+          <span class="integration-mark mk-pdf">PDF</span>RateCon PDF
+        </div>
+        <div class="integration-node" style="--x:16%;--y:31%;">
+          <span class="integration-mark mk-evo">EVO</span>EVO ELD
+        </div>
+        <div class="integration-node" style="--x:26%;--y:14%;">
+          <span class="integration-mark mk-zip">ZE</span>ZippyELD
         </div>
       </div>
     </div>

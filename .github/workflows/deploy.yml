@@ -22,9 +22,13 @@ jobs:
             git pull origin main
             docker compose down --remove-orphans || true
             docker rm -f ratecon_app || true
-            PORT_8002_CONTAINERS="$(docker ps -q --filter publish=8002)"
+            PORT_8002_CONTAINERS="$(docker ps -aq --filter publish=8002)"
             if [ -n "$PORT_8002_CONTAINERS" ]; then
               docker rm -f $PORT_8002_CONTAINERS || true
+            fi
+            PORT_8002_PIDS="$(lsof -ti tcp:8002 || true)"
+            if [ -n "$PORT_8002_PIDS" ]; then
+              kill -9 $PORT_8002_PIDS || true
             fi
             docker compose up --build -d
             docker image prune -f

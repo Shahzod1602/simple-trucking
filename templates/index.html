@@ -2933,13 +2933,15 @@ Rate: {{total_rate_usd}}
         mapMarkers.forEach(m => m.remove());
         mapMarkers = [];
         if (!locs.length) {
-          document.getElementById('map-status').textContent = 'No drivers with ELD location data. Assign a driver to a group in ELD settings.';
+          document.getElementById('map-status').textContent = 'No trucks with ELD location data. Check ELD settings and truck GPS feed.';
           return;
         }
         locs.forEach(loc => {
           const marker = L.marker([loc.lat, loc.lon]).addTo(leafletMap);
           const speed = loc.speed_mph > 0 ? `${Math.round(loc.speed_mph)} mph` : 'Stopped';
-          marker.bindPopup(`<strong>🚛 ${esc(loc.driver_name)}</strong><br>Speed: ${speed}`);
+          const driver = loc.driver_name ? `<br>Driver: ${esc(loc.driver_name)}` : '';
+          const provider = loc.provider ? `<br>Provider: ${esc(loc.provider)}` : '';
+          marker.bindPopup(`<strong>🚛 Truck ${esc(loc.truck_number || 'Unknown')}</strong>${driver}${provider}<br>Speed: ${speed}`);
           mapMarkers.push(marker);
         });
         // Fit map to markers
@@ -2949,7 +2951,7 @@ Rate: {{total_rate_usd}}
           const group = L.featureGroup(mapMarkers);
           leafletMap.fitBounds(group.getBounds().pad(0.2));
         }
-        document.getElementById('map-status').textContent = `${locs.length} driver${locs.length !== 1 ? 's' : ''} shown · Updated ${new Date().toLocaleTimeString()}`;
+        document.getElementById('map-status').textContent = `${locs.length} truck${locs.length !== 1 ? 's' : ''} shown · Updated ${new Date().toLocaleTimeString()}`;
       } catch { document.getElementById('map-status').textContent = 'Failed to load locations'; }
     }
 

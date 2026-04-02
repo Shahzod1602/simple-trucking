@@ -139,6 +139,25 @@ def _get_driver_location(eld_driver_id: str, dispatcher_id: int) -> dict | None:
     return None
 
 
+def _get_dispatcher_trucks(dispatcher_id: int) -> list[dict]:
+    """Fetch trucks from all ELD configs for a dispatcher."""
+    from eld import get_client
+    configs = database.get_eld_configs(dispatcher_id)
+    if not configs:
+        return []
+    all_trucks = []
+    for cfg in configs:
+        try:
+            client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
+            trucks = client.get_trucks()
+            for truck in trucks:
+                truck["provider"] = cfg["provider"]
+            all_trucks.extend(trucks)
+        except Exception:
+            continue
+    return all_trucks
+
+
 # ── Pages ─────────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -807,21 +826,10 @@ async def api_gmaps_delete(authorization: str | None = Header(default=None)):
 @app.get("/api/trucks")
 async def api_trucks(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
-    configs = database.get_eld_configs(dispatcher["id"])
-    if not configs:
+    trucks = _get_dispatcher_trucks(dispatcher["id"])
+    if not trucks and not database.get_eld_configs(dispatcher["id"]):
         raise HTTPException(status_code=400, detail="ELD not configured. Add API key in Settings.")
-    from eld import get_client
-    all_trucks = []
-    for cfg in configs:
-        try:
-            client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-            trucks = client.get_trucks()
-            for t in trucks:
-                t["provider"] = cfg["provider"]
-            all_trucks.extend(trucks)
-        except Exception:
-            continue
-    return {"trucks": all_trucks}
+    return {"trucks": trucks}
 
 
 class AssignDriverBody(BaseModel):
@@ -1241,30 +1249,24 @@ async def api_analytics(authorization: str | None = Header(default=None)):
 @app.get("/api/map/locations")
 async def api_map_locations(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
-    configs = database.get_eld_configs(dispatcher["id"])
-    if not configs:
-        return {"locations": []}
-
-    groups = database.get_groups(get_company_id(dispatcher))
-    groups_with_driver = [g for g in groups if g.get("eld_driver_id")]
-    if not groups_with_driver:
-        return {"locations": []}
-
+    trucks = _get_dispatcher_trucks(dispatcher["id"])
     locations = []
-    for group in groups_with_driver:
-        try:
-            loc = _get_driver_location(group["eld_driver_id"], dispatcher["id"])
-            if not loc:
-                continue
-            locations.append({
-                "group_id": group["id"],
-                "driver_name": group.get("name") or "Unknown",
-                "lat": loc["lat"],
-                "lon": loc["lon"],
-                "speed_mph": loc.get("speed_mph") or 0,
-            })
-        except Exception:
+    for truck in trucks:
+        lat = truck.get("lat")
+        lon = truck.get("lon")
+        if lat is None or lon is None:
             continue
+        driver = truck.get("driver") or {}
+        locations.append({
+            "truck_id": truck.get("id"),
+            "truck_number": truck.get("truck_number") or "Unknown",
+            "driver_name": driver.get("name") or None,
+            "provider": truck.get("provider") or "",
+            "lat": lat,
+            "lon": lon,
+            "speed_mph": truck.get("speed_mph") or 0,
+            "timestamp": truck.get("timestamp"),
+        })
     return {"locations": locations}
 
 

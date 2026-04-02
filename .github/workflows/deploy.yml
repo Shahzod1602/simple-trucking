@@ -22,13 +22,31 @@ jobs:
             git pull origin main
             docker compose down --remove-orphans || true
             docker rm -f ratecon_app || true
-            PORT_8002_CONTAINERS="$(docker ps -aq --filter publish=8002)"
-            if [ -n "$PORT_8002_CONTAINERS" ]; then
-              docker rm -f $PORT_8002_CONTAINERS || true
-            fi
-            PORT_8002_PIDS="$(lsof -ti tcp:8002 || true)"
-            if [ -n "$PORT_8002_PIDS" ]; then
-              kill -9 $PORT_8002_PIDS || true
-            fi
-            docker compose up --build -d
+            ATTEMPT=1
+            MAX_ATTEMPTS=3
+            until [ "$ATTEMPT" -gt "$MAX_ATTEMPTS" ]; do
+              echo "Deploy attempt $ATTEMPT/$MAX_ATTEMPTS: release port 8002"
+              PORT_8002_CONTAINERS="$(docker ps -aq --filter publish=8002)"
+              if [ -n "$PORT_8002_CONTAINERS" ]; then
+                docker rm -f $PORT_8002_CONTAINERS || true
+              fi
+              PORT_8002_PIDS="$(lsof -ti tcp:8002 || true)"
+              if [ -n "$PORT_8002_PIDS" ]; then
+                kill -9 $PORT_8002_PIDS || true
+              fi
+              if command -v fuser >/dev/null 2>&1; then
+                fuser -k 8002/tcp || true
+              fi
+
+              if docker compose up --build -d; then
+                break
+              fi
+
+              if [ "$ATTEMPT" -eq "$MAX_ATTEMPTS" ]; then
+                echo "Deploy failed after $MAX_ATTEMPTS attempts"
+                exit 1
+              fi
+              ATTEMPT=$((ATTEMPT + 1))
+              sleep 2
+            done
             docker image prune -f

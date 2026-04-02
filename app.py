@@ -22,6 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 IMAGE_PATH = BASE_DIR / "image.png"
 UPLOADS_DIR = Path("uploads")
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
@@ -38,7 +39,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Ratecon Extractor", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR), check_dir=False), name="static")
 
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".webp"}
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB

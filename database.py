@@ -61,7 +61,7 @@ def init_db():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS eld_configs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dispatcher_id INTEGER NOT NULL UNIQUE REFERENCES dispatchers(id) ON DELETE CASCADE,
+                dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
                 provider TEXT NOT NULL,
                 api_key TEXT NOT NULL,
                 company TEXT,
@@ -74,6 +74,33 @@ def init_db():
             conn.execute("ALTER TABLE eld_configs ADD COLUMN company TEXT")
         if "provider_token" not in eld_existing:
             conn.execute("ALTER TABLE eld_configs ADD COLUMN provider_token TEXT")
+
+        # Migrate eld_configs to multi-connection (no UNIQUE constraints on dispatcher/provider)
+        eld_table_row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='eld_configs'"
+        ).fetchone()
+        eld_table_sql = (eld_table_row[0] or "").upper() if eld_table_row else ""
+        has_old_unique = (
+            "DISPATCHER_ID INTEGER NOT NULL UNIQUE" in eld_table_sql
+            or "UNIQUE(DISPATCHER_ID" in eld_table_sql
+        )
+        if has_old_unique:
+            conn.execute("""CREATE TABLE IF NOT EXISTS eld_configs_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+                provider TEXT NOT NULL,
+                api_key TEXT NOT NULL,
+                company TEXT,
+                provider_token TEXT,
+                updated_at TEXT NOT NULL
+            )""")
+            conn.execute("""
+                INSERT INTO eld_configs_new (id, dispatcher_id, provider, api_key, company, provider_token, updated_at)
+                SELECT id, dispatcher_id, provider, api_key, company, provider_token, updated_at
+                FROM eld_configs
+            """)
+            conn.execute("DROP TABLE eld_configs")
+            conn.execute("ALTER TABLE eld_configs_new RENAME TO eld_configs")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS loads (
@@ -345,47 +372,58 @@ def delete_dispatcher(dispatcher_id: int) -> bool:
 
 # ── ELD configs ───────────────────────────────────────────────────────────────
 
-def get_eld_config(dispatcher_id: int) -> dict | None:
+def get_eld_configs(dispatcher_id: int) -> list[dict]:
     with get_conn() as conn:
-        # Try own config first, then fall back to any config in the same company
-        row = conn.execute(
+        rows = conn.execute(
             "SELECT * FROM eld_configs WHERE dispatcher_id = ?", (dispatcher_id,)
-        ).fetchone()
-        if row:
-            return dict(row)
-        row = conn.execute(
+        ).fetchall()
+        if rows:
+            return [dict(r) for r in rows]
+        # fallback to company admin's configs
+        rows = conn.execute(
             """SELECT ec.* FROM eld_configs ec
                JOIN dispatchers d ON d.id = ec.dispatcher_id
                WHERE d.company_id = (SELECT company_id FROM dispatchers WHERE id = ?)
-               AND d.company_id IS NOT NULL
-               LIMIT 1""",
+               AND d.company_id IS NOT NULL""",
             (dispatcher_id,),
-        ).fetchone()
-        return dict(row) if row else None
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_eld_config(dispatcher_id: int) -> dict | None:
+    configs = get_eld_configs(dispatcher_id)
+    return configs[0] if configs else None
 
 
 def save_eld_config(dispatcher_id: int, provider: str, api_key: str, company: str | None = None, provider_token: str | None = None) -> dict:
     now = datetime.utcnow().isoformat()
     with get_conn() as conn:
-        conn.execute(
+        cur = conn.execute(
             """INSERT INTO eld_configs (dispatcher_id, provider, api_key, company, provider_token, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT(dispatcher_id) DO UPDATE SET
-                 provider = excluded.provider,
-                 api_key = excluded.api_key,
-                 company = excluded.company,
-                 provider_token = excluded.provider_token,
-                 updated_at = excluded.updated_at""",
+               VALUES (?, ?, ?, ?, ?, ?)""",
             (dispatcher_id, provider, api_key, company, provider_token, now),
         )
-        return {"dispatcher_id": dispatcher_id, "provider": provider}
+        return {"id": cur.lastrowid, "dispatcher_id": dispatcher_id, "provider": provider}
 
 
-def delete_eld_config(dispatcher_id: int) -> bool:
+def delete_eld_config(dispatcher_id: int, provider: str | None = None, config_id: int | None = None) -> bool:
+    if config_id is None and not provider:
+        return False
     with get_conn() as conn:
-        cur = conn.execute(
-            "DELETE FROM eld_configs WHERE dispatcher_id = ?", (dispatcher_id,)
-        )
+        if config_id is not None:
+            cur = conn.execute(
+                "DELETE FROM eld_configs WHERE dispatcher_id = ? AND id = ?",
+                (dispatcher_id, config_id),
+            )
+        elif provider:
+            cur = conn.execute(
+                "DELETE FROM eld_configs WHERE dispatcher_id = ? AND provider = ?",
+                (dispatcher_id, provider),
+            )
+        else:
+            cur = conn.execute(
+                "DELETE FROM eld_configs WHERE dispatcher_id = ?", (dispatcher_id,)
+            )
         return cur.rowcount > 0
 
 

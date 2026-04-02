@@ -716,6 +716,7 @@ async def api_eld_get_config(authorization: str | None = Header(default=None)):
     return {
         "configs": [
             {
+                "id": c["id"],
                 "provider": c["provider"],
                 "api_key": "••••" + c["api_key"][-4:] if len(c["api_key"]) >= 4 else "••••",
                 "company": c.get("company"),
@@ -743,9 +744,15 @@ async def api_eld_save_config(
 
 
 @app.delete("/api/eld/config")
-async def api_eld_delete_config(provider: str | None = None, authorization: str | None = Header(default=None)):
+async def api_eld_delete_config(
+    provider: str | None = None,
+    config_id: int | None = None,
+    authorization: str | None = Header(default=None),
+):
     dispatcher = require_dispatcher(authorization)
-    database.delete_eld_config(dispatcher["id"], provider)
+    if config_id is None and not provider:
+        raise HTTPException(status_code=400, detail="config_id is required")
+    database.delete_eld_config(dispatcher["id"], provider=provider, config_id=config_id)
     return {"ok": True}
 
 

@@ -48,7 +48,9 @@
       width: 30px; height: 30px;
       background: linear-gradient(135deg, #2563eb, #1d4ed8);
       border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
     }
+    .brand-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
     .brand-name { font-weight: 800; font-size: 0.95rem; }
     .badge {
       background: var(--primary-light); color: var(--primary);
@@ -108,9 +110,9 @@
     /* table */
     .tbl-wrap {
       background: var(--card); border: 1px solid var(--border);
-      border-radius: 12px; overflow: hidden;
+      border-radius: 12px; overflow-x: auto;
     }
-    table { width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
     thead { background: var(--card-inner); }
     th {
       padding: 11px 16px; text-align: left;
@@ -210,6 +212,18 @@
 
     .empty-row td { text-align: center; color: var(--text-muted); padding: 48px; }
     .loading-row td { text-align: center; color: var(--text-muted); padding: 32px; }
+
+    @media (max-width: 860px) {
+      .topbar {
+        padding: 8px 12px;
+        height: auto;
+        min-height: 56px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .main { padding: 20px 12px; }
+      .modal { padding: 20px; }
+    }
   </style>
 </head>
 <body>
@@ -217,7 +231,7 @@
 <div class="topbar">
   <div class="brand">
     <div class="brand-icon">
-      <svg width="20" height="15" viewBox="0 0 24 18" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="1" width="14" height="10" rx="1.5" fill="white" opacity="0.95"/><path d="M14 3.5 L14 11 L24 11 L24 7.5 L20 3.5 Z" fill="white" opacity="0.95"/><path d="M15.5 4.5 L19.5 4.5 L22.5 7.2 L15.5 7.2 Z" fill="rgba(255,150,0,0.55)"/><rect x="1" y="11" width="23" height="1" rx="0.5" fill="rgba(255,255,255,0.35)"/><circle cx="4.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="4.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/><circle cx="9.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="9.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/><circle cx="20.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="20.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/></svg>
+      <img src="/static/logo.svg" alt="SimpleTrucking logo" />
     </div>
     <span class="brand-name">SimpleTrucking</span>
     <span class="badge">Super Admin</span>
@@ -414,7 +428,7 @@
   function showErr(id, msg) { const e = document.getElementById(id); e.textContent = msg; e.style.display = 'block'; }
   function showOk(id, msg)  { const e = document.getElementById(id); e.textContent = msg; e.style.display = 'block'; }
   function hideMsg(id) { document.getElementById(id).style.display = 'none'; }
-  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
   async function init() {
     try {
@@ -469,10 +483,10 @@
         <td style="text-align:center">${c.load_count ?? 0}</td>
         <td>
           <div class="acts">
-            <button class="btn-act" onclick="openAssign(${c.id},'${esc(c.name)}')">Assign Admin</button>
-            <button class="btn-act green" onclick="openManageUsers(${c.id},'${esc(c.name)}')">Users</button>
-            <button class="btn-act" onclick="openRename(${c.id},'${esc(c.name)}')">Rename</button>
-            <button class="btn-act del" onclick="openDeleteCompany(${c.id},'${esc(c.name)}')">Delete</button>
+            <button class="btn-act" onclick='openAssign(${c.id}, ${JSON.stringify(c.name || "")})'>Assign Admin</button>
+            <button class="btn-act green" onclick='openManageUsers(${c.id}, ${JSON.stringify(c.name || "")})'>Users</button>
+            <button class="btn-act" onclick='openRename(${c.id}, ${JSON.stringify(c.name || "")})'>Rename</button>
+            <button class="btn-act del" onclick='openDeleteCompany(${c.id}, ${JSON.stringify(c.name || "")})'>Delete</button>
           </div>
         </td>
       </tr>
@@ -601,11 +615,11 @@
               </td>
               <td>
                 <div class="acts">
-                  <button class="btn-act" onclick="openResetUserPw(${u.id},'${esc(u.name)}')">Reset PW</button>
+                  <button class="btn-act" onclick='openResetUserPw(${u.id}, ${JSON.stringify(u.name || "")})'>Reset PW</button>
                   <button class="btn-act ${u.is_active ? 'del' : 'green'}" onclick="toggleUserActive(${u.id},${u.is_active})">
                     ${u.is_active ? 'Disable' : 'Enable'}
                   </button>
-                  <button class="btn-act del" onclick="doDeleteUser(${u.id},'${esc(u.name)}')">Delete</button>
+                  <button class="btn-act del" onclick='doDeleteUser(${u.id}, ${JSON.stringify(u.name || "")})'>Delete</button>
                 </div>
               </td>
             </tr>

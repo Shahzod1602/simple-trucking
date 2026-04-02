@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
 load_dotenv()
@@ -17,6 +18,9 @@ import telegram as tg
 import routing
 
 
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+IMAGE_PATH = BASE_DIR / "image.png"
 UPLOADS_DIR = Path("uploads")
 
 
@@ -34,6 +38,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Ratecon Extractor", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".webp"}
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
@@ -106,6 +111,33 @@ def get_company_id(dispatcher: dict) -> int:
     return company_id
 
 
+# ── ELD driver location helper ────────────────────────────────────────────────
+
+def _get_driver_location(eld_driver_id: str, dispatcher_id: int) -> dict | None:
+    """Get driver location, handling provider-prefixed IDs."""
+    from eld import get_client
+    configs = database.get_eld_configs(dispatcher_id)
+    if not configs:
+        return None
+    # Parse prefix if present
+    if ':' in eld_driver_id:
+        provider, raw_id = eld_driver_id.split(':', 1)
+        cfg = next((c for c in configs if c['provider'] == provider), None)
+        if cfg:
+            client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
+            return client.get_driver_location(raw_id)
+    # No prefix — try all configs (backward compat)
+    for cfg in configs:
+        try:
+            client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
+            loc = client.get_driver_location(eld_driver_id)
+            if loc:
+                return loc
+        except Exception:
+            continue
+    return None
+
+
 # ── Pages ─────────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -127,6 +159,16 @@ async def setup():
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel():
     return FileResponse("templates/admin.html")
+
+
+@app.get("/image.png")
+async def logo_image():
+    if IMAGE_PATH.exists():
+        return FileResponse(str(IMAGE_PATH))
+    fallback = STATIC_DIR / "image.png"
+    if fallback.exists():
+        return FileResponse(str(fallback))
+    raise HTTPException(status_code=404, detail="Logo image not found")
 
 
 # ── Auth API ──────────────────────────────────────────────────────────────────
@@ -669,14 +711,17 @@ class EldConfigBody(BaseModel):
 @app.get("/api/eld/config")
 async def api_eld_get_config(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
-    cfg = database.get_eld_config(dispatcher["id"])
-    if not cfg:
-        return {"provider": None, "api_key": None, "company": None, "provider_token": None}
+    configs = database.get_eld_configs(dispatcher["id"])
     return {
-        "provider": cfg["provider"],
-        "api_key": "••••••••",
-        "company": cfg.get("company"),
-        "provider_token": "••••••••" if cfg.get("provider_token") else None,
+        "configs": [
+            {
+                "provider": c["provider"],
+                "api_key": "••••" + c["api_key"][-4:] if len(c["api_key"]) >= 4 else "••••",
+                "company": c.get("company"),
+                "provider_token": "••••" if c.get("provider_token") else None,
+            }
+            for c in configs
+        ]
     }
 
 
@@ -697,33 +742,33 @@ async def api_eld_save_config(
 
 
 @app.delete("/api/eld/config")
-async def api_eld_delete_config(authorization: str | None = Header(default=None)):
+async def api_eld_delete_config(provider: str | None = None, authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
-    database.delete_eld_config(dispatcher["id"])
+    database.delete_eld_config(dispatcher["id"], provider)
     return {"ok": True}
 
 
 @app.get("/api/eld/drivers")
 async def api_eld_drivers(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
-    cfg = database.get_eld_config(dispatcher["id"])
-    if not cfg:
+    configs = database.get_eld_configs(dispatcher["id"])
+    if not configs:
         raise HTTPException(status_code=400, detail="ELD not configured. Add API key in Settings.")
-    try:
-        from eld import get_client
-        import httpx
-        client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-        drivers = client.get_drivers()
-        return {"drivers": drivers}
-    except httpx.HTTPStatusError as e:
-        body = ""
+    from eld import get_client
+    all_drivers = []
+    for cfg in configs:
         try:
-            body = e.response.json()
+            client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
+            drivers = client.get_drivers()
+            for d in drivers:
+                all_drivers.append({
+                    "id": f"{cfg['provider']}:{d['id']}",
+                    "name": d["name"],
+                    "provider": cfg["provider"],
+                })
         except Exception:
-            body = e.response.text
-        raise HTTPException(status_code=502, detail=f"ELD API error {e.response.status_code}: {body}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"ELD error: {e}")
+            continue
+    return {"drivers": all_drivers}
 
 
 @app.get("/api/settings/google-maps")
@@ -754,24 +799,21 @@ async def api_gmaps_delete(authorization: str | None = Header(default=None)):
 @app.get("/api/trucks")
 async def api_trucks(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
-    cfg = database.get_eld_config(dispatcher["id"])
-    if not cfg:
+    configs = database.get_eld_configs(dispatcher["id"])
+    if not configs:
         raise HTTPException(status_code=400, detail="ELD not configured. Add API key in Settings.")
-    try:
-        from eld import get_client
-        import httpx
-        client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-        trucks = client.get_trucks()
-        return {"trucks": trucks}
-    except httpx.HTTPStatusError as e:
-        body = ""
+    from eld import get_client
+    all_trucks = []
+    for cfg in configs:
         try:
-            body = e.response.json()
+            client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
+            trucks = client.get_trucks()
+            for t in trucks:
+                t["provider"] = cfg["provider"]
+            all_trucks.extend(trucks)
         except Exception:
-            body = e.response.text
-        raise HTTPException(status_code=502, detail=f"ELD API error {e.response.status_code}: {body}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"ELD error: {e}")
+            continue
+    return {"trucks": all_trucks}
 
 
 class AssignDriverBody(BaseModel):
@@ -807,15 +849,12 @@ async def api_eta(
     if not group.get("eld_driver_id"):
         raise HTTPException(status_code=400, detail="No driver assigned to this group")
 
-    cfg = database.get_eld_config(dispatcher["id"])
-    if not cfg:
+    if not database.get_eld_configs(dispatcher["id"]):
         raise HTTPException(status_code=400, detail="ELD not configured")
 
     try:
-        from eld import get_client
         import routing
-        client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-        origin = client.get_driver_location(group["eld_driver_id"])
+        origin = _get_driver_location(group["eld_driver_id"], dispatcher["id"])
         if not origin:
             raise HTTPException(status_code=404, detail="Driver location not available")
         gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
@@ -942,8 +981,7 @@ async def api_load_eta(
     if not load.get("driver_eld_id"):
         raise HTTPException(status_code=400, detail="No ELD driver assigned to this group")
 
-    cfg = database.get_eld_config(dispatcher["id"])
-    if not cfg:
+    if not database.get_eld_configs(dispatcher["id"]):
         raise HTTPException(status_code=400, detail="ELD not configured")
 
     # Determine next stop address from stops_json
@@ -963,9 +1001,7 @@ async def api_load_eta(
         raise HTTPException(status_code=400, detail="No address available for current stop")
 
     try:
-        from eld import get_client
-        client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-        origin = client.get_driver_location(load["driver_eld_id"])
+        origin = _get_driver_location(load["driver_eld_id"], dispatcher["id"])
         if not origin:
             raise HTTPException(status_code=404, detail="Driver location not available")
         gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
@@ -997,8 +1033,7 @@ async def api_load_send_status(
     if not os.environ.get("TELEGRAM_BOT_TOKEN"):
         raise HTTPException(status_code=500, detail="TELEGRAM_BOT_TOKEN not configured")
 
-    cfg = database.get_eld_config(dispatcher["id"])
-    if not cfg:
+    if not database.get_eld_configs(dispatcher["id"]):
         raise HTTPException(status_code=400, detail="ELD not configured")
 
     group = database.get_group(load["group_id"], get_company_id(dispatcher))
@@ -1006,9 +1041,7 @@ async def api_load_send_status(
         raise HTTPException(status_code=404, detail="Group not found")
 
     try:
-        from eld import get_client
-        client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-        location = client.get_driver_location(load["driver_eld_id"])
+        location = _get_driver_location(load["driver_eld_id"], dispatcher["id"])
         if not location:
             raise HTTPException(status_code=404, detail="Driver location not available")
 
@@ -1200,8 +1233,8 @@ async def api_analytics(authorization: str | None = Header(default=None)):
 @app.get("/api/map/locations")
 async def api_map_locations(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
-    cfg = database.get_eld_config(dispatcher["id"])
-    if not cfg:
+    configs = database.get_eld_configs(dispatcher["id"])
+    if not configs:
         return {"locations": []}
 
     groups = database.get_groups(get_company_id(dispatcher))
@@ -1209,27 +1242,22 @@ async def api_map_locations(authorization: str | None = Header(default=None)):
     if not groups_with_driver:
         return {"locations": []}
 
-    try:
-        from eld import get_client
-        client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-        locations = []
-        for group in groups_with_driver:
-            try:
-                loc = client.get_driver_location(group["eld_driver_id"])
-                if not loc:
-                    continue
-                locations.append({
-                    "group_id": group["id"],
-                    "driver_name": group.get("name") or "Unknown",
-                    "lat": loc["lat"],
-                    "lon": loc["lon"],
-                    "speed_mph": loc.get("speed_mph") or 0,
-                })
-            except Exception:
+    locations = []
+    for group in groups_with_driver:
+        try:
+            loc = _get_driver_location(group["eld_driver_id"], dispatcher["id"])
+            if not loc:
                 continue
-        return {"locations": locations}
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+            locations.append({
+                "group_id": group["id"],
+                "driver_name": group.get("name") or "Unknown",
+                "lat": loc["lat"],
+                "lon": loc["lon"],
+                "speed_mph": loc.get("speed_mph") or 0,
+            })
+        except Exception:
+            continue
+    return {"locations": locations}
 
 
 # ── File storage API ──────────────────────────────────────────────────────────

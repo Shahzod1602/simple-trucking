@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SimpleTrucking — AI Tools for Trucking Dispatchers</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -109,7 +109,7 @@
 
     /* ── NAV ── */
     nav {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10010;
       display: flex; align-items: center; justify-content: space-between;
       padding: 0 6%; height: 66px;
       background: rgba(7,9,14,0.85);
@@ -128,7 +128,9 @@
       background: linear-gradient(135deg, var(--primary), var(--accent));
       display: flex; align-items: center; justify-content: center;
       font-size: 16px; box-shadow: 0 0 16px rgba(245,158,11,0.35);
+      overflow: hidden;
     }
+    .logo-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
     .nav-links {
       display: flex; align-items: center; gap: 34px; list-style: none;
     }
@@ -1037,14 +1039,310 @@
       .section-title { font-size: 2.6rem; }
       .doc-flow { flex-direction: column; }
     }
+    /* ── TERMINAL-INSPIRED OVERRIDES ── */
+    html:not(.light), html.light {
+      --bg: #f1f0eb;
+      --bg2: #eceae3;
+      --bg3: #e4e2da;
+      --card: #faf9f5;
+      --card-hover: #f3f1ea;
+      --border: rgba(13, 13, 13, 0.12);
+      --border-lit: rgba(241, 140, 17, 0.5);
+      --text: #121212;
+      --muted: #6a6962;
+      --muted2: #3b3a36;
+      --primary: #f18c11;
+      --accent: #f97316;
+      --success: #0f9f63;
+      --blue: #135dce;
+      --purple: #5f43d8;
+    }
+    body {
+      font-family: 'Space Grotesk', 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    body::before { opacity: 0; }
+    body::after {
+      background-image:
+        linear-gradient(rgba(13,13,13,0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(13,13,13,0.055) 1px, transparent 1px);
+      background-size: 42px 42px;
+      opacity: 0.4;
+    }
+    nav {
+      background: rgba(241, 240, 235, 0.86);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+    }
+    .theme-toggle { display: none; }
+    .nav-logo {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .nav-logo .logo-icon {
+      border-radius: 6px;
+      background: #121212;
+      box-shadow: none;
+    }
+    .nav-links a {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .btn-primary,
+    .btn-hero,
+    .btn-plan-primary {
+      background: #121212;
+      border-radius: 4px;
+      box-shadow: none;
+    }
+    .btn-ghost,
+    .btn-hero-ghost,
+    .btn-plan-ghost {
+      border-radius: 4px;
+      border-color: var(--border);
+      color: var(--muted2);
+      background: transparent;
+    }
+    .hero {
+      min-height: 94vh;
+      gap: 48px;
+      padding: 120px 8% 70px;
+    }
+    .hero-glow, .hero-glow-2 { display: none; }
+    .hero-road { opacity: 0.4; }
+    .hero-left h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(3rem, 6vw, 5.2rem);
+      line-height: 0.94;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+    }
+    .hero-left h1 .gradient {
+      color: var(--primary);
+      background: none;
+      -webkit-text-fill-color: var(--primary);
+    }
+    .hero-card,
+    .bento-card,
+    .price-card,
+    .testimonial-card,
+    .orbit-center,
+    .integration-node {
+      border-radius: 8px;
+      border-color: var(--border);
+      box-shadow: 0 10px 24px rgba(18,18,18,0.08);
+    }
+    .section-title,
+    .cta-section h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      text-transform: uppercase;
+      line-height: 0.98;
+      letter-spacing: -0.02em;
+    }
+    .section-label,
+    .hero-badge,
+    .price-plan,
+    .footer-col h4 {
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 600;
+    }
+    .stats-bar,
+    .how-section,
+    .testimonials-section,
+    footer {
+      background: var(--bg2);
+      border-color: var(--border);
+    }
+    .trust-strip { background: var(--bg); border-color: var(--border); }
+    .trust-logo {
+      border-radius: 4px;
+      font-weight: 700;
+      background: rgba(18,18,18,0.02);
+    }
+    @media (max-width: 900px) {
+      .hero { padding: 110px 5% 70px; }
+      .hero-left h1 { font-size: 3.2rem; }
+    }
+
+    /* Intro cinematic */
+    :root { --intro-reveal: 0; }
+    .intro-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      overflow: hidden;
+      background: #1f1a18;
+      transition: opacity 0.28s linear, visibility 0.28s linear;
+      pointer-events: none;
+      will-change: opacity, transform;
+    }
+    .intro-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+    body.has-intro .hero {
+      opacity: var(--intro-reveal);
+      transition: opacity 0.22s linear;
+    }
+    .intro-gate {
+      height: clamp(620px, 120vh, 1200px);
+      position: relative;
+      z-index: 0;
+    }
+    .intro-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      animation: introVideoPan 4.2s ease forwards;
+      transform-origin: center center;
+      will-change: transform;
+    }
+    .intro-video-tint {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(36, 27, 21, 0.16) 0%, rgba(18, 12, 10, 0.55) 72%, rgba(9, 7, 6, 0.76) 100%),
+        radial-gradient(1200px 700px at 20% 10%, rgba(255, 160, 118, 0.25), transparent 55%);
+    }
+    .intro-copy {
+      position: absolute;
+      left: 50%;
+      bottom: 16%;
+      transform: translateX(-50%);
+      width: min(900px, 90%);
+      color: rgba(255,255,255,0.93);
+      font-size: clamp(2.4rem, 6vw, 4.8rem);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 500;
+      letter-spacing: -0.03em;
+      text-align: center;
+      text-transform: none;
+      animation: introCopy 5.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: clamp(14px, 2vw, 26px);
+    }
+    .intro-copy-main { display: inline-block; }
+    .intro-copy-float {
+      display: inline-block;
+      font-size: 0.92em;
+      opacity: 0;
+      transform: translateX(36px);
+      animation: introFloatE 5.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    }
+    .intro-scroll-cue {
+      position: fixed;
+      left: 50vw;
+      top: 88vh;
+      transform: translate(14px, 14px);
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      color: rgba(21, 51, 77, 0.92);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.36em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      pointer-events: none;
+      animation: introCueIn 0.7s ease both;
+      animation-delay: 0.35s;
+      z-index: 10001;
+    }
+    .intro-mouse {
+      width: 18px;
+      height: 30px;
+      border: 2px solid rgba(21, 51, 77, 0.78);
+      border-radius: 12px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .intro-mouse::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 5px;
+      width: 3px;
+      height: 7px;
+      border-radius: 2px;
+      background: rgba(21, 51, 77, 0.78);
+      transform: translateX(-50%);
+      animation: introWheel 1.4s ease-in-out infinite;
+    }
+    @keyframes introVideoPan {
+      0%   { transform: scale(1.09) translate3d(-1.4%, -0.3%, 0); }
+      100% { transform: scale(1.02) translate3d(1.1%, 0, 0); }
+    }
+    @keyframes introBarIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(-14px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    @keyframes introCopy {
+      0%   { opacity: 0; transform: translateX(-50%) translateY(20px); }
+      22%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+      86%  { opacity: 1; }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+    }
+    @keyframes introFloatE {
+      0%   { opacity: 0; transform: translateX(36px); }
+      42%  { opacity: 0; transform: translateX(36px); }
+      54%  { opacity: 1; transform: translateX(0); }
+      86%  { opacity: 1; transform: translateX(0); }
+      100% { opacity: 0; transform: translateX(-10px); }
+    }
+    @keyframes introCueIn {
+      from { opacity: 0; transform: translate(14px, 22px); }
+      to   { opacity: 1; transform: translate(14px, 14px); }
+    }
+    @keyframes introWheel {
+      0%, 100% { opacity: 0.9; transform: translateX(-50%) translateY(0); }
+      60%      { opacity: 0.3; transform: translateX(-50%) translateY(6px); }
+    }
+    @media (max-width: 900px) {
+      .intro-copy { bottom: 12%; font-size: clamp(1.8rem, 10vw, 3rem); }
+      .intro-copy-float { display: none; }
+      .intro-gate { height: 110vh; }
+      .intro-scroll-cue {
+        left: 50vw;
+        top: 90vh;
+        font-size: 0.68rem;
+        letter-spacing: 0.24em;
+        gap: 9px;
+      }
+      .intro-mouse {
+        width: 16px;
+        height: 26px;
+      }
+    }
   </style>
 </head>
 <body>
 
+  <!-- INTRO OVERLAY -->
+  <div id="introOverlay" class="intro-overlay" aria-hidden="true">
+    <video class="intro-video" autoplay muted playsinline preload="auto"></video>
+    <div class="intro-video-tint"></div>
+    <div class="intro-copy">
+      <span class="intro-copy-main">Logistics Made Simple</span>
+    </div>
+    <div class="intro-scroll-cue" aria-hidden="true">
+      <span class="intro-mouse"></span>
+      <span>Scroll to explore</span>
+    </div>
+  </div>
+  <div id="introGate" class="intro-gate" aria-hidden="true"></div>
   <!-- NAV -->
   <nav>
     <a href="#" class="nav-logo">
-      <div class="logo-icon"><svg width="21" height="16" viewBox="0 0 24 18" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="1" width="14" height="10" rx="1.5" fill="white" opacity="0.95"/><path d="M14 3.5 L14 11 L24 11 L24 7.5 L20 3.5 Z" fill="white" opacity="0.95"/><path d="M15.5 4.5 L19.5 4.5 L22.5 7.2 L15.5 7.2 Z" fill="rgba(255,150,0,0.55)"/><rect x="1" y="11" width="23" height="1" rx="0.5" fill="rgba(255,255,255,0.35)"/><circle cx="4.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="4.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/><circle cx="9.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="9.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/><circle cx="20.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="20.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/></svg></div>
+      <div class="logo-icon"><img src="/static/logo.svg" alt="SimpleTrucking logo" /></div>
       SimpleTrucking
     </a>
     <ul class="nav-links">
@@ -1528,7 +1826,7 @@
     <div class="footer-top">
       <div class="footer-brand">
         <a href="#" class="footer-logo">
-          <div class="logo-icon"><svg width="21" height="16" viewBox="0 0 24 18" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="1" width="14" height="10" rx="1.5" fill="white" opacity="0.95"/><path d="M14 3.5 L14 11 L24 11 L24 7.5 L20 3.5 Z" fill="white" opacity="0.95"/><path d="M15.5 4.5 L19.5 4.5 L22.5 7.2 L15.5 7.2 Z" fill="rgba(255,150,0,0.55)"/><rect x="1" y="11" width="23" height="1" rx="0.5" fill="rgba(255,255,255,0.35)"/><circle cx="4.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="4.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/><circle cx="9.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="9.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/><circle cx="20.5" cy="14.5" r="2.5" fill="white" opacity="0.9"/><circle cx="20.5" cy="14.5" r="1" fill="rgba(255,150,0,0.6)"/></svg></div>
+          <div class="logo-icon"><img src="/static/logo.svg" alt="SimpleTrucking logo" /></div>
           SimpleTrucking
         </a>
         <p>RateCon Extractor, AI Updater, and AI Dispatcher — three AI tools that save trucking dispatchers hours every day.</p>
@@ -1559,7 +1857,7 @@
       </div>
     </div>
     <div class="footer-bottom">
-      <span>© 2025 SimpleTrucking · simpletrucking.online</span>
+      <span>© 2026 SimpleTrucking · simpletrucking.online</span>
       <span>Built for trucking dispatchers ❤️</span>
     </div>
   </footer>
@@ -1592,6 +1890,90 @@
     setTheme(localStorage.getItem('theme') === 'light');
 
     toggle.addEventListener('click', () => setTheme(!html.classList.contains('light')));
+
+    // Intro scroll-driven fade (returns when scrolling back to top)
+    const intro = document.getElementById('introOverlay');
+    const introVideo = document.querySelector('.intro-video');
+    const introGate = document.getElementById('introGate');
+    const introSoundToggle = document.getElementById('introSoundToggle');
+    const introScrollCue = document.querySelector('.intro-scroll-cue');
+    if (intro && introVideo && introGate) {
+      document.body.classList.add('has-intro');
+
+      const INTRO_VIDEO_POOL = [
+        'https://assets.mixkit.co/videos/23174/23174-720.mp4', // Worker + freight truck at parking
+        'https://assets.mixkit.co/videos/28787/28787-720.mp4', // Cargo truck on highway
+        'https://assets.mixkit.co/videos/23852/23852-720.mp4', // Worker giving directions
+        'https://assets.mixkit.co/videos/30065/30065-720.mp4'  // Logistics transport visual
+      ];
+      let currentVideoIndex = Math.floor(Math.random() * INTRO_VIDEO_POOL.length);
+      const setIntroVideo = (index) => {
+        currentVideoIndex = (index + INTRO_VIDEO_POOL.length) % INTRO_VIDEO_POOL.length;
+        introVideo.src = INTRO_VIDEO_POOL[currentVideoIndex];
+        introVideo.load();
+        introVideo.play().catch(() => {});
+      };
+      introVideo.addEventListener('error', () => setIntroVideo(currentVideoIndex + 1));
+      setIntroVideo(currentVideoIndex);
+      introVideo.loop = true;
+      introVideo.muted = true;
+      introVideo.volume = 0.75;
+      introVideo.play().catch(() => {});
+
+      let soundEnabled = false;
+      const setSound = (enabled) => {
+        soundEnabled = enabled;
+        if (introSoundToggle) introSoundToggle.textContent = enabled ? 'Sound On' : 'Sound Off';
+        if (enabled) {
+          introVideo.muted = false;
+          introVideo.play().catch(() => {});
+        } else {
+          introVideo.muted = true;
+        }
+      };
+      introSoundToggle?.addEventListener('click', () => setSound(!soundEnabled));
+
+      const syncIntro = () => {
+        const gateHeight = Math.max(introGate.offsetHeight, 1);
+        const progress = Math.min(Math.max(window.scrollY / gateHeight, 0), 1);
+
+        intro.style.opacity = String(1 - progress);
+        intro.style.visibility = progress >= 1 ? 'hidden' : 'visible';
+        document.documentElement.style.setProperty('--intro-reveal', String(progress));
+
+        const videoScale = 1.02 + (1 - progress) * 0.04;
+        const videoShiftX = (1 - progress) * 1.1;
+        introVideo.style.transform = `scale(${videoScale}) translate3d(${videoShiftX}%, 0, 0)`;
+      };
+
+      const tryResumeAudio = () => {
+        if (!soundEnabled) return;
+        introVideo.muted = false;
+        introVideo.play().catch(() => {});
+      };
+
+      const moveScrollCue = (x, y) => {
+        if (!introScrollCue) return;
+        const cx = Math.min(Math.max(x, 8), window.innerWidth - 8);
+        const cy = Math.min(Math.max(y, 8), window.innerHeight - 8);
+        introScrollCue.style.left = `${cx}px`;
+        introScrollCue.style.top = `${cy}px`;
+      };
+
+      if (introScrollCue && window.matchMedia('(pointer:fine)').matches) {
+        const seedX = Math.round(window.innerWidth * 0.5);
+        const seedY = Math.round(window.innerHeight * 0.88);
+        moveScrollCue(seedX, seedY);
+        window.addEventListener('mousemove', (e) => moveScrollCue(e.clientX, e.clientY), { passive: true });
+      }
+
+      window.addEventListener('scroll', syncIntro, { passive: true });
+      window.addEventListener('resize', syncIntro);
+      window.addEventListener('click', tryResumeAudio, { passive: true });
+      window.addEventListener('touchstart', tryResumeAudio, { passive: true });
+      window.addEventListener('keydown', tryResumeAudio);
+      syncIntro();
+    }
   </script>
 
 </body>

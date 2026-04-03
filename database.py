@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import secrets
 import sqlite3
@@ -11,6 +12,13 @@ DB_PATH = "ratecon.db"
 
 def init_db():
     with get_conn() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                name TEXT PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            )
+        """)
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS companies (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,33 +82,6 @@ def init_db():
             conn.execute("ALTER TABLE eld_configs ADD COLUMN company TEXT")
         if "provider_token" not in eld_existing:
             conn.execute("ALTER TABLE eld_configs ADD COLUMN provider_token TEXT")
-
-        # Migrate eld_configs to multi-connection (no UNIQUE constraints on dispatcher/provider)
-        eld_table_row = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='eld_configs'"
-        ).fetchone()
-        eld_table_sql = (eld_table_row[0] or "").upper() if eld_table_row else ""
-        has_old_unique = (
-            "DISPATCHER_ID INTEGER NOT NULL UNIQUE" in eld_table_sql
-            or "UNIQUE(DISPATCHER_ID" in eld_table_sql
-        )
-        if has_old_unique:
-            conn.execute("""CREATE TABLE IF NOT EXISTS eld_configs_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
-                provider TEXT NOT NULL,
-                api_key TEXT NOT NULL,
-                company TEXT,
-                provider_token TEXT,
-                updated_at TEXT NOT NULL
-            )""")
-            conn.execute("""
-                INSERT INTO eld_configs_new (id, dispatcher_id, provider, api_key, company, provider_token, updated_at)
-                SELECT id, dispatcher_id, provider, api_key, company, provider_token, updated_at
-                FROM eld_configs
-            """)
-            conn.execute("DROP TABLE eld_configs")
-            conn.execute("ALTER TABLE eld_configs_new RENAME TO eld_configs")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS loads (
@@ -190,6 +171,65 @@ def init_db():
                 created_at TEXT NOT NULL
             )
         """)
+
+        def _migration_applied(name: str) -> bool:
+            row = conn.execute("SELECT 1 FROM schema_migrations WHERE name = ?", (name,)).fetchone()
+            return bool(row)
+
+        def _mark_migration(name: str):
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)",
+                (name, datetime.utcnow().isoformat()),
+            )
+
+        # Versioned migration: drop old UNIQUE constraint from eld_configs for multi-ELD support.
+        mig_drop_eld_unique = "2026_04_04_drop_eld_unique"
+        if not _migration_applied(mig_drop_eld_unique):
+            eld_table_row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='eld_configs'"
+            ).fetchone()
+            eld_table_sql = (eld_table_row[0] or "").upper() if eld_table_row else ""
+            has_old_unique = (
+                "DISPATCHER_ID INTEGER NOT NULL UNIQUE" in eld_table_sql
+                or "UNIQUE(DISPATCHER_ID" in eld_table_sql
+            )
+            if has_old_unique:
+                conn.execute("""CREATE TABLE IF NOT EXISTS eld_configs_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+                    provider TEXT NOT NULL,
+                    api_key TEXT NOT NULL,
+                    company TEXT,
+                    provider_token TEXT,
+                    updated_at TEXT NOT NULL
+                )""")
+                conn.execute("""
+                    INSERT INTO eld_configs_new (id, dispatcher_id, provider, api_key, company, provider_token, updated_at)
+                    SELECT id, dispatcher_id, provider, api_key, company, provider_token, updated_at
+                    FROM eld_configs
+                """)
+                conn.execute("DROP TABLE eld_configs")
+                conn.execute("ALTER TABLE eld_configs_new RENAME TO eld_configs")
+            _mark_migration(mig_drop_eld_unique)
+
+        # Versioned migration: create audit logs table.
+        mig_audit_logs = "2026_04_04_create_audit_logs"
+        if not _migration_applied(mig_audit_logs):
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS audit_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    actor_dispatcher_id INTEGER REFERENCES dispatchers(id) ON DELETE SET NULL,
+                    company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+                    action TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_company_created ON audit_logs(company_id, created_at DESC)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_actor_created ON audit_logs(actor_dispatcher_id, created_at DESC)")
+            _mark_migration(mig_audit_logs)
 
     super_email = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
     super_pass = os.environ.get("SUPER_ADMIN_PASSWORD", "").strip()
@@ -298,6 +338,15 @@ def get_dispatcher_by_token(token: str) -> dict | None:
         return dict(row) if row else None
 
 
+def get_dispatcher_by_id(dispatcher_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM dispatchers WHERE id = ?",
+            (dispatcher_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
 def get_all_dispatchers() -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
@@ -339,6 +388,14 @@ def get_company_dispatchers(company_id: int) -> list[dict]:
             (company_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_dispatchers_with_eld_configs() -> list[int]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT dispatcher_id FROM eld_configs ORDER BY dispatcher_id"
+        ).fetchall()
+        return [int(r["dispatcher_id"]) for r in rows]
 
 
 def update_dispatcher(dispatcher_id: int, **fields) -> bool:
@@ -899,7 +956,13 @@ def get_loads_for_auto_send() -> list[dict]:
                       ec.company as eld_company, ec.provider_token as eld_provider_token
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
-               LEFT JOIN eld_configs ec ON l.dispatcher_id = ec.dispatcher_id
+               LEFT JOIN eld_configs ec ON ec.id = (
+                   SELECT ec2.id
+                   FROM eld_configs ec2
+                   WHERE ec2.dispatcher_id = l.dispatcher_id
+                   ORDER BY ec2.updated_at DESC, ec2.id DESC
+                   LIMIT 1
+               )
                WHERE l.status = 'dispatched'
                  AND l.auto_send_hours > 0
                  AND dg.chat_id IS NOT NULL
@@ -907,6 +970,58 @@ def get_loads_for_auto_send() -> list[dict]:
                  AND ec.provider IS NOT NULL"""
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def create_audit_log(
+    actor_dispatcher_id: int | None,
+    company_id: int | None,
+    action: str,
+    entity_type: str,
+    entity_id: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    now = datetime.utcnow().isoformat()
+    metadata_json = json.dumps(metadata or {}, ensure_ascii=True, separators=(",", ":"))
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO audit_logs (
+                   actor_dispatcher_id, company_id, action, entity_type, entity_id, metadata_json, created_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (actor_dispatcher_id, company_id, action, entity_type, entity_id, metadata_json, now),
+        )
+        return {
+            "id": cur.lastrowid,
+            "actor_dispatcher_id": actor_dispatcher_id,
+            "company_id": company_id,
+            "action": action,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "metadata": metadata or {},
+            "created_at": now,
+        }
+
+
+def get_audit_logs(company_id: int, limit: int = 100) -> list[dict]:
+    safe_limit = max(1, min(int(limit), 500))
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT al.*, d.name as actor_name, d.email as actor_email
+               FROM audit_logs al
+               LEFT JOIN dispatchers d ON d.id = al.actor_dispatcher_id
+               WHERE al.company_id = ?
+               ORDER BY al.created_at DESC
+               LIMIT ?""",
+            (company_id, safe_limit),
+        ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["metadata"] = json.loads(item.get("metadata_json") or "{}")
+            except Exception:
+                item["metadata"] = {}
+            result.append(item)
+        return result
 
 
 # ── Pay Tiers ─────────────────────────────────────────────────────────────────

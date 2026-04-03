@@ -1,7 +1,9 @@
+import logging
+import asyncio
 import os
 import tempfile
 import time
-import logging
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -28,15 +30,29 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _truck_prefetch_task
     database.init_db()
     database.ensure_superadmin(
         os.getenv("SUPER_ADMIN_EMAIL", ""),
         os.getenv("SUPER_ADMIN_PASSWORD", ""),
     )
     UPLOADS_DIR.mkdir(exist_ok=True)
-    bot_poller.start()
+    bot_enabled = os.getenv("DISABLE_BOT_POLLER", "0") != "1"
+    prefetch_enabled = os.getenv("DISABLE_TRUCK_PREFETCH", "0") != "1"
+    if bot_enabled:
+        bot_poller.start()
+    if prefetch_enabled:
+        _truck_prefetch_task = asyncio.create_task(_prefetch_trucks_loop())
     yield
-    bot_poller.stop()
+    if _truck_prefetch_task:
+        _truck_prefetch_task.cancel()
+        try:
+            await _truck_prefetch_task
+        except asyncio.CancelledError:
+            pass
+        _truck_prefetch_task = None
+    if bot_enabled:
+        bot_poller.stop()
 
 
 app = FastAPI(title="Ratecon Extractor", lifespan=lifespan)
@@ -45,6 +61,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR), check_dir=False), na
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".webp"}
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 TRUCK_CACHE_TTL_SECS = 20
+ELD_RATE_LIMIT_WINDOW_SECS = 30
+ELD_RATE_LIMIT_MAX_CALLS = 20
 logger = logging.getLogger(__name__)
 
 
@@ -52,6 +70,8 @@ logger = logging.getLogger(__name__)
 
 _attempts: dict[str, dict] = {}  # {ip: {count, blocked_until}}
 _truck_cache: dict[int, dict] = {}  # {dispatcher_id: {"ts": float, "trucks": list[dict]}}
+_eld_call_windows: dict[tuple[int, str], deque] = {}
+_truck_prefetch_task: asyncio.Task | None = None
 MAX_ATTEMPTS = 5
 BLOCK_SECS = 3 * 60  # 3 minutes
 
@@ -79,6 +99,48 @@ def _invalidate_truck_cache(dispatcher_id: int):
     _truck_cache.pop(dispatcher_id, None)
 
 
+def _enforce_eld_rate_limit(dispatcher_id: int, endpoint_key: str):
+    now = time.time()
+    key = (dispatcher_id, endpoint_key)
+    q = _eld_call_windows.setdefault(key, deque())
+    while q and now - q[0] > ELD_RATE_LIMIT_WINDOW_SECS:
+        q.popleft()
+    if len(q) >= ELD_RATE_LIMIT_MAX_CALLS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many ELD requests. Try again in {ELD_RATE_LIMIT_WINDOW_SECS} seconds.",
+        )
+    q.append(now)
+
+
+def _retry_sync_call(fn, *args, retries: int = 2, base_delay: float = 0.35, **kwargs):
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= retries:
+                raise
+            time.sleep(base_delay * (2 ** attempt))
+    if last_exc:
+        raise last_exc
+
+
+async def _prefetch_trucks_loop():
+    while True:
+        try:
+            dispatcher_ids = database.get_dispatchers_with_eld_configs()
+            for dispatcher_id in dispatcher_ids:
+                try:
+                    _get_dispatcher_trucks(dispatcher_id, use_cache=False)
+                except Exception as exc:
+                    logger.warning("Truck prefetch failed for dispatcher_id=%s: %s", dispatcher_id, exc)
+        except Exception as exc:
+            logger.warning("Truck prefetch loop error: %s", exc)
+        await asyncio.sleep(20)
+
+
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
 def require_dispatcher(authorization: str | None) -> dict:
@@ -91,25 +153,23 @@ def require_dispatcher(authorization: str | None) -> dict:
     return dispatcher
 
 
-def require_admin(authorization: str | None) -> dict:
+def require_roles(authorization: str | None, allowed_roles: tuple[str, ...], error_detail: str) -> dict:
     dispatcher = require_dispatcher(authorization)
-    if dispatcher.get("role") not in ("admin", "superadmin"):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if dispatcher.get("role") not in allowed_roles:
+        raise HTTPException(status_code=403, detail=error_detail)
     return dispatcher
+
+
+def require_admin(authorization: str | None) -> dict:
+    return require_roles(authorization, ("admin", "superadmin"), "Admin access required")
 
 
 def require_superadmin(authorization: str | None) -> dict:
-    dispatcher = require_dispatcher(authorization)
-    if dispatcher.get("role") != "superadmin":
-        raise HTTPException(status_code=403, detail="Super admin access required")
-    return dispatcher
+    return require_roles(authorization, ("superadmin",), "Super admin access required")
 
 
 def require_company_admin(authorization: str | None) -> dict:
-    dispatcher = require_dispatcher(authorization)
-    if dispatcher.get("role") not in ("admin", "superadmin"):
-        raise HTTPException(status_code=403, detail="Company admin access required")
-    return dispatcher
+    return require_roles(authorization, ("admin", "superadmin"), "Company admin access required")
 
 
 def get_company_id(dispatcher: dict) -> int:
@@ -118,6 +178,22 @@ def get_company_id(dispatcher: dict) -> int:
     if not company_id:
         raise HTTPException(status_code=403, detail="This action requires a company account")
     return company_id
+
+
+def _audit_event(
+    actor: dict | None,
+    action: str,
+    entity_type: str,
+    entity_id: str | None = None,
+    metadata: dict | None = None,
+    company_id: int | None = None,
+):
+    actor_id = actor.get("id") if actor else None
+    resolved_company = company_id if company_id is not None else (actor.get("company_id") if actor else None)
+    try:
+        database.create_audit_log(actor_id, resolved_company, action, entity_type, entity_id, metadata)
+    except Exception as exc:
+        logger.warning("Audit log failed for action=%s entity=%s: %s", action, entity_type, exc)
 
 
 # ── ELD driver location helper ────────────────────────────────────────────────
@@ -134,12 +210,12 @@ def _get_driver_location(eld_driver_id: str, dispatcher_id: int) -> dict | None:
         cfg = next((c for c in configs if c['provider'] == provider), None)
         if cfg:
             client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-            return client.get_driver_location(raw_id)
+            return _retry_sync_call(client.get_driver_location, raw_id)
     # No prefix — try all configs (backward compat)
     for cfg in configs:
         try:
             client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-            loc = client.get_driver_location(eld_driver_id)
+            loc = _retry_sync_call(client.get_driver_location, eld_driver_id)
             if loc:
                 return loc
         except Exception:
@@ -164,7 +240,7 @@ def _get_dispatcher_trucks(dispatcher_id: int, use_cache: bool = True) -> list[d
     for cfg in configs:
         try:
             client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-            trucks = client.get_trucks()
+            trucks = _retry_sync_call(client.get_trucks)
             for truck in trucks:
                 truck["provider"] = cfg["provider"]
             all_trucks.extend(trucks)
@@ -282,6 +358,34 @@ async def api_me(authorization: str | None = Header(default=None)):
     return {"id": d["id"], "name": d["name"], "role": d.get("role", "user"), "email": d.get("email", "")}
 
 
+@app.get("/api/health")
+async def api_health():
+    db_ok = True
+    db_error = None
+    try:
+        with database.get_conn() as conn:
+            conn.execute("SELECT 1").fetchone()
+    except Exception as exc:
+        db_ok = False
+        db_error = str(exc)
+    prefetch_running = bool(_truck_prefetch_task and not _truck_prefetch_task.done())
+    bot_enabled = os.getenv("DISABLE_BOT_POLLER", "0") != "1"
+    return {
+        "ok": db_ok,
+        "checks": {
+            "db": {"ok": db_ok, "error": db_error},
+            "truck_prefetch": {
+                "enabled": os.getenv("DISABLE_TRUCK_PREFETCH", "0") != "1",
+                "running": prefetch_running,
+                "cache_entries": len(_truck_cache),
+            },
+            "bot_poller": {"enabled": bot_enabled},
+            "eld": {"dispatchers_configured": len(database.get_dispatchers_with_eld_configs())},
+        },
+        "ts": int(time.time()),
+    }
+
+
 @app.post("/api/change-password")
 async def api_change_password(
     body: ChangePasswordBody,
@@ -354,6 +458,14 @@ async def api_admin_delete(
     ok = database.delete_dispatcher(target_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Dispatcher not found")
+    _audit_event(
+        me,
+        "dispatcher.delete",
+        "dispatcher",
+        str(target_id),
+        {"target_id": target_id},
+        company_id=me.get("company_id"),
+    )
     return {"ok": True}
 
 
@@ -401,11 +513,13 @@ async def api_list_companies(authorization: str | None = Header(default=None)):
 
 @app.post("/api/superadmin/companies")
 async def api_create_company(body: CompanyBody, authorization: str | None = Header(default=None)):
-    require_superadmin(authorization)
+    me = require_superadmin(authorization)
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Company name is required")
-    return database.create_company(name)
+    company = database.create_company(name)
+    _audit_event(me, "company.create", "company", str(company["id"]), {"name": company["name"]})
+    return company
 
 
 @app.patch("/api/superadmin/companies/{company_id}")
@@ -429,10 +543,11 @@ async def api_delete_company(
     company_id: int,
     authorization: str | None = Header(default=None),
 ):
-    require_superadmin(authorization)
+    me = require_superadmin(authorization)
     ok = database.delete_company(company_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Company not found")
+    _audit_event(me, "company.delete", "company", str(company_id), {"company_id": company_id})
     return {"ok": True}
 
 
@@ -448,7 +563,7 @@ async def api_assign_admin(
     body: AssignAdminBody,
     authorization: str | None = Header(default=None),
 ):
-    require_superadmin(authorization)
+    me = require_superadmin(authorization)
     if not database.get_company(company_id):
         raise HTTPException(status_code=404, detail="Company not found")
     name = body.name.strip()
@@ -461,7 +576,16 @@ async def api_assign_admin(
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if database.get_dispatcher_by_email(email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    return database.create_company_user(company_id, name, email, body.password, role="admin")
+    created = database.create_company_user(company_id, name, email, body.password, role="admin")
+    _audit_event(
+        me,
+        "company_admin.create",
+        "dispatcher",
+        str(created["id"]),
+        {"email": created.get("email"), "company_id": company_id},
+        company_id=company_id,
+    )
+    return created
 
 
 @app.get("/api/superadmin/companies/{company_id}/users")
@@ -481,7 +605,7 @@ async def api_superadmin_create_user(
     body: CreateUserBody,
     authorization: str | None = Header(default=None),
 ):
-    require_superadmin(authorization)
+    me = require_superadmin(authorization)
     if not database.get_company(company_id):
         raise HTTPException(status_code=404, detail="Company not found")
     name = body.name.strip()
@@ -494,7 +618,16 @@ async def api_superadmin_create_user(
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if database.get_dispatcher_by_email(email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    return database.create_company_user(company_id, name, email, body.password, role="user")
+    created = database.create_company_user(company_id, name, email, body.password, role="user")
+    _audit_event(
+        me,
+        "company_user.create",
+        "dispatcher",
+        str(created["id"]),
+        {"email": created.get("email"), "company_id": company_id, "role": "user"},
+        company_id=company_id,
+    )
+    return created
 
 
 @app.patch("/api/superadmin/users/{target_id}")
@@ -533,10 +666,19 @@ async def api_superadmin_delete_user(
     target_id: int,
     authorization: str | None = Header(default=None),
 ):
-    require_superadmin(authorization)
+    me = require_superadmin(authorization)
+    target = database.get_dispatcher_by_id(target_id)
     ok = database.delete_dispatcher(target_id)
     if not ok:
         raise HTTPException(status_code=404, detail="User not found")
+    _audit_event(
+        me,
+        "dispatcher.delete",
+        "dispatcher",
+        str(target_id),
+        {"target_id": target_id},
+        company_id=(target or {}).get("company_id"),
+    )
     return {"ok": True}
 
 
@@ -576,7 +718,16 @@ async def api_create_company_user(
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if database.get_dispatcher_by_email(email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    return database.create_company_user(company_id, name, email, body.password, role="user")
+    created = database.create_company_user(company_id, name, email, body.password, role="user")
+    _audit_event(
+        me,
+        "company_user.create",
+        "dispatcher",
+        str(created["id"]),
+        {"email": created.get("email"), "role": created.get("role")},
+        company_id=company_id,
+    )
+    return created
 
 
 @app.patch("/api/company/users/{target_id}")
@@ -634,7 +785,27 @@ async def api_delete_company_user(
     if not database.get_dispatcher_in_company(target_id, company_id):
         raise HTTPException(status_code=404, detail="User not found in your company")
     database.delete_dispatcher(target_id)
+    _audit_event(
+        me,
+        "company_user.delete",
+        "dispatcher",
+        str(target_id),
+        {"target_id": target_id},
+        company_id=company_id,
+    )
     return {"ok": True}
+
+
+@app.get("/api/audit/logs")
+async def api_audit_logs(
+    limit: int = 100,
+    authorization: str | None = Header(default=None),
+):
+    me = require_company_admin(authorization)
+    company_id = me.get("company_id")
+    if not company_id:
+        raise HTTPException(status_code=400, detail="Not assigned to a company")
+    return {"logs": database.get_audit_logs(company_id, limit)}
 
 
 # ── Groups API ────────────────────────────────────────────────────────────────
@@ -774,14 +945,22 @@ async def api_eld_save_config(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "eld_config_write")
     if body.provider not in ("samsara", "motive", "zippyeld", "evoeld"):
         raise HTTPException(status_code=400, detail="Invalid provider. Use: samsara, motive, zippyeld, evoeld")
     if not body.api_key.strip():
         raise HTTPException(status_code=400, detail="API key is required")
     company = body.company.strip() if body.company else None
     provider_token = body.provider_token.strip() if body.provider_token else None
-    database.save_eld_config(dispatcher["id"], body.provider, body.api_key.strip(), company, provider_token)
+    saved = database.save_eld_config(dispatcher["id"], body.provider, body.api_key.strip(), company, provider_token)
     _invalidate_truck_cache(dispatcher["id"])
+    _audit_event(
+        dispatcher,
+        "eld_config.create",
+        "eld_config",
+        str(saved["id"]),
+        {"provider": body.provider, "company": company},
+    )
     return {"ok": True}
 
 
@@ -792,18 +971,27 @@ async def api_eld_delete_config(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "eld_config_write")
     if config_id is None and not provider:
         raise HTTPException(status_code=400, detail="config_id is required")
     ok = database.delete_eld_config(dispatcher["id"], provider=provider, config_id=config_id)
     if not ok:
         raise HTTPException(status_code=404, detail="ELD config not found")
     _invalidate_truck_cache(dispatcher["id"])
+    _audit_event(
+        dispatcher,
+        "eld_config.delete",
+        "eld_config",
+        str(config_id) if config_id is not None else None,
+        {"provider": provider, "config_id": config_id},
+    )
     return {"ok": True}
 
 
 @app.get("/api/eld/drivers")
 async def api_eld_drivers(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "eld_drivers_read")
     configs = database.get_eld_configs(dispatcher["id"])
     if not configs:
         raise HTTPException(status_code=400, detail="ELD not configured. Add API key in Settings.")
@@ -812,14 +1000,20 @@ async def api_eld_drivers(authorization: str | None = Header(default=None)):
     for cfg in configs:
         try:
             client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
-            drivers = client.get_drivers()
+            drivers = _retry_sync_call(client.get_drivers)
             for d in drivers:
                 all_drivers.append({
                     "id": f"{cfg['provider']}:{d['id']}",
                     "name": d["name"],
                     "provider": cfg["provider"],
                 })
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "ELD get_drivers failed for dispatcher_id=%s provider=%s: %s",
+                dispatcher["id"],
+                cfg.get("provider"),
+                exc,
+            )
             continue
     return {"drivers": all_drivers}
 
@@ -852,6 +1046,7 @@ async def api_gmaps_delete(authorization: str | None = Header(default=None)):
 @app.get("/api/trucks")
 async def api_trucks(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "trucks_read")
     trucks = _get_dispatcher_trucks(dispatcher["id"])
     if not trucks and not database.get_eld_configs(dispatcher["id"]):
         raise HTTPException(status_code=400, detail="ELD not configured. Add API key in Settings.")
@@ -977,6 +1172,14 @@ async def api_update_load_status(
     ok = database.update_load_status(load_id, get_company_id(dispatcher), body.status, new_stop_index)
     if not ok:
         raise HTTPException(status_code=404, detail="Load not found")
+    _audit_event(
+        dispatcher,
+        "load.status_update",
+        "load",
+        str(load_id),
+        {"from_status": load.get("status"), "to_status": body.status, "new_stop_index": new_stop_index},
+        company_id=get_company_id(dispatcher),
+    )
     return {"ok": True}
 
 
@@ -1275,6 +1478,7 @@ async def api_analytics(authorization: str | None = Header(default=None)):
 @app.get("/api/map/locations")
 async def api_map_locations(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "map_locations_read")
     trucks = _get_dispatcher_trucks(dispatcher["id"])
     locations = []
     for truck in trucks:

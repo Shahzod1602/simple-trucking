@@ -25,6 +25,18 @@ jobs:
             until [ "$ATTEMPT" -gt "$MAX_ATTEMPTS" ]; do
               echo "Deploy attempt $ATTEMPT/$MAX_ATTEMPTS"
               docker compose down --remove-orphans || true
+              PORT_8002_PIDS="$(lsof -ti tcp:8002 || true)"
+              if [ -n "$PORT_8002_PIDS" ]; then
+                for pid in $PORT_8002_PIDS; do
+                  CMD="$(ps -p "$pid" -o args= || true)"
+                  if echo "$CMD" | grep -Eq "uvicorn|/opt/simple-trucking|ratecon"; then
+                    echo "Stopping conflicting process on 8002: pid=$pid cmd=$CMD"
+                    kill -9 "$pid" || true
+                  else
+                    echo "Port 8002 in use by non-project process, skipping: pid=$pid cmd=$CMD"
+                  fi
+                done
+              fi
 
               if docker compose up --build -d; then
                 break

@@ -1,6 +1,7 @@
 import os
 import tempfile
 import time
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -43,11 +44,14 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR), check_dir=False), na
 
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".webp"}
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
+TRUCK_CACHE_TTL_SECS = 20
+logger = logging.getLogger(__name__)
 
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
 
 _attempts: dict[str, dict] = {}  # {ip: {count, blocked_until}}
+_truck_cache: dict[int, dict] = {}  # {dispatcher_id: {"ts": float, "trucks": list[dict]}}
 MAX_ATTEMPTS = 5
 BLOCK_SECS = 3 * 60  # 3 minutes
 
@@ -69,6 +73,10 @@ def _record_failure(ip: str):
 
 def _clear_attempts(ip: str):
     _attempts.pop(ip, None)
+
+
+def _invalidate_truck_cache(dispatcher_id: int):
+    _truck_cache.pop(dispatcher_id, None)
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -139,11 +147,18 @@ def _get_driver_location(eld_driver_id: str, dispatcher_id: int) -> dict | None:
     return None
 
 
-def _get_dispatcher_trucks(dispatcher_id: int) -> list[dict]:
+def _get_dispatcher_trucks(dispatcher_id: int, use_cache: bool = True) -> list[dict]:
     """Fetch trucks from all ELD configs for a dispatcher."""
+    now = time.time()
+    if use_cache:
+        cached = _truck_cache.get(dispatcher_id)
+        if cached and now - cached["ts"] <= TRUCK_CACHE_TTL_SECS:
+            return cached["trucks"]
+
     from eld import get_client
     configs = database.get_eld_configs(dispatcher_id)
     if not configs:
+        _truck_cache[dispatcher_id] = {"ts": now, "trucks": []}
         return []
     all_trucks = []
     for cfg in configs:
@@ -153,8 +168,15 @@ def _get_dispatcher_trucks(dispatcher_id: int) -> list[dict]:
             for truck in trucks:
                 truck["provider"] = cfg["provider"]
             all_trucks.extend(trucks)
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "ELD get_trucks failed for dispatcher_id=%s provider=%s: %s",
+                dispatcher_id,
+                cfg.get("provider"),
+                exc,
+            )
             continue
+    _truck_cache[dispatcher_id] = {"ts": now, "trucks": all_trucks}
     return all_trucks
 
 
@@ -759,6 +781,7 @@ async def api_eld_save_config(
     company = body.company.strip() if body.company else None
     provider_token = body.provider_token.strip() if body.provider_token else None
     database.save_eld_config(dispatcher["id"], body.provider, body.api_key.strip(), company, provider_token)
+    _invalidate_truck_cache(dispatcher["id"])
     return {"ok": True}
 
 
@@ -771,7 +794,10 @@ async def api_eld_delete_config(
     dispatcher = require_dispatcher(authorization)
     if config_id is None and not provider:
         raise HTTPException(status_code=400, detail="config_id is required")
-    database.delete_eld_config(dispatcher["id"], provider=provider, config_id=config_id)
+    ok = database.delete_eld_config(dispatcher["id"], provider=provider, config_id=config_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="ELD config not found")
+    _invalidate_truck_cache(dispatcher["id"])
     return {"ok": True}
 
 

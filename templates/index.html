@@ -2927,6 +2927,15 @@ Rate: {{total_rate_usd}}
       }
       try {
         const r = await fetch('/api/map/locations', { headers: authH() });
+        if (!r.ok) {
+          let detail = 'Failed to load locations';
+          try {
+            const err = await r.json();
+            if (err && err.detail) detail = err.detail;
+          } catch {}
+          document.getElementById('map-status').textContent = detail;
+          return;
+        }
         const data = await r.json();
         const locs = data.locations || [];
         // Clear old markers

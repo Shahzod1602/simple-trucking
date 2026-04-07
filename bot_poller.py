@@ -17,16 +17,45 @@ _stop_event = threading.Event()
 
 # ── Status message helper ──────────────────────────────────────────────────────
 
-def _build_status_message(load: dict, eld_cfg: dict) -> str | None:
+def _get_driver_location_for_load(load: dict) -> dict | None:
+    """Get driver location for a load using multi-provider ELD configs."""
+    from eld import get_client
+    eld_driver_id = load.get("driver_eld_id")
+    if not eld_driver_id:
+        return None
+    dispatcher_id = load.get("dispatcher_id")
+    if not dispatcher_id:
+        return None
+    configs = database.get_eld_configs(dispatcher_id)
+    if not configs:
+        return None
+    # Parse prefix if present
+    if ':' in eld_driver_id:
+        provider, raw_id = eld_driver_id.split(':', 1)
+        cfg = next((c for c in configs if c['provider'] == provider), None)
+        if cfg:
+            try:
+                client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
+                return client.get_driver_location(raw_id)
+            except Exception:
+                return None
+    # No prefix — try all configs (backward compat)
+    for cfg in configs:
+        try:
+            client = get_client(cfg["provider"], cfg["api_key"], cfg.get("company"), cfg.get("provider_token"))
+            loc = client.get_driver_location(eld_driver_id)
+            if loc:
+                return loc
+        except Exception:
+            continue
+    return None
+
+
+def _build_status_message(load: dict, eld_cfg: dict | None = None) -> str | None:
     """Builds a status update message by querying the ELD. Returns None on failure."""
     try:
-        from eld import get_client
         import routing
-        client = get_client(
-            eld_cfg["provider"], eld_cfg["api_key"],
-            eld_cfg.get("company"), eld_cfg.get("provider_token"),
-        )
-        location = client.get_driver_location(load["driver_eld_id"])
+        location = _get_driver_location_for_load(load)
         if not location:
             return None
 
@@ -128,11 +157,10 @@ def _process_updates(updates: list[dict]):
             if not load.get("driver_eld_id"):
                 _reply(message, "No ELD driver assigned to this load.")
                 continue
-            eld_cfg = database.get_eld_config(load["dispatcher_id"])
-            if not eld_cfg:
+            if not database.get_eld_configs(load["dispatcher_id"]):
                 _reply(message, "ELD not configured for your dispatcher.")
                 continue
-            msg = _build_status_message(load, eld_cfg)
+            msg = _build_status_message(load)
             _reply(message, msg if msg else "Could not retrieve driver location.")
 
         # /eta

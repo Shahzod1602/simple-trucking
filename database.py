@@ -885,7 +885,7 @@ def get_all_companies() -> list[dict]:
                       (SELECT d2.email FROM dispatchers d2 WHERE d2.company_id = c.id AND d2.role = 'admin' LIMIT 1) as admin_email,
                       COUNT(DISTINCT CASE WHEN d.role = 'user' THEN d.id END) as user_count,
                       COUNT(DISTINCT l.id) as load_count,
-                      COALESCE(SUM(CASE WHEN l.status='delivered' THEN CAST(l.total_rate_usd AS REAL) ELSE 0 END), 0) as revenue
+                      COALESCE(SUM(CASE WHEN l.status='delivered' THEN CAST(REPLACE(REPLACE(l.total_rate_usd,'$',''),',','') AS REAL) ELSE 0 END), 0) as revenue
                FROM companies c
                LEFT JOIN dispatchers d ON d.company_id = c.id
                LEFT JOIN loads l ON l.dispatcher_id = d.id
@@ -926,7 +926,7 @@ def get_admin_stats() -> dict:
         total_drivers = conn.execute("SELECT COUNT(*) FROM driver_groups").fetchone()[0]
         total_loads = conn.execute("SELECT COUNT(*) FROM loads").fetchone()[0]
         total_revenue = conn.execute(
-            "SELECT SUM(CAST(total_rate_usd AS REAL)) FROM loads WHERE status = 'delivered'"
+            "SELECT SUM(CAST(REPLACE(REPLACE(total_rate_usd,'$',''),',','') AS REAL)) FROM loads WHERE status = 'delivered'"
         ).fetchone()[0] or 0
         dispatched = conn.execute(
             "SELECT COUNT(*) FROM loads WHERE status = 'dispatched'"
@@ -1098,22 +1098,28 @@ def get_earnings(company_id: int, dispatcher_id: int | None = None) -> list[dict
             worker_tiers = [t for t in tiers if t["dispatcher_id"] == worker_id]
             active_tiers = worker_tiers if worker_tiers else company_tiers
 
-            gross = float(load.get("total_rate_usd") or 0)
-            miles = float(load.get("miles") or 0)
-            rpm = gross / miles if miles > 0 else 0
+            def _parse_num(v):
+                if not v:
+                    return 0.0
+                return float(str(v).replace("$", "").replace(",", "").strip() or 0)
+
+            gross = _parse_num(load.get("total_rate_usd"))
+            miles = _parse_num(load.get("miles"))
+            rpm = gross / miles if miles > 0 else None
 
             earning = 0.0
             matched_tier = None
             for tier in sorted(active_tiers, key=lambda t: t["min_gross"], reverse=True):
                 gross_ok = gross >= tier["min_gross"]
                 max_ok = tier["max_gross"] is None or gross < tier["max_gross"]
-                rpm_ok = rpm >= tier["min_rpm"]
+                # skip RPM check if miles data is missing
+                rpm_ok = rpm is None or rpm >= tier["min_rpm"]
                 if gross_ok and max_ok and rpm_ok:
                     earning = round(gross * tier["percentage"] / 100, 2)
                     matched_tier = tier
                     break
 
-            load["rpm"] = round(rpm, 2)
+            load["rpm"] = round(rpm, 2) if rpm is not None else None
             load["earning"] = earning
             load["tier_percentage"] = matched_tier["percentage"] if matched_tier else None
             result.append(load)

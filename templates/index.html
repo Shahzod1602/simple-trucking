@@ -1848,9 +1848,11 @@ Rate: {{total_rate_usd}}
     }
 
     document.getElementById('tier-standard-btn').addEventListener('click', async () => {
-      if (_payTiers.filter(t => !t.dispatcher_id).length > 0) {
-        if (!confirm('This will add the standard 4-tier pay scale as company-wide tiers. Existing tiers will remain. Continue?')) return;
-      }
+      const existing = _payTiers.filter(t => !t.dispatcher_id);
+      const msg = existing.length
+        ? `This will replace ${existing.length} existing company-wide tier(s) with the standard 4-tier pay scale. Continue?`
+        : 'Load the standard 4-tier pay scale as company-wide tiers?';
+      if (!confirm(msg)) return;
       const btn = document.getElementById('tier-standard-btn');
       btn.disabled = true; btn.textContent = 'Loading...';
       const standardTiers = [
@@ -1860,6 +1862,10 @@ Rate: {{total_rate_usd}}
         { min_gross: 0,     max_gross: 6000,  min_rpm: 2.0, percentage: 1   },
       ];
       try {
+        // delete existing company-wide tiers first
+        for (const t of existing) {
+          await fetch(`/api/pay-tiers/${t.id}`, { method: 'DELETE', headers: authH() });
+        }
         for (const tier of standardTiers) {
           await fetch('/api/pay-tiers', {
             method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },

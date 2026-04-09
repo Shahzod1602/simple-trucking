@@ -4,35 +4,39 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SimpleTrucking — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #f1f5f9;
-      --card: #ffffff;
-      --text: #0f172a;
-      --text-muted: #64748b;
-      --border: #e2e8f0;
-      --primary: #4f7cff;
-      --primary-hover: #3a64e8;
-      --primary-light: #eff4ff;
-      --success: #16a34a;
-      --error: #dc2626;
-      --error-light: #fef2f2;
+      --bg: #07090f;
+      --card: #0c1020;
+      --text: #bec9e0;
+      --text-muted: #3d5070;
+      --border: rgba(255,255,255,0.08);
+      --primary: #4585ff;
+      --primary-hover: #3368e0;
+      --primary-light: rgba(69,133,255,0.1);
+      --error: #ef4444;
+      --error-light: rgba(239,68,68,0.1);
     }
-    [data-theme="dark"] {
-      --bg: #0d1117; --card: #161b22;
-      --text: #e6edf3; --text-muted: #8b949e;
-      --border: #30363d; --primary-light: rgba(79,124,255,0.12);
-      --error-light: rgba(220,38,38,0.1);
+    [data-theme="light"] {
+      --bg: #edf1f8; --card: #fff;
+      --text: #0e1828; --text-muted: #64748b; --border: #dce2ef;
+      --primary: #3b72ff; --primary-hover: #2b5ce0; --primary-light: rgba(59,114,255,0.08);
+      --error: #dc2626; --error-light: #fef2f2;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg); color: var(--text);
       min-height: 100vh;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       padding: 32px 16px;
       transition: background 0.2s, color 0.2s;
+      background-image: radial-gradient(circle, rgba(69,133,255,0.04) 1px, transparent 1px);
+      background-size: 28px 28px;
     }
 
     .logo {
@@ -40,61 +44,76 @@
       text-decoration: none;
     }
     .logo-icon {
-      width: 36px; height: 36px; background: var(--primary);
-      border-radius: 10px; display: flex; align-items: center;
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, #4585ff, #2563eb);
+      border-radius: 8px; display: flex; align-items: center;
       justify-content: center; flex-shrink: 0;
-      overflow: hidden;
+      overflow: hidden; box-shadow: 0 0 16px rgba(69,133,255,0.3);
     }
     .logo-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
-    .logo-text { font-size: 1rem; font-weight: 800; color: var(--text); }
+    .logo-text {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 1.15rem; font-weight: 700; color: var(--text);
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
 
     .card {
-      background: var(--card); border-radius: 14px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.06);
+      background: var(--card); border-radius: 12px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 24px 60px rgba(0,0,0,0.4);
       width: 100%; max-width: 400px;
       border: 1px solid var(--border); overflow: hidden;
+      position: relative;
+    }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, rgba(69,133,255,0.5), transparent 60%);
     }
 
     .tab-bar { display: flex; border-bottom: 1px solid var(--border); }
     .tab-btn {
-      flex: 1; padding: 14px; border: none; background: none;
-      font-size: 0.88rem; font-weight: 600; color: var(--text-muted);
+      flex: 1; padding: 13px; border: none; background: none;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 0.86rem; font-weight: 600; color: var(--text-muted);
       cursor: pointer; transition: all 0.15s;
       border-bottom: 2px solid transparent; margin-bottom: -1px;
     }
     .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
     .tab-btn:hover:not(.active) { color: var(--text); }
 
-    .form-body { padding: 28px; }
+    .form-body { padding: 26px; }
 
-    .field { margin-bottom: 14px; }
+    .field { margin-bottom: 13px; }
     .field label {
-      display: block; font-size: 0.8rem; font-weight: 600;
-      color: var(--text-muted); margin-bottom: 6px;
+      display: block; font-size: 0.75rem; font-weight: 600;
+      color: var(--text-muted); margin-bottom: 5px;
+      text-transform: uppercase; letter-spacing: 0.5px;
     }
     .field input {
-      width: 100%; padding: 10px 13px;
-      border: 1.5px solid var(--border); border-radius: 9px;
+      width: 100%; padding: 9px 12px;
+      border: 1px solid var(--border); border-radius: 8px;
+      font-family: 'IBM Plex Sans', sans-serif;
       font-size: 0.92rem; color: var(--text);
-      background: var(--bg); outline: none; transition: border-color 0.15s;
-      font-family: inherit;
+      background: rgba(255,255,255,0.03); outline: none; transition: border-color 0.15s;
     }
     .field input:focus { border-color: var(--primary); }
 
     .err-banner {
       background: var(--error-light); border: 1px solid rgba(220,38,38,0.2);
-      border-radius: 8px; padding: 10px 13px;
-      color: var(--error); font-size: 0.84rem; margin-bottom: 14px; display: none;
+      border-radius: 6px; padding: 9px 12px;
+      color: var(--error); font-size: 0.83rem; margin-bottom: 13px; display: none;
     }
 
     .btn-submit {
-      width: 100%; padding: 12px; margin-top: 4px;
+      width: 100%; padding: 11px; margin-top: 4px;
       background: var(--primary); color: #fff; border: none;
-      border-radius: 9px; font-size: 0.95rem; font-weight: 600;
+      border-radius: 8px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 0.92rem; font-weight: 700;
       cursor: pointer; transition: background 0.15s;
     }
     .btn-submit:hover:not(:disabled) { background: var(--primary-hover); }
-    .btn-submit:disabled { background: #94a3b8; cursor: not-allowed; }
+    .btn-submit:disabled { background: rgba(255,255,255,0.1); color: var(--text-muted); cursor: not-allowed; }
 
     .form-footer {
       text-align: center; margin-top: 16px;
@@ -106,8 +125,8 @@
     .theme-btn {
       position: fixed; top: 16px; right: 16px;
       background: var(--card); border: 1px solid var(--border);
-      border-radius: 8px; padding: 7px 12px; cursor: pointer;
-      font-size: 0.82rem; color: var(--text-muted); transition: all 0.15s;
+      border-radius: 7px; padding: 6px 12px; cursor: pointer;
+      font-size: 0.8rem; color: var(--text-muted); transition: all 0.15s;
     }
     .theme-btn:hover { border-color: var(--primary); color: var(--primary); }
 

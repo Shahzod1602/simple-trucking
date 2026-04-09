@@ -692,7 +692,10 @@
             <h1 class="page-title">Loads</h1>
             <p class="page-subtitle">Active trips with ETA tracking</p>
           </div>
-          <button class="btn-outline" onclick="loadLoadsPage()">↺ Refresh</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn-outline" onclick="loadLoadsPage()">↺ Refresh</button>
+            <button class="btn-blue" style="padding:7px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;" onclick="openCreateLoadModal()">+ New Load</button>
+          </div>
         </div>
         <div id="loads-content"></div>
       </div>
@@ -1110,6 +1113,56 @@
     </div>
   </div>
 
+  <!-- Create Load Modal -->
+  <div class="overlay" id="create-load-modal">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-title"><i class="ph-bold ph-plus-circle" style="vertical-align:-2px;margin-right:7px;"></i>New Load</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <div class="modal-section-label">Load Number</div>
+          <input id="cl-load-number" type="text" placeholder="e.g. RC-12345" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Total Rate ($)</div>
+          <input id="cl-rate" type="text" placeholder="e.g. 2500" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Origin State</div>
+          <input id="cl-origin" type="text" placeholder="e.g. TX" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Destination State</div>
+          <input id="cl-dest" type="text" placeholder="e.g. CA" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Pickup Address</div>
+          <input id="cl-pickup-addr" type="text" placeholder="e.g. 123 Main St, Dallas, TX" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Pickup Date</div>
+          <input id="cl-pickup-date" type="date" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Delivery Address</div>
+          <input id="cl-delivery-addr" type="text" placeholder="e.g. 456 Oak Ave, Los Angeles, CA" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Delivery Date</div>
+          <input id="cl-delivery-date" type="date" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Miles</div>
+          <input id="cl-miles" type="text" placeholder="e.g. 1200" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+      </div>
+      <div class="modal-status err" id="cl-status"></div>
+      <div class="modal-footer">
+        <button class="btn-modal-cancel" onclick="closeCreateLoadModal()">Cancel</button>
+        <button class="btn-blue" id="cl-save-btn" style="flex:1;padding:11px;border-radius:8px;font-size:0.92rem;font-weight:600;cursor:pointer;" onclick="submitCreateLoad()">Save Load</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toasts"></div>
 
   <!-- Files Modal (Ratecon + BOL/POD + Invoice) -->
@@ -1314,6 +1367,7 @@ Rate: {{total_rate_usd}}
       document.getElementById('sb-overlay').classList.toggle('open');
     });
     document.getElementById('sb-overlay').addEventListener('click', closeSidebar);
+    document.getElementById('create-load-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeCreateLoadModal(); });
 
     // ── Template engine ───────────────────────────────────────────────────
     function fillTpl(tpl, data) {
@@ -2744,6 +2798,43 @@ Rate: {{total_rate_usd}}
             <tbody>${rows}</tbody>
           </table>
         </div>`;
+    }
+
+    function openCreateLoadModal() {
+      ['cl-load-number','cl-rate','cl-origin','cl-dest','cl-pickup-addr','cl-pickup-date','cl-delivery-addr','cl-delivery-date','cl-miles'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('cl-status').textContent = '';
+      document.getElementById('create-load-modal').classList.add('open');
+    }
+
+    function closeCreateLoadModal() {
+      document.getElementById('create-load-modal').classList.remove('open');
+    }
+
+    async function submitCreateLoad() {
+      const btn = document.getElementById('cl-save-btn');
+      const statusEl = document.getElementById('cl-status');
+      statusEl.textContent = '';
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      try {
+        const body = {
+          load_number: document.getElementById('cl-load-number').value.trim() || null,
+          total_rate_usd: document.getElementById('cl-rate').value.trim() || null,
+          origin_state: document.getElementById('cl-origin').value.trim() || null,
+          destination_state: document.getElementById('cl-dest').value.trim() || null,
+          pickup_address: document.getElementById('cl-pickup-addr').value.trim() || null,
+          pickup_date: document.getElementById('cl-pickup-date').value || null,
+          delivery_address: document.getElementById('cl-delivery-addr').value.trim() || null,
+          delivery_date: document.getElementById('cl-delivery-date').value || null,
+          miles: document.getElementById('cl-miles').value.trim() || null,
+        };
+        const r = await fetch('/api/loads', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) { const d = await r.json(); statusEl.textContent = d.detail || 'Error saving load'; return; }
+        closeCreateLoadModal();
+        loadLoadsPage();
+        toast('Load created', 'success');
+      } catch { statusEl.textContent = 'Connection error'; }
+      finally { btn.disabled = false; btn.textContent = 'Save Load'; }
     }
 
     async function refreshEta(loadId, btn) {

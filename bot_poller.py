@@ -105,18 +105,20 @@ def _build_status_message(load: dict, eld_cfg: dict | None = None) -> str | None
 
         # Use company template if available
         import collections as _collections
+        _DEFAULT_TPL = (
+            "Load Id: {load_id}\n\n"
+            "Current location: {current_location}\n\n"
+            "Miles left: {miles_left}\n\n"
+            "Heading ➤ {heading}\n\n"
+            "Status: {status}"
+        )
         company_id = load.get("company_id")
         tpl = None
         if company_id:
             tpl = database.get_global_setting(f"status_template_{company_id}")
         if not tpl:
-            tpl = (
-                "Load Id: {load_id}\n\n"
-                "Current location: {current_location}\n\n"
-                "Miles left: {miles_left}\n\n"
-                "Heading ➤ {heading}\n\n"
-                "Status: {status}"
-            )
+            # Also check without company_id prefix as a fallback
+            tpl = database.get_global_setting("status_template") or _DEFAULT_TPL
         variables = {
             "load_id": load_id_display,
             "current_location": current_addr,
@@ -133,7 +135,7 @@ def _build_status_message(load: dict, eld_cfg: dict | None = None) -> str | None
         try:
             return tpl.format_map(_collections.defaultdict(lambda: "N/A", variables))
         except Exception:
-            return tpl
+            return _DEFAULT_TPL.format_map(_collections.defaultdict(lambda: "N/A", variables))
     except Exception as e:
         logger.warning("_build_status_message error: %s", e)
         return None
@@ -299,33 +301,6 @@ def _poll_loop():
         time.sleep(3)
 
 
-# ── ETA alert background thread ───────────────────────────────────────────────
-
-def _eta_alert_loop():
-    while not _stop_event.is_set():
-        try:
-            if not os.environ.get("TELEGRAM_BOT_TOKEN"):
-                time.sleep(60)
-                continue
-            loads = database.get_dispatched_loads_for_alerts()
-            now = datetime.now(timezone.utc)
-            for load in loads:
-                try:
-                    eta_dt = _to_datetime(load["eta_utc"])
-                    diff_min = (eta_dt - now).total_seconds() / 60
-                    if 0 <= diff_min <= 60:
-                        chat_id = load.get("group_chat_id")
-                        if chat_id:
-                            address = load.get("delivery_address") or "destination"
-                            msg = f"⚠️ Driver arriving in ~{round(diff_min)} min to {address}"
-                            telegram.send_message(chat_id, msg)
-                            database.set_eta_alert_sent(load["id"])
-                except Exception as e:
-                    logger.warning("ETA alert error for load %s: %s", load.get("id"), e)
-        except Exception as e:
-            logger.warning("ETA alert loop error: %s", e)
-        time.sleep(300)  # every 5 minutes
-
 
 # ── Auto-send background thread ───────────────────────────────────────────────
 
@@ -378,9 +353,8 @@ def _auto_send_loop():
 def start():
     _stop_event.clear()
     threading.Thread(target=_poll_loop, daemon=True, name="bot-poller").start()
-    threading.Thread(target=_eta_alert_loop, daemon=True, name="eta-alert").start()
     threading.Thread(target=_auto_send_loop, daemon=True, name="auto-send").start()
-    logger.info("Bot poller started (with ETA alerts and auto-send)")
+    logger.info("Bot poller started (with auto-send)")
 
 
 def stop():

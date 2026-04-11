@@ -125,10 +125,12 @@ DEFAULT_STATUS_TEMPLATE = (
 
 def format_status_message(template: str, variables: dict) -> str:
     """Format a status template with the given variables. Unknown placeholders are left as-is."""
+    safe = collections.defaultdict(lambda: "N/A", variables)
     try:
-        return template.format_map(collections.defaultdict(lambda: "N/A", variables))
-    except Exception:
-        return DEFAULT_STATUS_TEMPLATE.format_map(collections.defaultdict(lambda: "N/A", variables))
+        return template.format_map(safe)
+    except (KeyError, ValueError, IndexError):
+        # Only fall back if template itself is broken, not for missing vars
+        return DEFAULT_STATUS_TEMPLATE.format_map(safe)
 
 
 def get_status_template(company_id: int) -> str:

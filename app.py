@@ -2037,8 +2037,9 @@ async def api_kpi_comment(
 
 class KpiEntryBody(BaseModel):
     week_start: str
-    total_miles: float
-    total_cost: float
+    load_id: int | None = None
+    miles: float
+    cost: float
 
 
 @app.post("/api/kpi/entry")
@@ -2048,8 +2049,38 @@ async def api_kpi_entry_save(
 ):
     dispatcher = require_dispatcher(authorization)
     company_id = get_company_id(dispatcher)
-    database.upsert_kpi_entry(company_id, dispatcher["id"], body.week_start, body.total_miles, body.total_cost)
+    result = database.add_kpi_entry(
+        company_id, dispatcher["id"], body.week_start,
+        body.load_id, body.miles, body.cost,
+    )
+    return result
+
+
+@app.delete("/api/kpi/entry/{entry_id}")
+async def api_kpi_entry_delete(
+    entry_id: int,
+    authorization: str | None = Header(default=None),
+):
+    dispatcher = require_dispatcher(authorization)
+    ok = database.delete_kpi_entry(entry_id, dispatcher["id"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="Entry not found")
     return {"ok": True}
+
+
+def _calc_tier(total_cost: float, total_miles: float, tiers: list[dict]):
+    rpm = round(total_cost / total_miles, 2) if total_miles > 0 else 0
+    earning = 0
+    tier_pct = None
+    for tier in sorted(tiers, key=lambda t: t["min_gross"], reverse=True):
+        gross_ok = total_cost >= tier["min_gross"]
+        max_ok = tier["max_gross"] is None or total_cost < tier["max_gross"]
+        rpm_ok = rpm >= tier["min_rpm"] if tier["min_rpm"] else True
+        if gross_ok and max_ok and rpm_ok:
+            earning = round(total_cost * tier["percentage"] / 100, 2)
+            tier_pct = tier["percentage"]
+            break
+    return rpm, earning, tier_pct
 
 
 @app.get("/api/kpi/my")
@@ -2066,37 +2097,25 @@ async def api_kpi_my(
         monday = today - timedelta(days=today.weekday())
         week_start = monday.isoformat()
 
-    entry = database.get_kpi_entry(company_id, dispatcher["id"], week_start)
+    entries = database.get_kpi_entries_for_dispatcher(company_id, dispatcher["id"], week_start)
+    available_loads = database.get_dispatcher_loads_for_select(dispatcher["id"], company_id)
     tiers = database.get_pay_tiers(company_id)
     company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
 
-    # Get dispatcher's loads for this week
-    my_loads = database.get_dispatcher_weekly_loads(dispatcher["id"], week_start)
-
-    total_cost = entry["total_cost"] if entry else 0
-    total_miles = entry["total_miles"] if entry else 0
-    rpm = round(total_cost / total_miles, 2) if total_miles > 0 else 0
-
-    earning = 0
-    tier_pct = None
-    for tier in sorted(company_tiers, key=lambda t: t["min_gross"], reverse=True):
-        gross_ok = total_cost >= tier["min_gross"]
-        max_ok = tier["max_gross"] is None or total_cost < tier["max_gross"]
-        rpm_ok = rpm >= tier["min_rpm"] if tier["min_rpm"] else True
-        if gross_ok and max_ok and rpm_ok:
-            earning = round(total_cost * tier["percentage"] / 100, 2)
-            tier_pct = tier["percentage"]
-            break
+    total_cost = sum(e["cost"] for e in entries)
+    total_miles = sum(e["miles"] for e in entries)
+    rpm, earning, tier_pct = _calc_tier(total_cost, total_miles, company_tiers)
 
     return {
         "week_start": week_start,
+        "entries": entries,
+        "available_loads": available_loads,
         "total_miles": total_miles,
         "total_cost": total_cost,
         "rpm": rpm,
         "earning": earning,
         "tier_percentage": tier_pct,
         "tiers": company_tiers,
-        "loads": my_loads,
     }
 
 
@@ -2120,23 +2139,26 @@ async def api_kpi_all_entries(
     tiers = database.get_pay_tiers(company_id)
     company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
 
+    # Group by dispatcher for summary
+    by_disp = {}
     for e in entries:
-        tc = e["total_cost"]
-        tm = e["total_miles"]
-        rpm = round(tc / tm, 2) if tm > 0 else 0
-        e["rpm"] = rpm
-        earning = 0
-        tier_pct = None
-        for tier in sorted(company_tiers, key=lambda t: t["min_gross"], reverse=True):
-            if tc >= tier["min_gross"] and (tier["max_gross"] is None or tc < tier["max_gross"]):
-                if rpm >= tier["min_rpm"] if tier["min_rpm"] else True:
-                    earning = round(tc * tier["percentage"] / 100, 2)
-                    tier_pct = tier["percentage"]
-                    break
-        e["earning"] = earning
-        e["tier_percentage"] = tier_pct
+        did = e["dispatcher_id"]
+        if did not in by_disp:
+            by_disp[did] = {"dispatcher_name": e["dispatcher_name"], "total_cost": 0, "total_miles": 0, "entries": []}
+        by_disp[did]["total_cost"] += e["cost"]
+        by_disp[did]["total_miles"] += e["miles"]
+        by_disp[did]["entries"].append(e)
 
-    return {"week_start": week_start, "entries": entries, "tiers": company_tiers}
+    dispatchers = []
+    for did, d in by_disp.items():
+        rpm, earning, tier_pct = _calc_tier(d["total_cost"], d["total_miles"], company_tiers)
+        d["rpm"] = rpm
+        d["earning"] = earning
+        d["tier_percentage"] = tier_pct
+        dispatchers.append(d)
+    dispatchers.sort(key=lambda x: x["total_cost"], reverse=True)
+
+    return {"week_start": week_start, "dispatchers": dispatchers, "tiers": company_tiers}
 
 
 @app.get("/api/earnings")

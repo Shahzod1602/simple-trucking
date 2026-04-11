@@ -774,25 +774,29 @@
 
         <!-- Dispatcher self-entry -->
         <div id="kpi-dispatcher-view" style="display:none;">
-          <!-- My Loads this week -->
+          <!-- Add entry form -->
           <div class="card" style="margin-bottom:16px;">
-            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">My Loads This Week</div>
-            <div id="kpi-my-loads"></div>
-          </div>
-          <!-- Entry form -->
-          <div class="card" style="margin-bottom:16px;">
-            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">Weekly Totals</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">Add Entry</div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end;">
               <div class="field">
-                <label>Total Cost ($)</label>
-                <input type="number" id="kpi-my-cost" placeholder="e.g. 8500" min="0" step="0.01" />
+                <label>Load</label>
+                <select id="kpi-entry-load" style="width:100%;"><option value="">— Select load —</option></select>
               </div>
               <div class="field">
-                <label>Total Miles</label>
-                <input type="number" id="kpi-my-miles" placeholder="e.g. 3200" min="0" step="0.01" />
+                <label>Cost ($)</label>
+                <input type="number" id="kpi-entry-cost" placeholder="0" min="0" step="0.01" />
               </div>
+              <div class="field">
+                <label>Miles</label>
+                <input type="number" id="kpi-entry-miles" placeholder="0" min="0" step="0.01" />
+              </div>
+              <button class="btn-blue" id="kpi-entry-add" style="height:38px;white-space:nowrap;">+ Add</button>
             </div>
-            <button class="btn-blue" id="kpi-my-save" style="margin-top:8px;">Save</button>
+          </div>
+          <!-- My entries list -->
+          <div class="card" style="margin-bottom:16px;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">My Entries</div>
+            <div id="kpi-my-entries"></div>
           </div>
           <!-- My result -->
           <div id="kpi-my-result"></div>
@@ -2241,58 +2245,103 @@ Rate: {{total_rate_usd}}
         const r = await fetch(`/api/kpi/my?week_start=${_kpiWeekStart}`, { headers: authH() });
         if (!r.ok) return;
         const d = await r.json();
-        document.getElementById('kpi-my-cost').value = d.total_cost || '';
-        document.getElementById('kpi-my-miles').value = d.total_miles || '';
-        renderKpiMyLoads(d.loads || []);
+        renderKpiMyEntries(d.entries || []);
+        renderKpiLoadSelect(d.available_loads || []);
         renderKpiMyResult(d);
         renderKpiMyTiers(d.tiers);
       } catch(e) { console.error(e); }
     }
 
-    function renderKpiMyLoads(loads) {
-      const el = document.getElementById('kpi-my-loads');
-      if (!loads.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No loads this week</div>'; return; }
-      let totalRate = 0, totalMiles = 0;
+    function renderKpiLoadSelect(loads) {
+      const sel = document.getElementById('kpi-entry-load');
+      sel.innerHTML = '<option value="">— No load (manual) —</option>' +
+        loads.map(l => {
+          const rate = _parseNum(l.total_rate_usd);
+          const miles = _parseNum(l.miles);
+          const route = (l.origin_state && l.destination_state) ? `${l.origin_state}-${l.destination_state}` : '';
+          const label = `${l.load_number || '#'+l.id} | ${l.driver_name || '—'} | ${route} | $${rate} | ${miles}mi`;
+          return `<option value="${l.id}" data-cost="${rate}" data-miles="${miles}">${esc(label)}</option>`;
+        }).join('');
+    }
+
+    // Auto-fill cost/miles when load is selected
+    document.getElementById('kpi-entry-load').addEventListener('change', (e) => {
+      const opt = e.target.selectedOptions[0];
+      if (opt && opt.dataset.cost) {
+        document.getElementById('kpi-entry-cost').value = opt.dataset.cost;
+        document.getElementById('kpi-entry-miles').value = opt.dataset.miles;
+      }
+    });
+
+    function renderKpiMyEntries(entries) {
+      const el = document.getElementById('kpi-my-entries');
+      if (!entries.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No entries yet. Add your loads above.</div>'; return; }
+      let totalCost = 0, totalMiles = 0;
       let html = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
       html += '<thead><tr style="border-bottom:2px solid var(--border);">';
-      html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Load #</th>';
+      html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Load</th>';
       html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Driver</th>';
-      html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Date</th>';
       html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Route</th>';
       html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Broker</th>';
-      html += '<th style="text-align:right;padding:7px 6px;color:var(--text-muted);font-weight:600;">Rate</th>';
+      html += '<th style="text-align:right;padding:7px 6px;color:var(--text-muted);font-weight:600;">Cost</th>';
       html += '<th style="text-align:right;padding:7px 6px;color:var(--text-muted);font-weight:600;">Miles</th>';
-      html += '<th style="text-align:center;padding:7px 6px;color:var(--text-muted);font-weight:600;">Status</th>';
+      html += '<th></th>';
       html += '</tr></thead><tbody>';
-      loads.forEach(l => {
-        const rate = _parseNum(l.total_rate_usd);
-        const miles = _parseNum(l.miles);
-        totalRate += rate; totalMiles += miles;
-        const route = (l.origin_state && l.destination_state) ? `${l.origin_state} → ${l.destination_state}` : '—';
-        const statusColor = l.status === 'delivered' ? '#16a34a' : '#d97706';
-        const brokerBg = l.broker_name === 'SPOT' ? '#fef08a' : l.broker_name ? 'rgba(79,124,255,0.15)' : 'transparent';
+      entries.forEach(e => {
+        totalCost += e.cost; totalMiles += e.miles;
+        const route = (e.origin_state && e.destination_state) ? `${e.origin_state} → ${e.destination_state}` : '—';
+        const brokerBg = e.broker_name === 'SPOT' ? '#fef08a' : e.broker_name ? 'rgba(79,124,255,0.15)' : 'transparent';
         html += `<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:7px 6px;font-weight:700;">${esc(l.load_number || '—')}</td>
-          <td style="padding:7px 6px;">${esc(l.driver_name || '—')}</td>
-          <td style="padding:7px 6px;">${l.pickup_date || '—'}</td>
+          <td style="padding:7px 6px;font-weight:700;">${esc(e.load_number || 'Manual')}</td>
+          <td style="padding:7px 6px;">${esc(e.driver_name || '—')}</td>
           <td style="padding:7px 6px;">${route}</td>
-          <td style="padding:7px 6px;"><span style="background:${brokerBg};padding:1px 6px;border-radius:3px;font-weight:600;font-size:0.75rem;">${esc(l.broker_name || '—')}</span></td>
-          <td style="padding:7px 6px;text-align:right;font-weight:700;color:#16a34a;">$${rate.toLocaleString()}</td>
-          <td style="padding:7px 6px;text-align:right;">${miles.toLocaleString()}</td>
-          <td style="padding:7px 6px;text-align:center;"><span style="color:${statusColor};font-weight:600;font-size:0.75rem;text-transform:uppercase;">${l.status}</span></td>
+          <td style="padding:7px 6px;"><span style="background:${brokerBg};padding:1px 6px;border-radius:3px;font-weight:600;font-size:0.75rem;">${esc(e.broker_name || '—')}</span></td>
+          <td style="padding:7px 6px;text-align:right;font-weight:700;color:#16a34a;">$${e.cost.toLocaleString()}</td>
+          <td style="padding:7px 6px;text-align:right;">${e.miles.toLocaleString()}</td>
+          <td style="padding:7px 6px;text-align:right;">
+            <button onclick="deleteKpiEntry(${e.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;padding:4px;" title="Delete">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </td>
         </tr>`;
       });
-      const avgRpm = totalMiles > 0 ? (totalRate / totalMiles).toFixed(2) : '0.00';
+      const avgRpm = totalMiles > 0 ? (totalCost / totalMiles).toFixed(2) : '0.00';
       html += `<tr style="border-top:2px solid var(--border);background:var(--bg-secondary);">
-        <td colspan="5" style="padding:8px 6px;font-weight:800;">${loads.length} loads</td>
-        <td style="padding:8px 6px;text-align:right;font-weight:800;color:#16a34a;">$${totalRate.toLocaleString()}</td>
+        <td colspan="4" style="padding:8px 6px;font-weight:800;">${entries.length} entries</td>
+        <td style="padding:8px 6px;text-align:right;font-weight:800;color:#16a34a;">$${totalCost.toLocaleString()}</td>
         <td style="padding:8px 6px;text-align:right;font-weight:800;">${totalMiles.toLocaleString()}</td>
-        <td style="padding:8px 6px;text-align:center;font-weight:700;color:var(--primary);">RPM $${avgRpm}</td>
+        <td style="padding:8px 6px;text-align:center;font-weight:700;color:var(--primary);font-size:0.75rem;">RPM $${avgRpm}</td>
       </tr>`;
       html += '</tbody></table>';
-      // Auto-fill button
-      html += `<button class="btn-outline" style="margin-top:10px;font-size:0.8rem;" onclick="document.getElementById('kpi-my-cost').value='${totalRate}';document.getElementById('kpi-my-miles').value='${totalMiles}';">Auto-fill totals from loads ($${totalRate.toLocaleString()} / ${totalMiles.toLocaleString()} mi)</button>`;
       el.innerHTML = html;
+    }
+
+    document.getElementById('kpi-entry-add').addEventListener('click', async () => {
+      const loadId = document.getElementById('kpi-entry-load').value || null;
+      const cost = parseFloat(document.getElementById('kpi-entry-cost').value || '0');
+      const miles = parseFloat(document.getElementById('kpi-entry-miles').value || '0');
+      if (!cost && !miles) { toast('Enter cost or miles', 'error'); return; }
+      const btn = document.getElementById('kpi-entry-add');
+      btn.disabled = true; btn.textContent = 'Adding...';
+      try {
+        const r = await fetch('/api/kpi/entry', {
+          method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ week_start: _kpiWeekStart, load_id: loadId ? parseInt(loadId) : null, miles, cost })
+        });
+        if (r.ok) {
+          document.getElementById('kpi-entry-load').value = '';
+          document.getElementById('kpi-entry-cost').value = '';
+          document.getElementById('kpi-entry-miles').value = '';
+          await loadKpiMy();
+        } else { const d = await r.json(); toast(d.detail || 'Error', 'error'); }
+      } catch { toast('Connection error', 'error'); }
+      finally { btn.disabled = false; btn.textContent = '+ Add'; }
+    });
+
+    async function deleteKpiEntry(id) {
+      if (!confirm('Delete this entry?')) return;
+      await fetch(`/api/kpi/entry/${id}`, { method: 'DELETE', headers: authH() });
+      await loadKpiMy();
     }
 
     function renderKpiMyResult(d) {
@@ -2344,21 +2393,6 @@ Rate: {{total_rate_usd}}
       el.innerHTML = html;
     }
 
-    document.getElementById('kpi-my-save').addEventListener('click', async () => {
-      const cost = parseFloat(document.getElementById('kpi-my-cost').value || '0');
-      const miles = parseFloat(document.getElementById('kpi-my-miles').value || '0');
-      const btn = document.getElementById('kpi-my-save');
-      btn.disabled = true; btn.textContent = 'Saving...';
-      try {
-        const r = await fetch('/api/kpi/entry', {
-          method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ week_start: _kpiWeekStart, total_miles: miles, total_cost: cost })
-        });
-        if (r.ok) { toast('Saved', 'success'); await loadKpiMy(); }
-        else { const d = await r.json(); toast(d.detail || 'Error', 'error'); }
-      } catch { toast('Connection error', 'error'); }
-      finally { btn.disabled = false; btn.textContent = 'Save'; }
-    });
 
     // ── Admin KPI entries view ────────────────────────────────────────────
     async function loadKpiEntries() {
@@ -2366,46 +2400,61 @@ Rate: {{total_rate_usd}}
         const r = await fetch(`/api/kpi/all-entries?week_start=${_kpiWeekStart}`, { headers: authH() });
         if (!r.ok) return;
         const d = await r.json();
-        renderKpiEntries(d.entries);
+        renderKpiEntries(d.dispatchers);
       } catch(e) { console.error(e); }
     }
 
-    function renderKpiEntries(entries) {
+    function renderKpiEntries(dispatchers) {
       const el = document.getElementById('kpi-entries-content');
-      if (!entries.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No dispatcher reports for this week</div>'; return; }
-      let html = '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
-      html += '<thead><tr style="border-bottom:2px solid var(--border);">';
-      html += '<th style="text-align:left;padding:8px;color:var(--text-muted);font-weight:600;">Dispatcher</th>';
-      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">Total Cost</th>';
-      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">Miles</th>';
-      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">RPM</th>';
-      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">Tier</th>';
-      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">Earning</th>';
-      html += '</tr></thead><tbody>';
-      let totalCost = 0, totalMiles = 0, totalEarning = 0;
-      entries.forEach(e => {
-        totalCost += e.total_cost; totalMiles += e.total_miles; totalEarning += e.earning;
-        const rpmC = e.rpm >= 2.5 ? '#16a34a' : e.rpm >= 2.0 ? '#d97706' : '#ef4444';
-        const pctC = e.tier_percentage >= 3 ? '#16a34a' : e.tier_percentage >= 2 ? '#2563eb' : e.tier_percentage >= 1.5 ? '#d97706' : '#6b7280';
-        html += `<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:9px 8px;font-weight:600;">${esc(e.dispatcher_name)}</td>
-          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#16a34a;">$${e.total_cost.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
-          <td style="padding:9px 8px;text-align:right;">${e.total_miles.toLocaleString()}</td>
-          <td style="padding:9px 8px;text-align:right;font-weight:700;color:${rpmC};">$${e.rpm.toFixed(2)}</td>
-          <td style="padding:9px 8px;text-align:right;font-weight:700;color:${pctC};">${e.tier_percentage != null ? e.tier_percentage + '%' : '—'}</td>
-          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#d97706;">$${e.earning.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-        </tr>`;
+      if (!dispatchers.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No dispatcher reports for this week</div>'; return; }
+      let html = '';
+      let grandCost = 0, grandMiles = 0, grandEarning = 0;
+
+      dispatchers.forEach(d => {
+        grandCost += d.total_cost; grandMiles += d.total_miles; grandEarning += d.earning;
+        const rpmC = d.rpm >= 2.5 ? '#16a34a' : d.rpm >= 2.0 ? '#d97706' : '#ef4444';
+        const pctC = d.tier_percentage >= 3 ? '#16a34a' : d.tier_percentage >= 2 ? '#2563eb' : d.tier_percentage >= 1.5 ? '#d97706' : '#6b7280';
+
+        html += `<div style="margin-bottom:16px;">`;
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid var(--border);">`;
+        html += `<span style="font-weight:700;font-size:0.9rem;">${esc(d.dispatcher_name)}</span>`;
+        html += `<span style="font-size:0.82rem;">
+          <span style="color:#16a34a;font-weight:700;">$${d.total_cost.toLocaleString()}</span>
+          <span style="color:var(--text-muted);margin:0 6px;">|</span>
+          ${d.total_miles.toLocaleString()} mi
+          <span style="color:var(--text-muted);margin:0 6px;">|</span>
+          <span style="color:${rpmC};font-weight:700;">RPM $${d.rpm.toFixed(2)}</span>
+          <span style="color:var(--text-muted);margin:0 6px;">|</span>
+          <span style="color:${pctC};font-weight:700;">${d.tier_percentage != null ? d.tier_percentage + '%' : '—'}</span>
+          <span style="color:var(--text-muted);margin:0 6px;">→</span>
+          <span style="color:#d97706;font-weight:800;">$${d.earning.toFixed(2)}</span>
+        </span>`;
+        html += `</div>`;
+        html += `<table style="width:100%;border-collapse:collapse;font-size:0.8rem;"><tbody>`;
+        d.entries.forEach(e => {
+          const route = (e.origin_state && e.destination_state) ? `${e.origin_state}→${e.destination_state}` : '—';
+          html += `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:5px 6px;font-weight:600;">${esc(e.load_number || 'Manual')}</td>
+            <td style="padding:5px 6px;color:var(--text-muted);">${route}</td>
+            <td style="padding:5px 6px;color:var(--text-muted);">${esc(e.broker_name || '—')}</td>
+            <td style="padding:5px 6px;text-align:right;color:#16a34a;font-weight:600;">$${e.cost.toLocaleString()}</td>
+            <td style="padding:5px 6px;text-align:right;">${e.miles.toLocaleString()} mi</td>
+          </tr>`;
+        });
+        html += `</tbody></table></div>`;
       });
-      const avgRpm = totalMiles > 0 ? totalCost / totalMiles : 0;
-      html += `<tr style="border-top:2px solid var(--border);">
-        <td style="padding:9px 8px;font-weight:800;">Total (${entries.length})</td>
-        <td style="padding:9px 8px;text-align:right;font-weight:800;color:#16a34a;">$${totalCost.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
-        <td style="padding:9px 8px;text-align:right;font-weight:800;">${totalMiles.toLocaleString()}</td>
-        <td style="padding:9px 8px;text-align:right;font-weight:800;">$${avgRpm.toFixed(2)}</td>
-        <td style="padding:9px 8px;"></td>
-        <td style="padding:9px 8px;text-align:right;font-weight:800;color:#d97706;">$${totalEarning.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-      </tr>`;
-      html += '</tbody></table>';
+
+      // Grand total
+      const avgRpm = grandMiles > 0 ? grandCost / grandMiles : 0;
+      html += `<div style="border-top:3px solid var(--border);padding:10px 0;display:flex;justify-content:space-between;font-weight:800;font-size:0.9rem;">
+        <span>Total (${dispatchers.length} dispatchers)</span>
+        <span>
+          <span style="color:#16a34a;">$${grandCost.toLocaleString()}</span> |
+          ${grandMiles.toLocaleString()} mi |
+          RPM $${avgRpm.toFixed(2)} |
+          <span style="color:#d97706;">$${grandEarning.toFixed(2)}</span>
+        </span>
+      </div>`;
       el.innerHTML = html;
     }
 

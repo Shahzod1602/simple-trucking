@@ -179,10 +179,10 @@ def init_db():
                 company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
                 dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
                 week_start DATE NOT NULL,
-                total_miles DOUBLE PRECISION NOT NULL DEFAULT 0,
-                total_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
-                updated_at TIMESTAMP NOT NULL,
-                UNIQUE(company_id, dispatcher_id, week_start)
+                load_id INTEGER REFERENCES loads(id) ON DELETE SET NULL,
+                miles DOUBLE PRECISION NOT NULL DEFAULT 0,
+                cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP NOT NULL
             )
         """)
 
@@ -190,6 +190,15 @@ def init_db():
         conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS broker_name TEXT")
         conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS deadhead_miles TEXT")
         conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS charge TEXT")
+
+        # Migrate kpi_entries: drop old unique constraint if exists (schema changed)
+        try:
+            conn.execute("ALTER TABLE kpi_entries DROP CONSTRAINT IF EXISTS kpi_entries_company_id_dispatcher_id_week_start_key")
+        except Exception:
+            conn.connection.rollback()
+        conn.execute("ALTER TABLE kpi_entries ADD COLUMN IF NOT EXISTS load_id INTEGER REFERENCES loads(id) ON DELETE SET NULL")
+        conn.execute("ALTER TABLE kpi_entries ADD COLUMN IF NOT EXISTS miles DOUBLE PRECISION NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE kpi_entries ADD COLUMN IF NOT EXISTS cost DOUBLE PRECISION NOT NULL DEFAULT 0")
 
     super_email = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
     super_pass = os.environ.get("SUPER_ADMIN_PASSWORD", "").strip()
@@ -1189,60 +1198,72 @@ def upsert_kpi_comment(company_id: int, driver_group_id: int, week_start: str, c
 
 # ── KPI Entries (dispatcher self-report) ──────────────────────────────────────
 
-def upsert_kpi_entry(company_id: int, dispatcher_id: int, week_start: str,
-                     total_miles: float, total_cost: float):
+def add_kpi_entry(company_id: int, dispatcher_id: int, week_start: str,
+                  load_id: int | None, miles: float, cost: float) -> dict:
     now = datetime.now(timezone.utc)
     with get_conn() as conn:
         conn.execute(
-            """INSERT INTO kpi_entries (company_id, dispatcher_id, week_start, total_miles, total_cost, updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s)
-               ON CONFLICT(company_id, dispatcher_id, week_start)
-               DO UPDATE SET total_miles = EXCLUDED.total_miles, total_cost = EXCLUDED.total_cost,
-                             updated_at = EXCLUDED.updated_at""",
-            (company_id, dispatcher_id, week_start, total_miles, total_cost, now),
-        )
-
-
-def get_kpi_entry(company_id: int, dispatcher_id: int, week_start: str) -> dict | None:
-    with get_conn() as conn:
-        conn.execute(
-            "SELECT * FROM kpi_entries WHERE company_id = %s AND dispatcher_id = %s AND week_start = %s",
-            (company_id, dispatcher_id, week_start),
+            """INSERT INTO kpi_entries (company_id, dispatcher_id, week_start, load_id, miles, cost, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+            (company_id, dispatcher_id, week_start, load_id, miles, cost, now),
         )
         row = conn.fetchone()
-        return dict(row) if row else None
+        return {"id": row["id"]}
 
 
-def get_dispatcher_weekly_loads(dispatcher_id: int, week_start: str) -> list[dict]:
-    from datetime import timedelta
-    week_start_dt = datetime.strptime(week_start, "%Y-%m-%d").date()
-    week_end_dt = week_start_dt + timedelta(days=7)
+def delete_kpi_entry(entry_id: int, dispatcher_id: int) -> bool:
     with get_conn() as conn:
         conn.execute(
-            """SELECT l.id, l.load_number, l.status, l.total_rate_usd, l.miles,
-                      l.pickup_address, l.delivery_address, l.pickup_date,
-                      l.broker_name, l.deadhead_miles, l.charge,
-                      l.origin_state, l.destination_state,
+            "DELETE FROM kpi_entries WHERE id = %s AND dispatcher_id = %s",
+            (entry_id, dispatcher_id),
+        )
+        return conn.rowcount > 0
+
+
+def get_kpi_entries_for_dispatcher(company_id: int, dispatcher_id: int, week_start: str) -> list[dict]:
+    with get_conn() as conn:
+        conn.execute(
+            """SELECT ke.*, l.load_number, l.broker_name, l.origin_state, l.destination_state,
+                      dg.name as driver_name
+               FROM kpi_entries ke
+               LEFT JOIN loads l ON ke.load_id = l.id
+               LEFT JOIN driver_groups dg ON l.group_id = dg.id
+               WHERE ke.company_id = %s AND ke.dispatcher_id = %s AND ke.week_start = %s
+               ORDER BY ke.id""",
+            (company_id, dispatcher_id, week_start),
+        )
+        return [dict(r) for r in conn.fetchall()]
+
+
+def get_dispatcher_loads_for_select(dispatcher_id: int, company_id: int) -> list[dict]:
+    """Get dispatcher's recent loads for KPI entry dropdown."""
+    with get_conn() as conn:
+        conn.execute(
+            """SELECT l.id, l.load_number, l.total_rate_usd, l.miles, l.pickup_date,
+                      l.origin_state, l.destination_state, l.broker_name,
                       dg.name as driver_name
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                WHERE l.dispatcher_id = %s
                  AND l.status IN ('dispatched', 'delivered')
-                 AND l.pickup_date >= %s AND l.pickup_date < %s
-               ORDER BY l.pickup_date""",
-            (dispatcher_id, week_start_dt.isoformat(), week_end_dt.isoformat()),
+               ORDER BY l.pickup_date DESC
+               LIMIT 50""",
+            (dispatcher_id,),
         )
         return [dict(r) for r in conn.fetchall()]
 
 
 def get_all_kpi_entries(company_id: int, week_start: str) -> list[dict]:
+    """Get all KPI entries grouped by dispatcher for admin view."""
     with get_conn() as conn:
         conn.execute(
-            """SELECT ke.*, d.name as dispatcher_name
+            """SELECT ke.*, d.name as dispatcher_name, l.load_number, l.broker_name,
+                      l.origin_state, l.destination_state
                FROM kpi_entries ke
                JOIN dispatchers d ON ke.dispatcher_id = d.id
+               LEFT JOIN loads l ON ke.load_id = l.id
                WHERE ke.company_id = %s AND ke.week_start = %s
-               ORDER BY ke.total_cost DESC""",
+               ORDER BY d.name, ke.id""",
             (company_id, week_start),
         )
         return [dict(r) for r in conn.fetchall()]

@@ -838,12 +838,12 @@
         </div>
 
         <!-- Commission Tiers (admin only) -->
-        <div class="card" id="kpi-tiers-card" style="margin-bottom:16px;display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <details class="card" id="kpi-tiers-card" style="margin-bottom:16px;display:none;">
+          <summary style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
             <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Commission Tiers</div>
-            <button class="btn-outline" id="tier-standard-btn" title="Load standard 4-tier pay structure" style="font-size:0.78rem;padding:4px 10px;">&#9889; Standard Setup</button>
-          </div>
-          <div id="kpi-tiers-list"></div>
+            <button class="btn-outline" id="tier-standard-btn" title="Load standard 4-tier pay structure" style="font-size:0.78rem;padding:4px 10px;" onclick="event.stopPropagation()">&#9889; Standard Setup</button>
+          </summary>
+          <div id="kpi-tiers-list" style="margin-top:14px;"></div>
           <!-- Add tier form (collapsible) -->
           <details style="margin-top:12px;">
             <summary style="cursor:pointer;font-size:0.82rem;font-weight:600;color:var(--primary);user-select:none;">+ Add Tier</summary>
@@ -870,7 +870,7 @@
               <button class="btn-blue" id="tier-add-btn" style="margin-top:4px;font-size:0.82rem;">Add Tier</button>
             </div>
           </details>
-        </div>
+        </details>
       </div>
 
       <!-- ── Settings ── -->

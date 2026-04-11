@@ -514,6 +514,9 @@
     .btn-eta-refresh:disabled { background: rgba(255,255,255,0.04); color: var(--text-muted); cursor: not-allowed; }
     .btn-del-load { width: 26px; height: 26px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: none; color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s; margin-left: 3px; }
     .btn-del-load:hover { border-color: var(--error); color: var(--error); background: var(--error-light); }
+    .loads-tab { padding:8px 16px; border:none; background:none; color:var(--text-muted); font-size:0.84rem; font-weight:600; border-radius:8px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+    .loads-tab:hover { color:var(--text); background:rgba(255,255,255,0.06); }
+    .loads-tab.active { background:var(--bg-card); color:var(--text); box-shadow:0 1px 3px rgba(0,0,0,0.2); }
     .btn-send-status { width: 28px; height: 28px; border-radius: var(--radius-sm); border: none; background: rgba(245,166,35,0.12); color: #fbbf24; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s; margin-left: 3px; }
     .btn-send-status:hover { background: rgba(245,166,35,0.22); }
     .btn-send-status:disabled { background: rgba(255,255,255,0.04); color: var(--text-muted); cursor: not-allowed; }
@@ -720,6 +723,15 @@
             <button class="btn-outline" onclick="loadLoadsPage()">↺ Refresh</button>
             <button class="btn-blue" style="padding:7px 16px;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;" onclick="openCreateLoadModal()">+ New Load</button>
           </div>
+        </div>
+        <!-- Status filter tabs -->
+        <div id="loads-tabs" style="display:flex;gap:0;background:var(--bg-secondary);border-radius:10px;padding:3px;margin-bottom:16px;overflow-x:auto;">
+          <button class="loads-tab active" data-filter="all" onclick="filterLoads('all',this)">All</button>
+          <button class="loads-tab" data-filter="upcoming" onclick="filterLoads('upcoming',this)">Upcoming</button>
+          <button class="loads-tab" data-filter="dispatched" onclick="filterLoads('dispatched',this)">Dispatched</button>
+          <button class="loads-tab" data-filter="in-transit" onclick="filterLoads('in-transit',this)">In-Transit</button>
+          <button class="loads-tab" data-filter="delivered" onclick="filterLoads('delivered',this)">Delivered</button>
+          <button class="loads-tab" data-filter="cancelled" onclick="filterLoads('cancelled',this)">Cancelled</button>
         </div>
         <div id="loads-content"></div>
       </div>
@@ -3502,14 +3514,37 @@ Rate: {{total_rate_usd}}
       return `<span class="${cls}">${s.charAt(0).toUpperCase()+s.slice(1)}</span>`;
     }
 
+    let _allLoads = [];
+    let _loadsFilter = 'all';
+
     async function loadLoadsPage() {
       if (!token) { document.getElementById('loads-content').innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-lock"></i></div><div class="empty-title">Sign in required</div></div>'; return; }
       document.getElementById('loads-content').innerHTML = '<div class="spinner visible" style="margin-top:32px;"></div>';
       try {
         const r = await fetch('/api/loads', { headers: authH() });
         const data = await r.json();
-        renderLoadsTable(data.loads || []);
+        _allLoads = data.loads || [];
+        applyLoadsFilter();
       } catch { document.getElementById('loads-content').innerHTML = '<div class="empty-state"><div class="empty-title">Failed to load</div></div>'; }
+    }
+
+    function filterLoads(filter, btn) {
+      _loadsFilter = filter;
+      document.querySelectorAll('.loads-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      applyLoadsFilter();
+    }
+
+    function applyLoadsFilter() {
+      const filtered = _loadsFilter === 'all' ? _allLoads : _allLoads.filter(l => l.status === _loadsFilter);
+      // Update tab counts
+      document.querySelectorAll('.loads-tab').forEach(t => {
+        const f = t.dataset.filter;
+        const count = f === 'all' ? _allLoads.length : _allLoads.filter(l => l.status === f).length;
+        const label = { all:'All', upcoming:'Upcoming', dispatched:'Dispatched', 'in-transit':'In-Transit', delivered:'Delivered', cancelled:'Cancelled' }[f];
+        t.textContent = count > 0 ? `${label} (${count})` : label;
+      });
+      renderLoadsTable(filtered);
     }
 
     function currentStopLabel(l) {

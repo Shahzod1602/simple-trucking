@@ -772,18 +772,52 @@
           </div>
         </div>
 
-        <!-- KPI Summary Cards -->
-        <div id="kpi-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
-
-        <!-- KPI Driver Table -->
-        <div class="card" style="margin-bottom:16px;overflow-x:auto;">
-          <div id="kpi-board-content" style="min-width:900px;">
-            <div style="color:var(--text-muted);font-size:0.85rem;padding:20px 0;text-align:center;">Loading...</div>
+        <!-- Dispatcher self-entry -->
+        <div id="kpi-dispatcher-view" style="display:none;">
+          <div class="card" style="margin-bottom:16px;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">My Weekly Report</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;">
+              <div class="field">
+                <label>Total Cost ($)</label>
+                <input type="number" id="kpi-my-cost" placeholder="e.g. 8500" min="0" step="0.01" />
+              </div>
+              <div class="field">
+                <label>Total Miles</label>
+                <input type="number" id="kpi-my-miles" placeholder="e.g. 3200" min="0" step="0.01" />
+              </div>
+            </div>
+            <button class="btn-blue" id="kpi-my-save" style="margin-top:8px;">Save</button>
+          </div>
+          <!-- My result -->
+          <div id="kpi-my-result"></div>
+          <!-- Tiers reference for dispatcher -->
+          <div class="card" style="margin-bottom:16px;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">Commission Scale</div>
+            <div id="kpi-my-tiers"></div>
           </div>
         </div>
 
-        <!-- Commission Tiers -->
-        <div class="card" style="margin-bottom:16px;">
+        <!-- Admin view -->
+        <div id="kpi-admin-view" style="display:none;">
+          <!-- KPI Summary Cards -->
+          <div id="kpi-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
+
+          <!-- Dispatcher entries table -->
+          <div class="card" style="margin-bottom:16px;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Dispatcher Reports</div>
+            <div id="kpi-entries-content"></div>
+          </div>
+
+          <!-- KPI Driver Table -->
+          <div class="card" style="margin-bottom:16px;overflow-x:auto;">
+            <div id="kpi-board-content" style="min-width:900px;">
+              <div style="color:var(--text-muted);font-size:0.85rem;padding:20px 0;text-align:center;">Loading...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Commission Tiers (admin only) -->
+        <div class="card" id="kpi-tiers-card" style="margin-bottom:16px;display:none;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
             <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Commission Tiers</div>
             <button class="btn-outline" id="tier-standard-btn" title="Load standard 4-tier pay structure" style="font-size:0.78rem;padding:4px 10px;">&#9889; Standard Setup</button>
@@ -1446,9 +1480,9 @@ Rate: {{total_rate_usd}}
         userName  = d.name;
         localStorage.setItem(NAME_KEY, d.name);
         renderUser();
+        document.getElementById('kpi-nav').hidden = false;
         if (userRole === 'admin' || userRole === 'superadmin') {
           document.getElementById('users-nav').hidden = false;
-          document.getElementById('kpi-nav').hidden = false;
         }
         if (userRole === 'superadmin') document.getElementById('admin-nav').hidden = false;
         startAlertPolling();
@@ -2184,7 +2218,142 @@ Rate: {{total_rate_usd}}
 
     async function loadKpiPage() {
       _buildWeekOptions();
-      await Promise.all([loadKpiBoard(), loadKpiTiers()]);
+      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+      document.getElementById('kpi-admin-view').style.display = isAdmin ? '' : 'none';
+      document.getElementById('kpi-dispatcher-view').style.display = isAdmin ? 'none' : '';
+      document.getElementById('kpi-tiers-card').style.display = isAdmin ? '' : 'none';
+      if (isAdmin) {
+        await Promise.all([loadKpiBoard(), loadKpiTiers(), loadKpiEntries()]);
+      } else {
+        await loadKpiMy();
+      }
+    }
+
+    // ── Dispatcher self-report ────────────────────────────────────────────
+    async function loadKpiMy() {
+      try {
+        const r = await fetch(`/api/kpi/my?week_start=${_kpiWeekStart}`, { headers: authH() });
+        if (!r.ok) return;
+        const d = await r.json();
+        document.getElementById('kpi-my-cost').value = d.total_cost || '';
+        document.getElementById('kpi-my-miles').value = d.total_miles || '';
+        renderKpiMyResult(d);
+        renderKpiMyTiers(d.tiers);
+      } catch(e) { console.error(e); }
+    }
+
+    function renderKpiMyResult(d) {
+      const el = document.getElementById('kpi-my-result');
+      if (!d.total_cost && !d.total_miles) { el.innerHTML = ''; return; }
+      const rpmColor = d.rpm >= 2.5 ? '#16a34a' : d.rpm >= 2.0 ? '#d97706' : '#ef4444';
+      const pctColor = d.tier_percentage >= 3 ? '#16a34a' : d.tier_percentage >= 2 ? '#2563eb' : d.tier_percentage >= 1.5 ? '#d97706' : '#6b7280';
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+          <div class="card" style="padding:14px;text-align:center;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Total Cost</div>
+            <div style="font-size:1.5rem;font-weight:800;color:#16a34a;margin-top:4px;">$${d.total_cost.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
+          </div>
+          <div class="card" style="padding:14px;text-align:center;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Total Miles</div>
+            <div style="font-size:1.5rem;font-weight:800;color:var(--text);margin-top:4px;">${d.total_miles.toLocaleString()}</div>
+          </div>
+          <div class="card" style="padding:14px;text-align:center;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">RPM</div>
+            <div style="font-size:1.5rem;font-weight:800;color:${rpmColor};margin-top:4px;">$${d.rpm.toFixed(2)}</div>
+          </div>
+          <div class="card" style="padding:14px;text-align:center;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Commission</div>
+            <div style="font-size:1.5rem;font-weight:800;color:${pctColor};margin-top:4px;">${d.tier_percentage != null ? d.tier_percentage + '%' : '—'}</div>
+          </div>
+          <div class="card" style="padding:14px;text-align:center;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">My Earnings</div>
+            <div style="font-size:1.5rem;font-weight:800;color:#d97706;margin-top:4px;">$${d.earning.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          </div>
+        </div>`;
+    }
+
+    function renderKpiMyTiers(tiers) {
+      const el = document.getElementById('kpi-my-tiers');
+      if (!tiers || !tiers.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No tiers configured</div>'; return; }
+      let html = '<table style="width:100%;border-collapse:collapse;font-size:0.84rem;"><thead><tr style="border-bottom:2px solid var(--border);">';
+      html += '<th style="text-align:left;padding:7px 8px;color:var(--text-muted);font-weight:600;">Gross Range</th>';
+      html += '<th style="text-align:center;padding:7px 8px;color:var(--text-muted);font-weight:600;">Min RPM</th>';
+      html += '<th style="text-align:center;padding:7px 8px;color:var(--text-muted);font-weight:600;">Commission</th>';
+      html += '</tr></thead><tbody>';
+      tiers.sort((a, b) => b.min_gross - a.min_gross).forEach(t => {
+        const minG = '$' + Number(t.min_gross).toLocaleString();
+        const maxG = t.max_gross ? ' – $' + Number(t.max_gross).toLocaleString() : '+';
+        const rpm = t.min_rpm ? '$' + Number(t.min_rpm).toFixed(2) : '—';
+        const pc = t.percentage >= 3 ? '#16a34a' : t.percentage >= 2 ? '#2563eb' : t.percentage >= 1.5 ? '#d97706' : '#6b7280';
+        html += `<tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;font-weight:600;">${minG}${maxG}</td><td style="padding:8px;text-align:center;">${rpm}</td><td style="padding:8px;text-align:center;font-weight:800;font-size:1rem;color:${pc};">${t.percentage}%</td></tr>`;
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    document.getElementById('kpi-my-save').addEventListener('click', async () => {
+      const cost = parseFloat(document.getElementById('kpi-my-cost').value || '0');
+      const miles = parseFloat(document.getElementById('kpi-my-miles').value || '0');
+      const btn = document.getElementById('kpi-my-save');
+      btn.disabled = true; btn.textContent = 'Saving...';
+      try {
+        const r = await fetch('/api/kpi/entry', {
+          method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ week_start: _kpiWeekStart, total_miles: miles, total_cost: cost })
+        });
+        if (r.ok) { toast('Saved', 'success'); await loadKpiMy(); }
+        else { const d = await r.json(); toast(d.detail || 'Error', 'error'); }
+      } catch { toast('Connection error', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Save'; }
+    });
+
+    // ── Admin KPI entries view ────────────────────────────────────────────
+    async function loadKpiEntries() {
+      try {
+        const r = await fetch(`/api/kpi/all-entries?week_start=${_kpiWeekStart}`, { headers: authH() });
+        if (!r.ok) return;
+        const d = await r.json();
+        renderKpiEntries(d.entries);
+      } catch(e) { console.error(e); }
+    }
+
+    function renderKpiEntries(entries) {
+      const el = document.getElementById('kpi-entries-content');
+      if (!entries.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No dispatcher reports for this week</div>'; return; }
+      let html = '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
+      html += '<thead><tr style="border-bottom:2px solid var(--border);">';
+      html += '<th style="text-align:left;padding:8px;color:var(--text-muted);font-weight:600;">Dispatcher</th>';
+      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">Total Cost</th>';
+      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">Miles</th>';
+      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">RPM</th>';
+      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">Tier</th>';
+      html += '<th style="text-align:right;padding:8px;color:var(--text-muted);font-weight:600;">Earning</th>';
+      html += '</tr></thead><tbody>';
+      let totalCost = 0, totalMiles = 0, totalEarning = 0;
+      entries.forEach(e => {
+        totalCost += e.total_cost; totalMiles += e.total_miles; totalEarning += e.earning;
+        const rpmC = e.rpm >= 2.5 ? '#16a34a' : e.rpm >= 2.0 ? '#d97706' : '#ef4444';
+        const pctC = e.tier_percentage >= 3 ? '#16a34a' : e.tier_percentage >= 2 ? '#2563eb' : e.tier_percentage >= 1.5 ? '#d97706' : '#6b7280';
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:9px 8px;font-weight:600;">${esc(e.dispatcher_name)}</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#16a34a;">$${e.total_cost.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+          <td style="padding:9px 8px;text-align:right;">${e.total_miles.toLocaleString()}</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:${rpmC};">$${e.rpm.toFixed(2)}</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:${pctC};">${e.tier_percentage != null ? e.tier_percentage + '%' : '—'}</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700;color:#d97706;">$${e.earning.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        </tr>`;
+      });
+      const avgRpm = totalMiles > 0 ? totalCost / totalMiles : 0;
+      html += `<tr style="border-top:2px solid var(--border);">
+        <td style="padding:9px 8px;font-weight:800;">Total (${entries.length})</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:800;color:#16a34a;">$${totalCost.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:800;">${totalMiles.toLocaleString()}</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:800;">$${avgRpm.toFixed(2)}</td>
+        <td style="padding:9px 8px;"></td>
+        <td style="padding:9px 8px;text-align:right;font-weight:800;color:#d97706;">$${totalEarning.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      </tr>`;
+      html += '</tbody></table>';
+      el.innerHTML = html;
     }
 
     async function loadKpiBoard() {
@@ -2352,19 +2521,22 @@ Rate: {{total_rate_usd}}
     }
 
     // Week navigation
+    function _kpiRefresh() {
+      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+      if (isAdmin) { loadKpiBoard(); loadKpiEntries(); } else { loadKpiMy(); }
+    }
     document.getElementById('kpi-week-select').addEventListener('change', (e) => {
-      _kpiWeekStart = e.target.value;
-      loadKpiBoard();
+      _kpiWeekStart = e.target.value; _kpiRefresh();
     });
     document.getElementById('kpi-prev-week').addEventListener('click', () => {
       const sel = document.getElementById('kpi-week-select');
       const idx = sel.selectedIndex;
-      if (idx < sel.options.length - 1) { sel.selectedIndex = idx + 1; _kpiWeekStart = sel.value; loadKpiBoard(); }
+      if (idx < sel.options.length - 1) { sel.selectedIndex = idx + 1; _kpiWeekStart = sel.value; _kpiRefresh(); }
     });
     document.getElementById('kpi-next-week').addEventListener('click', () => {
       const sel = document.getElementById('kpi-week-select');
       const idx = sel.selectedIndex;
-      if (idx > 0) { sel.selectedIndex = idx - 1; _kpiWeekStart = sel.value; loadKpiBoard(); }
+      if (idx > 0) { sel.selectedIndex = idx - 1; _kpiWeekStart = sel.value; _kpiRefresh(); }
     });
 
     // ── KPI Tiers ─────────────────────────────────────────────────────────────

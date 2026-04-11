@@ -2035,6 +2035,106 @@ async def api_kpi_comment(
     return {"ok": True}
 
 
+class KpiEntryBody(BaseModel):
+    week_start: str
+    total_miles: float
+    total_cost: float
+
+
+@app.post("/api/kpi/entry")
+async def api_kpi_entry_save(
+    body: KpiEntryBody,
+    authorization: str | None = Header(default=None),
+):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    database.upsert_kpi_entry(company_id, dispatcher["id"], body.week_start, body.total_miles, body.total_cost)
+    return {"ok": True}
+
+
+@app.get("/api/kpi/my")
+async def api_kpi_my(
+    week_start: str = Query(None),
+    authorization: str | None = Header(default=None),
+):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+
+    if not week_start:
+        from datetime import timedelta
+        today = datetime.now().date()
+        monday = today - timedelta(days=today.weekday())
+        week_start = monday.isoformat()
+
+    entry = database.get_kpi_entry(company_id, dispatcher["id"], week_start)
+    tiers = database.get_pay_tiers(company_id)
+    company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
+
+    total_cost = entry["total_cost"] if entry else 0
+    total_miles = entry["total_miles"] if entry else 0
+    rpm = round(total_cost / total_miles, 2) if total_miles > 0 else 0
+
+    earning = 0
+    tier_pct = None
+    for tier in sorted(company_tiers, key=lambda t: t["min_gross"], reverse=True):
+        gross_ok = total_cost >= tier["min_gross"]
+        max_ok = tier["max_gross"] is None or total_cost < tier["max_gross"]
+        rpm_ok = rpm >= tier["min_rpm"] if tier["min_rpm"] else True
+        if gross_ok and max_ok and rpm_ok:
+            earning = round(total_cost * tier["percentage"] / 100, 2)
+            tier_pct = tier["percentage"]
+            break
+
+    return {
+        "week_start": week_start,
+        "total_miles": total_miles,
+        "total_cost": total_cost,
+        "rpm": rpm,
+        "earning": earning,
+        "tier_percentage": tier_pct,
+        "tiers": company_tiers,
+    }
+
+
+@app.get("/api/kpi/all-entries")
+async def api_kpi_all_entries(
+    week_start: str = Query(None),
+    authorization: str | None = Header(default=None),
+):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    if dispatcher.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    if not week_start:
+        from datetime import timedelta
+        today = datetime.now().date()
+        monday = today - timedelta(days=today.weekday())
+        week_start = monday.isoformat()
+
+    entries = database.get_all_kpi_entries(company_id, week_start)
+    tiers = database.get_pay_tiers(company_id)
+    company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
+
+    for e in entries:
+        tc = e["total_cost"]
+        tm = e["total_miles"]
+        rpm = round(tc / tm, 2) if tm > 0 else 0
+        e["rpm"] = rpm
+        earning = 0
+        tier_pct = None
+        for tier in sorted(company_tiers, key=lambda t: t["min_gross"], reverse=True):
+            if tc >= tier["min_gross"] and (tier["max_gross"] is None or tc < tier["max_gross"]):
+                if rpm >= tier["min_rpm"] if tier["min_rpm"] else True:
+                    earning = round(tc * tier["percentage"] / 100, 2)
+                    tier_pct = tier["percentage"]
+                    break
+        e["earning"] = earning
+        e["tier_percentage"] = tier_pct
+
+    return {"week_start": week_start, "entries": entries, "tiers": company_tiers}
+
+
 @app.get("/api/earnings")
 async def api_earnings(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)

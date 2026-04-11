@@ -1220,12 +1220,15 @@ def add_kpi_entry(company_id: int, dispatcher_id: int, week_start: str,
         return {"id": row["id"]}
 
 
-def delete_kpi_entry(entry_id: int, dispatcher_id: int) -> bool:
+def delete_kpi_entry(entry_id: int, dispatcher_id: int | None = None) -> bool:
     with get_conn() as conn:
-        conn.execute(
-            "DELETE FROM kpi_entries WHERE id = %s AND dispatcher_id = %s",
-            (entry_id, dispatcher_id),
-        )
+        if dispatcher_id:
+            conn.execute(
+                "DELETE FROM kpi_entries WHERE id = %s AND dispatcher_id = %s",
+                (entry_id, dispatcher_id),
+            )
+        else:
+            conn.execute("DELETE FROM kpi_entries WHERE id = %s", (entry_id,))
         return conn.rowcount > 0
 
 

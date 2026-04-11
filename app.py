@@ -2150,7 +2150,9 @@ async def api_kpi_entry_delete(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    ok = database.delete_kpi_entry(entry_id, dispatcher["id"])
+    if dispatcher.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Only admins can delete KPI entries")
+    ok = database.delete_kpi_entry(entry_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"ok": True}

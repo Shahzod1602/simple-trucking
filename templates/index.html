@@ -2310,9 +2310,9 @@ Rate: {{total_rate_usd}}
           <td style="padding:7px 6px;text-align:right;font-weight:700;color:#16a34a;">$${e.cost.toLocaleString()}</td>
           <td style="padding:7px 6px;text-align:right;">${e.miles.toLocaleString()}</td>
           <td style="padding:7px 6px;text-align:right;">
-            <button onclick="deleteKpiEntry(${e.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;padding:4px;" title="Delete">
+            ${(userRole === 'admin' || userRole === 'superadmin') ? `<button onclick="deleteKpiEntry(${e.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;padding:4px;" title="Delete">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
+            </button>` : ''}
           </td>
         </tr>`;
       });

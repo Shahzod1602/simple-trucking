@@ -899,16 +899,45 @@ async def api_send(
     dispatcher = require_dispatcher(authorization)
     if not os.environ.get("TELEGRAM_BOT_TOKEN"):
         raise HTTPException(status_code=500, detail="TELEGRAM_BOT_TOKEN not configured")
-    group = database.get_group(body.group_id, get_company_id(dispatcher))
+    company_id = get_company_id(dispatcher)
+    group = database.get_group(body.group_id, company_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
+
+    # Calculate deadhead miles from driver's ELD location to pickup
+    dhd_miles = None
+    message = body.message
+    if group.get("eld_driver_id") and body.pickup_address:
+        try:
+            location = _get_driver_location(group["eld_driver_id"], dispatcher["id"])
+            if location:
+                import routing
+                gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
+                dest = routing.geocode(body.pickup_address, gmaps_key)
+                if dest:
+                    route = routing.get_route(
+                        {"lat": location["lat"], "lon": location["lon"]},
+                        dest, gmaps_key
+                    )
+                    dhd_val = round(route["distance_meters"] / 1609.34, 1)
+                    dhd_miles = str(dhd_val)
+                    # Add deadhead + total miles to the message after "Miles:" line
+                    loaded = float(str(body.miles or "0").replace(",", "").strip() or 0)
+                    total = round(loaded + dhd_val, 1)
+                    message = message.replace(
+                        f"Miles: {body.miles}",
+                        f"Miles: {body.miles}\nDHD: {dhd_miles} mi\nTotal Miles: {total} mi"
+                    )
+        except Exception:
+            pass
+
     try:
-        tg.send_message(group["chat_id"], body.message)
+        tg.send_message(group["chat_id"], message)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Telegram error: {e}")
 
     if any([body.load_number, body.pickup_address, body.origin_state, body.destination_state]):
-        database.create_load(dispatcher["id"], {
+        load_data = {
             "group_id": body.group_id,
             "load_number": body.load_number,
             "origin_state": body.origin_state,
@@ -920,7 +949,10 @@ async def api_send(
             "delivery_address": body.delivery_address,
             "delivery_date": body.delivery_date,
             "stops_json": body.stops_json,
-        })
+        }
+        if dhd_miles:
+            load_data["deadhead_miles"] = dhd_miles
+        database.create_load(dispatcher["id"], load_data)
 
     return {"ok": True}
 

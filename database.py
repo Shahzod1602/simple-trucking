@@ -561,8 +561,8 @@ def create_load(dispatcher_id: int, data: dict) -> dict:
                (dispatcher_id, group_id, load_number, status,
                 origin_state, destination_state, total_rate_usd, miles,
                 pickup_address, pickup_date, delivery_address, delivery_date,
-                stops_json, current_stop_index, created_at)
-               VALUES (%s, %s, %s, 'upcoming', %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s) RETURNING id""",
+                stops_json, current_stop_index, deadhead_miles, broker_name, charge, created_at)
+               VALUES (%s, %s, %s, 'upcoming', %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, %s) RETURNING id""",
             (
                 dispatcher_id,
                 data.get("group_id"),
@@ -576,6 +576,9 @@ def create_load(dispatcher_id: int, data: dict) -> dict:
                 data.get("delivery_address"),
                 data.get("delivery_date"),
                 data.get("stops_json"),
+                data.get("deadhead_miles"),
+                data.get("broker_name"),
+                data.get("charge"),
                 now,
             ),
         )

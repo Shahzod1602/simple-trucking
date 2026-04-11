@@ -41,7 +41,14 @@ async def lifespan(app: FastAPI):
     bot_enabled = os.getenv("DISABLE_BOT_POLLER", "0") != "1"
     prefetch_enabled = os.getenv("DISABLE_TRUCK_PREFETCH", "0") != "1"
     if bot_enabled:
-        bot_poller.start()
+        # Only one worker should run bot poller (use file lock)
+        import fcntl
+        try:
+            _bot_lock_fd = open("/tmp/bot_poller.lock", "w")
+            fcntl.flock(_bot_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            bot_poller.start()
+        except (IOError, OSError):
+            pass  # another worker holds the lock
     if prefetch_enabled:
         _truck_prefetch_task = asyncio.create_task(_prefetch_trucks_loop())
     yield

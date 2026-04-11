@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
@@ -1926,6 +1926,112 @@ async def api_delete_pay_tier(
     ok = database.delete_pay_tier(tier_id, get_company_id(me))
     if not ok:
         raise HTTPException(status_code=404, detail="Tier not found")
+    return {"ok": True}
+
+
+# ── KPI Board API ─────────────────────────────────────────────────────────────
+
+
+@app.get("/api/kpi/weekly")
+async def api_kpi_weekly(
+    week_start: str = Query(None),
+    authorization: str | None = Header(default=None),
+):
+    from datetime import datetime, timedelta
+
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+
+    # Default to current week's Monday
+    if not week_start:
+        today = datetime.now().date()
+        monday = today - timedelta(days=today.weekday())
+        week_start = monday.isoformat()
+
+    loads = database.get_weekly_kpi(company_id, week_start)
+    comments = database.get_kpi_comments(company_id, week_start)
+    tiers = database.get_pay_tiers(company_id)
+    company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
+
+    # Group loads by driver
+    drivers = {}
+    for load in loads:
+        dg_id = load.get("driver_group_id")
+        if not dg_id:
+            continue
+        if dg_id not in drivers:
+            drivers[dg_id] = {
+                "driver_group_id": dg_id,
+                "driver_name": load.get("driver_name") or "Unknown",
+                "dispatcher_name": load.get("dispatcher_name") or "",
+                "loads": [],
+                "total_rate": 0,
+                "total_miles": 0,
+                "total_dhd": 0,
+                "comment": "",
+            }
+
+        def _parse_num(v):
+            if not v:
+                return 0.0
+            return float(str(v).replace("$", "").replace(",", "").strip() or 0)
+
+        rate = _parse_num(load.get("total_rate_usd"))
+        miles = _parse_num(load.get("miles"))
+        dhd = _parse_num(load.get("deadhead_miles"))
+
+        drivers[dg_id]["loads"].append(load)
+        drivers[dg_id]["total_rate"] += rate
+        drivers[dg_id]["total_miles"] += miles
+        drivers[dg_id]["total_dhd"] += dhd
+
+    # Calculate RPM and earnings for each driver
+    for dg_id, drv in drivers.items():
+        drv["rpm"] = round(drv["total_rate"] / drv["total_miles"], 2) if drv["total_miles"] > 0 else 0
+
+        # Find matching tier
+        gross = drv["total_rate"]
+        rpm = drv["rpm"]
+        earning = 0
+        tier_pct = None
+        for tier in sorted(company_tiers, key=lambda t: t["min_gross"], reverse=True):
+            gross_ok = gross >= tier["min_gross"]
+            max_ok = tier["max_gross"] is None or gross < tier["max_gross"]
+            rpm_ok = rpm >= tier["min_rpm"] if tier["min_rpm"] else True
+            if gross_ok and max_ok and rpm_ok:
+                earning = round(gross * tier["percentage"] / 100, 2)
+                tier_pct = tier["percentage"]
+                break
+        drv["earning"] = earning
+        drv["tier_percentage"] = tier_pct
+
+        # Attach comment
+        for c in comments:
+            if c["driver_group_id"] == dg_id:
+                drv["comment"] = c["comment"]
+                break
+
+    return {
+        "week_start": week_start,
+        "drivers": list(drivers.values()),
+        "tiers": company_tiers,
+    }
+
+
+class KpiCommentBody(BaseModel):
+    driver_group_id: int
+    week_start: str
+    comment: str
+
+
+@app.post("/api/kpi/comment")
+async def api_kpi_comment(
+    body: KpiCommentBody,
+    authorization: str | None = Header(default=None),
+):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    database.upsert_kpi_comment(company_id, body.driver_group_id, body.week_start, body.comment)
     return {"ok": True}
 
 

@@ -161,6 +161,23 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_company_created ON audit_logs(company_id, created_at DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_actor_created ON audit_logs(actor_dispatcher_id, created_at DESC)")
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS kpi_comments (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                driver_group_id INTEGER NOT NULL REFERENCES driver_groups(id) ON DELETE CASCADE,
+                week_start DATE NOT NULL,
+                comment TEXT NOT NULL DEFAULT '',
+                updated_at TIMESTAMP NOT NULL,
+                UNIQUE(company_id, driver_group_id, week_start)
+            )
+        """)
+
+        # Migrations for new load columns
+        conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS broker_name TEXT")
+        conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS deadhead_miles TEXT")
+        conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS charge TEXT")
+
     super_email = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
     super_pass = os.environ.get("SUPER_ADMIN_PASSWORD", "").strip()
     if super_email and super_pass:
@@ -610,7 +627,8 @@ def update_load_status(load_id: int, company_id: int, status: str, current_stop_
 def update_load_fields(load_id: int, company_id: int, fields: dict) -> bool:
     allowed = {"group_id", "load_number", "origin_state", "destination_state",
                "total_rate_usd", "miles", "pickup_address", "pickup_date",
-               "delivery_address", "delivery_date", "stops_json"}
+               "delivery_address", "delivery_date", "stops_json",
+               "broker_name", "deadhead_miles", "charge"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False
@@ -1103,3 +1121,54 @@ def get_earnings(company_id: int, dispatcher_id: int | None = None) -> list[dict
         result.append(load)
 
     return result
+
+
+# ── KPI Board ─────────────────────────────────────────────────────────────────
+
+
+def get_weekly_kpi(company_id: int, week_start: str) -> list[dict]:
+    """Get all loads for a company within a specific week (Mon-Sun), grouped by driver.
+    week_start is ISO date string like '2026-03-30' (Monday).
+    Returns loads with driver info for the KPI board."""
+    from datetime import timedelta
+    week_start_dt = datetime.strptime(week_start, "%Y-%m-%d").date()
+    week_end_dt = week_start_dt + timedelta(days=7)
+    with get_conn() as conn:
+        conn.execute(
+            """SELECT l.*, dg.name as driver_name, dg.id as driver_group_id,
+                      dg.eld_driver_id as driver_eld_id,
+                      d.name as dispatcher_name, d.id as worker_id
+               FROM loads l
+               LEFT JOIN driver_groups dg ON l.group_id = dg.id
+               LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
+               WHERE d.company_id = %s
+                 AND l.status IN ('dispatched', 'delivered')
+                 AND l.pickup_date >= %s AND l.pickup_date < %s
+               ORDER BY dg.name, l.pickup_date""",
+            (company_id, week_start_dt.isoformat(), week_end_dt.isoformat()),
+        )
+        return [dict(r) for r in conn.fetchall()]
+
+
+def get_kpi_comments(company_id: int, week_start: str) -> list[dict]:
+    with get_conn() as conn:
+        conn.execute(
+            """SELECT kc.*, dg.name as driver_name
+               FROM kpi_comments kc
+               LEFT JOIN driver_groups dg ON kc.driver_group_id = dg.id
+               WHERE kc.company_id = %s AND kc.week_start = %s""",
+            (company_id, week_start),
+        )
+        return [dict(r) for r in conn.fetchall()]
+
+
+def upsert_kpi_comment(company_id: int, driver_group_id: int, week_start: str, comment: str):
+    now = datetime.now(timezone.utc)
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO kpi_comments (company_id, driver_group_id, week_start, comment, updated_at)
+               VALUES (%s, %s, %s, %s, %s)
+               ON CONFLICT(company_id, driver_group_id, week_start)
+               DO UPDATE SET comment = EXCLUDED.comment, updated_at = EXCLUDED.updated_at""",
+            (company_id, driver_group_id, week_start, comment, now),
+        )

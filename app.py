@@ -2070,6 +2070,9 @@ async def api_kpi_my(
     tiers = database.get_pay_tiers(company_id)
     company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
 
+    # Get dispatcher's loads for this week
+    my_loads = database.get_dispatcher_weekly_loads(dispatcher["id"], week_start)
+
     total_cost = entry["total_cost"] if entry else 0
     total_miles = entry["total_miles"] if entry else 0
     rpm = round(total_cost / total_miles, 2) if total_miles > 0 else 0
@@ -2093,6 +2096,7 @@ async def api_kpi_my(
         "earning": earning,
         "tier_percentage": tier_pct,
         "tiers": company_tiers,
+        "loads": my_loads,
     }
 
 

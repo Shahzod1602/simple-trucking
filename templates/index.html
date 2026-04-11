@@ -774,8 +774,14 @@
 
         <!-- Dispatcher self-entry -->
         <div id="kpi-dispatcher-view" style="display:none;">
+          <!-- My Loads this week -->
           <div class="card" style="margin-bottom:16px;">
-            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">My Weekly Report</div>
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">My Loads This Week</div>
+            <div id="kpi-my-loads"></div>
+          </div>
+          <!-- Entry form -->
+          <div class="card" style="margin-bottom:16px;">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:14px;">Weekly Totals</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;">
               <div class="field">
                 <label>Total Cost ($)</label>
@@ -2237,9 +2243,56 @@ Rate: {{total_rate_usd}}
         const d = await r.json();
         document.getElementById('kpi-my-cost').value = d.total_cost || '';
         document.getElementById('kpi-my-miles').value = d.total_miles || '';
+        renderKpiMyLoads(d.loads || []);
         renderKpiMyResult(d);
         renderKpiMyTiers(d.tiers);
       } catch(e) { console.error(e); }
+    }
+
+    function renderKpiMyLoads(loads) {
+      const el = document.getElementById('kpi-my-loads');
+      if (!loads.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No loads this week</div>'; return; }
+      let totalRate = 0, totalMiles = 0;
+      let html = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+      html += '<thead><tr style="border-bottom:2px solid var(--border);">';
+      html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Load #</th>';
+      html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Driver</th>';
+      html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Date</th>';
+      html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Route</th>';
+      html += '<th style="text-align:left;padding:7px 6px;color:var(--text-muted);font-weight:600;">Broker</th>';
+      html += '<th style="text-align:right;padding:7px 6px;color:var(--text-muted);font-weight:600;">Rate</th>';
+      html += '<th style="text-align:right;padding:7px 6px;color:var(--text-muted);font-weight:600;">Miles</th>';
+      html += '<th style="text-align:center;padding:7px 6px;color:var(--text-muted);font-weight:600;">Status</th>';
+      html += '</tr></thead><tbody>';
+      loads.forEach(l => {
+        const rate = _parseNum(l.total_rate_usd);
+        const miles = _parseNum(l.miles);
+        totalRate += rate; totalMiles += miles;
+        const route = (l.origin_state && l.destination_state) ? `${l.origin_state} → ${l.destination_state}` : '—';
+        const statusColor = l.status === 'delivered' ? '#16a34a' : '#d97706';
+        const brokerBg = l.broker_name === 'SPOT' ? '#fef08a' : l.broker_name ? 'rgba(79,124,255,0.15)' : 'transparent';
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:7px 6px;font-weight:700;">${esc(l.load_number || '—')}</td>
+          <td style="padding:7px 6px;">${esc(l.driver_name || '—')}</td>
+          <td style="padding:7px 6px;">${l.pickup_date || '—'}</td>
+          <td style="padding:7px 6px;">${route}</td>
+          <td style="padding:7px 6px;"><span style="background:${brokerBg};padding:1px 6px;border-radius:3px;font-weight:600;font-size:0.75rem;">${esc(l.broker_name || '—')}</span></td>
+          <td style="padding:7px 6px;text-align:right;font-weight:700;color:#16a34a;">$${rate.toLocaleString()}</td>
+          <td style="padding:7px 6px;text-align:right;">${miles.toLocaleString()}</td>
+          <td style="padding:7px 6px;text-align:center;"><span style="color:${statusColor};font-weight:600;font-size:0.75rem;text-transform:uppercase;">${l.status}</span></td>
+        </tr>`;
+      });
+      const avgRpm = totalMiles > 0 ? (totalRate / totalMiles).toFixed(2) : '0.00';
+      html += `<tr style="border-top:2px solid var(--border);background:var(--bg-secondary);">
+        <td colspan="5" style="padding:8px 6px;font-weight:800;">${loads.length} loads</td>
+        <td style="padding:8px 6px;text-align:right;font-weight:800;color:#16a34a;">$${totalRate.toLocaleString()}</td>
+        <td style="padding:8px 6px;text-align:right;font-weight:800;">${totalMiles.toLocaleString()}</td>
+        <td style="padding:8px 6px;text-align:center;font-weight:700;color:var(--primary);">RPM $${avgRpm}</td>
+      </tr>`;
+      html += '</tbody></table>';
+      // Auto-fill button
+      html += `<button class="btn-outline" style="margin-top:10px;font-size:0.8rem;" onclick="document.getElementById('kpi-my-cost').value='${totalRate}';document.getElementById('kpi-my-miles').value='${totalMiles}';">Auto-fill totals from loads ($${totalRate.toLocaleString()} / ${totalMiles.toLocaleString()} mi)</button>`;
+      el.innerHTML = html;
     }
 
     function renderKpiMyResult(d) {

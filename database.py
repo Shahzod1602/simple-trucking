@@ -1213,6 +1213,28 @@ def get_kpi_entry(company_id: int, dispatcher_id: int, week_start: str) -> dict 
         return dict(row) if row else None
 
 
+def get_dispatcher_weekly_loads(dispatcher_id: int, week_start: str) -> list[dict]:
+    from datetime import timedelta
+    week_start_dt = datetime.strptime(week_start, "%Y-%m-%d").date()
+    week_end_dt = week_start_dt + timedelta(days=7)
+    with get_conn() as conn:
+        conn.execute(
+            """SELECT l.id, l.load_number, l.status, l.total_rate_usd, l.miles,
+                      l.pickup_address, l.delivery_address, l.pickup_date,
+                      l.broker_name, l.deadhead_miles, l.charge,
+                      l.origin_state, l.destination_state,
+                      dg.name as driver_name
+               FROM loads l
+               LEFT JOIN driver_groups dg ON l.group_id = dg.id
+               WHERE l.dispatcher_id = %s
+                 AND l.status IN ('dispatched', 'delivered')
+                 AND l.pickup_date >= %s AND l.pickup_date < %s
+               ORDER BY l.pickup_date""",
+            (dispatcher_id, week_start_dt.isoformat(), week_end_dt.isoformat()),
+        )
+        return [dict(r) for r in conn.fetchall()]
+
+
 def get_all_kpi_entries(company_id: int, week_start: str) -> list[dict]:
     with get_conn() as conn:
         conn.execute(

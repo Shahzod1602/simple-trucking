@@ -2269,9 +2269,12 @@ Rate: {{total_rate_usd}}
         loads.map(l => {
           const rate = _parseNum(l.total_rate_usd);
           const miles = _parseNum(l.miles);
+          const dhd = _parseNum(l.deadhead_miles);
+          const totalMiles = miles + dhd;
           const route = (l.origin_state && l.destination_state) ? `${l.origin_state}-${l.destination_state}` : '';
-          const label = `${l.load_number || '#'+l.id} | ${l.driver_name || '—'} | ${route} | $${rate} | ${miles}mi`;
-          return `<option value="${l.id}" data-cost="${rate}" data-miles="${miles}">${esc(label)}</option>`;
+          const dhdLabel = dhd ? ` +${dhd}dhd` : '';
+          const label = `${l.load_number || '#'+l.id} | ${l.driver_name || '—'} | ${route} | $${rate} | ${miles}${dhdLabel}mi`;
+          return `<option value="${l.id}" data-cost="${rate}" data-miles="${totalMiles}">${esc(label)}</option>`;
         }).join('');
     }
 

@@ -1252,8 +1252,8 @@ def get_dispatcher_loads_for_select(dispatcher_id: int, company_id: int, is_admi
     with get_conn() as conn:
         if is_admin:
             conn.execute(
-                """SELECT l.id, l.load_number, l.total_rate_usd, l.miles, l.pickup_date,
-                          l.origin_state, l.destination_state, l.broker_name,
+                """SELECT l.id, l.load_number, l.total_rate_usd, l.miles, l.deadhead_miles,
+                          l.pickup_date, l.origin_state, l.destination_state, l.broker_name,
                           dg.name as driver_name
                    FROM loads l
                    LEFT JOIN driver_groups dg ON l.group_id = dg.id
@@ -1266,8 +1266,8 @@ def get_dispatcher_loads_for_select(dispatcher_id: int, company_id: int, is_admi
             )
         else:
             conn.execute(
-                """SELECT l.id, l.load_number, l.total_rate_usd, l.miles, l.pickup_date,
-                          l.origin_state, l.destination_state, l.broker_name,
+                """SELECT l.id, l.load_number, l.total_rate_usd, l.miles, l.deadhead_miles,
+                          l.pickup_date, l.origin_state, l.destination_state, l.broker_name,
                           dg.name as driver_name
                    FROM loads l
                    LEFT JOIN driver_groups dg ON l.group_id = dg.id

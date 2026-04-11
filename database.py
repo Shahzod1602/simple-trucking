@@ -2,12 +2,17 @@ import hashlib
 import json
 import os
 import secrets
-import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 
-DB_PATH = "ratecon.db"
+import psycopg2
+import psycopg2.extras
+
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql://ratecon:ratecon@localhost:5432/ratecon",
+)
 
 
 def init_db():
@@ -15,77 +20,58 @@ def init_db():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 name TEXT PRIMARY KEY,
-                applied_at TEXT NOT NULL
+                applied_at TIMESTAMP NOT NULL
             )
         """)
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS companies (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                id         SERIAL PRIMARY KEY,
                 name       TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TIMESTAMP NOT NULL
             )
         """)
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS dispatchers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
                 email TEXT,
                 password_hash TEXT,
                 token TEXT NOT NULL UNIQUE,
                 role TEXT NOT NULL DEFAULT 'user',
-                is_active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP NOT NULL,
+                company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL
             )
         """)
-        existing = {row[1] for row in conn.execute("PRAGMA table_info(dispatchers)")}
-        for col, defn in [
-            ("email", "TEXT"),
-            ("password_hash", "TEXT"),
-            ("role", "TEXT NOT NULL DEFAULT 'user'"),
-            ("is_active", "INTEGER NOT NULL DEFAULT 1"),
-            ("company_id", "INTEGER REFERENCES companies(id) ON DELETE SET NULL"),
-        ]:
-            if col not in existing:
-                conn.execute(f"ALTER TABLE dispatchers ADD COLUMN {col} {defn}")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS driver_groups (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
-                chat_id INTEGER NOT NULL,
+                chat_id BIGINT NOT NULL UNIQUE,
                 name TEXT NOT NULL,
                 eld_driver_id TEXT,
-                UNIQUE(chat_id)
+                eld_driver_name TEXT
             )
         """)
-        dg_existing = {row[1] for row in conn.execute("PRAGMA table_info(driver_groups)")}
-        if "eld_driver_id" not in dg_existing:
-            conn.execute("ALTER TABLE driver_groups ADD COLUMN eld_driver_id TEXT")
-        if "eld_driver_name" not in dg_existing:
-            conn.execute("ALTER TABLE driver_groups ADD COLUMN eld_driver_name TEXT")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS eld_configs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
                 provider TEXT NOT NULL,
                 api_key TEXT NOT NULL,
                 company TEXT,
                 provider_token TEXT,
-                updated_at TEXT NOT NULL
+                updated_at TIMESTAMP NOT NULL
             )
         """)
-        eld_existing = {row[1] for row in conn.execute("PRAGMA table_info(eld_configs)")}
-        if "company" not in eld_existing:
-            conn.execute("ALTER TABLE eld_configs ADD COLUMN company TEXT")
-        if "provider_token" not in eld_existing:
-            conn.execute("ALTER TABLE eld_configs ADD COLUMN provider_token TEXT")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS loads (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
                 group_id INTEGER REFERENCES driver_groups(id) ON DELETE SET NULL,
                 load_number TEXT,
@@ -101,24 +87,15 @@ def init_db():
                 stops_json TEXT,
                 current_stop_index INTEGER NOT NULL DEFAULT 0,
                 eta_utc TEXT,
-                eta_miles REAL,
-                last_eta_update TEXT,
-                created_at TEXT NOT NULL
+                eta_miles DOUBLE PRECISION,
+                last_eta_update TIMESTAMP,
+                created_at TIMESTAMP NOT NULL,
+                file_path TEXT,
+                auto_send_hours INTEGER DEFAULT 0,
+                last_auto_send TIMESTAMP,
+                eta_alert_sent BOOLEAN DEFAULT FALSE
             )
         """)
-        loads_existing = {row[1] for row in conn.execute("PRAGMA table_info(loads)")}
-        if "stops_json" not in loads_existing:
-            conn.execute("ALTER TABLE loads ADD COLUMN stops_json TEXT")
-        if "current_stop_index" not in loads_existing:
-            conn.execute("ALTER TABLE loads ADD COLUMN current_stop_index INTEGER NOT NULL DEFAULT 0")
-        if "file_path" not in loads_existing:
-            conn.execute("ALTER TABLE loads ADD COLUMN file_path TEXT")
-        if "auto_send_hours" not in loads_existing:
-            conn.execute("ALTER TABLE loads ADD COLUMN auto_send_hours INTEGER DEFAULT 0")
-        if "last_auto_send" not in loads_existing:
-            conn.execute("ALTER TABLE loads ADD COLUMN last_auto_send TEXT")
-        if "eta_alert_sent" not in loads_existing:
-            conn.execute("ALTER TABLE loads ADD COLUMN eta_alert_sent INTEGER DEFAULT 0")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS company_info (
@@ -133,103 +110,56 @@ def init_db():
                 bank_account  TEXT,
                 bank_routing  TEXT,
                 payment_terms TEXT NOT NULL DEFAULT 'Net 30',
-                updated_at    TEXT NOT NULL
+                google_maps_key TEXT,
+                updated_at    TIMESTAMP NOT NULL
             )
         """)
-
-        ci_cols = {row[1] for row in conn.execute("PRAGMA table_info(company_info)")}
-        if "google_maps_key" not in ci_cols:
-            conn.execute("ALTER TABLE company_info ADD COLUMN google_maps_key TEXT")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS global_settings (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TIMESTAMP NOT NULL
             )
         """)
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS load_pods (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 load_id INTEGER NOT NULL REFERENCES loads(id) ON DELETE CASCADE,
                 file_path TEXT NOT NULL,
                 filename TEXT NOT NULL,
-                uploaded_at TEXT NOT NULL
+                uploaded_at TIMESTAMP NOT NULL
             )
         """)
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS pay_tiers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
                 dispatcher_id INTEGER REFERENCES dispatchers(id) ON DELETE CASCADE,
-                min_gross REAL NOT NULL DEFAULT 0,
-                max_gross REAL,
-                min_rpm REAL NOT NULL DEFAULT 0,
-                percentage REAL NOT NULL,
-                created_at TEXT NOT NULL
+                min_gross DOUBLE PRECISION NOT NULL DEFAULT 0,
+                max_gross DOUBLE PRECISION,
+                min_rpm DOUBLE PRECISION NOT NULL DEFAULT 0,
+                percentage DOUBLE PRECISION NOT NULL,
+                created_at TIMESTAMP NOT NULL
             )
         """)
 
-        def _migration_applied(name: str) -> bool:
-            row = conn.execute("SELECT 1 FROM schema_migrations WHERE name = ?", (name,)).fetchone()
-            return bool(row)
-
-        def _mark_migration(name: str):
-            conn.execute(
-                "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)",
-                (name, datetime.utcnow().isoformat()),
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id SERIAL PRIMARY KEY,
+                actor_dispatcher_id INTEGER REFERENCES dispatchers(id) ON DELETE SET NULL,
+                company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+                action TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP NOT NULL
             )
-
-        # Versioned migration: drop old UNIQUE constraint from eld_configs for multi-ELD support.
-        mig_drop_eld_unique = "2026_04_04_drop_eld_unique"
-        if not _migration_applied(mig_drop_eld_unique):
-            eld_table_row = conn.execute(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='eld_configs'"
-            ).fetchone()
-            eld_table_sql = (eld_table_row[0] or "").upper() if eld_table_row else ""
-            has_old_unique = (
-                "DISPATCHER_ID INTEGER NOT NULL UNIQUE" in eld_table_sql
-                or "UNIQUE(DISPATCHER_ID" in eld_table_sql
-            )
-            if has_old_unique:
-                conn.execute("""CREATE TABLE IF NOT EXISTS eld_configs_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
-                    provider TEXT NOT NULL,
-                    api_key TEXT NOT NULL,
-                    company TEXT,
-                    provider_token TEXT,
-                    updated_at TEXT NOT NULL
-                )""")
-                conn.execute("""
-                    INSERT INTO eld_configs_new (id, dispatcher_id, provider, api_key, company, provider_token, updated_at)
-                    SELECT id, dispatcher_id, provider, api_key, company, provider_token, updated_at
-                    FROM eld_configs
-                """)
-                conn.execute("DROP TABLE eld_configs")
-                conn.execute("ALTER TABLE eld_configs_new RENAME TO eld_configs")
-            _mark_migration(mig_drop_eld_unique)
-
-        # Versioned migration: create audit logs table.
-        mig_audit_logs = "2026_04_04_create_audit_logs"
-        if not _migration_applied(mig_audit_logs):
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS audit_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    actor_dispatcher_id INTEGER REFERENCES dispatchers(id) ON DELETE SET NULL,
-                    company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
-                    action TEXT NOT NULL,
-                    entity_type TEXT NOT NULL,
-                    entity_id TEXT,
-                    metadata_json TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT NOT NULL
-                )
-            """)
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_company_created ON audit_logs(company_id, created_at DESC)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_actor_created ON audit_logs(actor_dispatcher_id, created_at DESC)")
-            _mark_migration(mig_audit_logs)
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_company_created ON audit_logs(company_id, created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_actor_created ON audit_logs(actor_dispatcher_id, created_at DESC)")
 
     super_email = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
     super_pass = os.environ.get("SUPER_ADMIN_PASSWORD", "").strip()
@@ -241,30 +171,30 @@ def ensure_superadmin(email: str, password: str):
     """Create or sync the superadmin account from env vars on every startup."""
     ph = hash_password(password)
     token = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
-        existing = conn.execute(
-            "SELECT id FROM dispatchers WHERE email = ?", (email,)
-        ).fetchone()
+        conn.execute(
+            "SELECT id FROM dispatchers WHERE email = %s", (email,)
+        )
+        existing = conn.fetchone()
         if existing:
             conn.execute(
-                "UPDATE dispatchers SET role = 'superadmin', password_hash = ?, is_active = 1 WHERE email = ?",
+                "UPDATE dispatchers SET role = 'superadmin', password_hash = %s, is_active = TRUE WHERE email = %s",
                 (ph, email),
             )
         else:
             conn.execute(
-                "INSERT INTO dispatchers (name, email, password_hash, token, role, is_active, created_at) VALUES (?, ?, ?, ?, 'superadmin', 1, ?)",
+                "INSERT INTO dispatchers (name, email, password_hash, token, role, is_active, created_at) VALUES (%s, %s, %s, %s, 'superadmin', TRUE, %s)",
                 ("Super Admin", email, ph, token, now),
             )
 
 
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        yield conn
+        cur = conn.cursor()
+        yield cur
         conn.commit()
     except Exception:
         conn.rollback()
@@ -294,62 +224,68 @@ def verify_password(password: str, stored: str) -> bool:
 
 def count_dispatchers() -> int:
     with get_conn() as conn:
-        return conn.execute("SELECT COUNT(*) FROM dispatchers").fetchone()[0]
+        conn.execute("SELECT COUNT(*) AS cnt FROM dispatchers")
+        return conn.fetchone()["cnt"]
 
 
 def create_dispatcher(name: str, email: str, password: str) -> dict:
     token = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     ph = hash_password(password)
     role = "admin" if count_dispatchers() == 0 else "user"
     with get_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO dispatchers (name, email, password_hash, token, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        conn.execute(
+            "INSERT INTO dispatchers (name, email, password_hash, token, role, created_at) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
             (name, email.lower().strip(), ph, token, role, now),
         )
-        return {"id": cur.lastrowid, "name": name, "email": email, "token": token, "role": role}
+        row = conn.fetchone()
+        return {"id": row["id"], "name": name, "email": email, "token": token, "role": role}
 
 
 def create_company_user(company_id: int, name: str, email: str, password: str, role: str = "user") -> dict:
     token = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     ph = hash_password(password)
     with get_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO dispatchers (name, email, password_hash, token, role, company_id, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+        conn.execute(
+            "INSERT INTO dispatchers (name, email, password_hash, token, role, company_id, is_active, created_at) VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s) RETURNING id",
             (name, email.lower().strip(), ph, token, role, company_id, now),
         )
-        return {"id": cur.lastrowid, "name": name, "email": email, "token": token, "role": role, "company_id": company_id}
+        row = conn.fetchone()
+        return {"id": row["id"], "name": name, "email": email, "token": token, "role": role, "company_id": company_id}
 
 
 def get_dispatcher_by_email(email: str) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM dispatchers WHERE email = ? AND is_active = 1", (email.lower().strip(),)
-        ).fetchone()
+        conn.execute(
+            "SELECT * FROM dispatchers WHERE email = %s AND is_active = TRUE", (email.lower().strip(),)
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def get_dispatcher_by_token(token: str) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM dispatchers WHERE token = ? AND is_active = 1", (token,)
-        ).fetchone()
+        conn.execute(
+            "SELECT * FROM dispatchers WHERE token = %s AND is_active = TRUE", (token,)
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def get_dispatcher_by_id(dispatcher_id: int) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM dispatchers WHERE id = ?",
+        conn.execute(
+            "SELECT * FROM dispatchers WHERE id = %s",
             (dispatcher_id,),
-        ).fetchone()
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def get_all_dispatchers() -> list[dict]:
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             """SELECT d.id, d.name, d.email, d.role, d.is_active, d.created_at, d.company_id,
                       c.name as company_name,
                       COUNT(DISTINCT dg.id) as driver_count,
@@ -358,44 +294,45 @@ def get_all_dispatchers() -> list[dict]:
                LEFT JOIN companies c ON d.company_id = c.id
                LEFT JOIN driver_groups dg ON dg.dispatcher_id = d.id
                LEFT JOIN loads l ON l.dispatcher_id = d.id
-               GROUP BY d.id
+               GROUP BY d.id, d.name, d.email, d.role, d.is_active, d.created_at, d.company_id, c.name
                ORDER BY d.created_at"""
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def get_dispatcher_in_company(dispatcher_id: int, company_id: int) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM dispatchers WHERE id = ? AND company_id = ?",
+        conn.execute(
+            "SELECT * FROM dispatchers WHERE id = %s AND company_id = %s",
             (dispatcher_id, company_id),
-        ).fetchone()
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def get_company_dispatchers(company_id: int) -> list[dict]:
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             """SELECT d.id, d.name, d.email, d.role, d.is_active, d.created_at,
                       COUNT(DISTINCT dg.id) as driver_count,
                       COUNT(DISTINCT l.id) as load_count
                FROM dispatchers d
                LEFT JOIN driver_groups dg ON dg.dispatcher_id = d.id
                LEFT JOIN loads l ON l.dispatcher_id = d.id
-               WHERE d.company_id = ?
-               GROUP BY d.id
+               WHERE d.company_id = %s
+               GROUP BY d.id, d.name, d.email, d.role, d.is_active, d.created_at
                ORDER BY d.role DESC, d.created_at""",
             (company_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def get_dispatchers_with_eld_configs() -> list[int]:
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             "SELECT DISTINCT dispatcher_id FROM eld_configs ORDER BY dispatcher_id"
-        ).fetchall()
-        return [int(r["dispatcher_id"]) for r in rows]
+        )
+        return [int(r["dispatcher_id"]) for r in conn.fetchall()]
 
 
 def update_dispatcher(dispatcher_id: int, **fields) -> bool:
@@ -403,47 +340,49 @@ def update_dispatcher(dispatcher_id: int, **fields) -> bool:
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False
-    setters = ", ".join(f"{k} = ?" for k in updates)
+    setters = ", ".join(f"{k} = %s" for k in updates)
     with get_conn() as conn:
-        cur = conn.execute(
-            f"UPDATE dispatchers SET {setters} WHERE id = ?",
+        conn.execute(
+            f"UPDATE dispatchers SET {setters} WHERE id = %s",
             (*updates.values(), dispatcher_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def update_password(dispatcher_id: int, new_password: str) -> bool:
     ph = hash_password(new_password)
     with get_conn() as conn:
-        cur = conn.execute(
-            "UPDATE dispatchers SET password_hash = ? WHERE id = ?", (ph, dispatcher_id)
+        conn.execute(
+            "UPDATE dispatchers SET password_hash = %s WHERE id = %s", (ph, dispatcher_id)
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def delete_dispatcher(dispatcher_id: int) -> bool:
     with get_conn() as conn:
-        cur = conn.execute("DELETE FROM dispatchers WHERE id = ?", (dispatcher_id,))
-        return cur.rowcount > 0
+        conn.execute("DELETE FROM dispatchers WHERE id = %s", (dispatcher_id,))
+        return conn.rowcount > 0
 
 
 # ── ELD configs ───────────────────────────────────────────────────────────────
 
 def get_eld_configs(dispatcher_id: int) -> list[dict]:
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM eld_configs WHERE dispatcher_id = ?", (dispatcher_id,)
-        ).fetchall()
+        conn.execute(
+            "SELECT * FROM eld_configs WHERE dispatcher_id = %s", (dispatcher_id,)
+        )
+        rows = conn.fetchall()
         if rows:
             return [dict(r) for r in rows]
         # fallback to company admin's configs
-        rows = conn.execute(
+        conn.execute(
             """SELECT ec.* FROM eld_configs ec
                JOIN dispatchers d ON d.id = ec.dispatcher_id
-               WHERE d.company_id = (SELECT company_id FROM dispatchers WHERE id = ?)
+               WHERE d.company_id = (SELECT company_id FROM dispatchers WHERE id = %s)
                AND d.company_id IS NOT NULL""",
             (dispatcher_id,),
-        ).fetchall()
+        )
+        rows = conn.fetchall()
         return [dict(r) for r in rows]
 
 
@@ -453,14 +392,15 @@ def get_eld_config(dispatcher_id: int) -> dict | None:
 
 
 def save_eld_config(dispatcher_id: int, provider: str, api_key: str, company: str | None = None, provider_token: str | None = None) -> dict:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
-        cur = conn.execute(
+        conn.execute(
             """INSERT INTO eld_configs (dispatcher_id, provider, api_key, company, provider_token, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
             (dispatcher_id, provider, api_key, company, provider_token, now),
         )
-        return {"id": cur.lastrowid, "dispatcher_id": dispatcher_id, "provider": provider}
+        row = conn.fetchone()
+        return {"id": row["id"], "dispatcher_id": dispatcher_id, "provider": provider}
 
 
 def delete_eld_config(dispatcher_id: int, provider: str | None = None, config_id: int | None = None) -> bool:
@@ -468,117 +408,122 @@ def delete_eld_config(dispatcher_id: int, provider: str | None = None, config_id
         return False
     with get_conn() as conn:
         if config_id is not None:
-            cur = conn.execute(
-                "DELETE FROM eld_configs WHERE dispatcher_id = ? AND id = ?",
+            conn.execute(
+                "DELETE FROM eld_configs WHERE dispatcher_id = %s AND id = %s",
                 (dispatcher_id, config_id),
             )
         elif provider:
-            cur = conn.execute(
-                "DELETE FROM eld_configs WHERE dispatcher_id = ? AND provider = ?",
+            conn.execute(
+                "DELETE FROM eld_configs WHERE dispatcher_id = %s AND provider = %s",
                 (dispatcher_id, provider),
             )
         else:
-            cur = conn.execute(
-                "DELETE FROM eld_configs WHERE dispatcher_id = ?", (dispatcher_id,)
+            conn.execute(
+                "DELETE FROM eld_configs WHERE dispatcher_id = %s", (dispatcher_id,)
             )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def set_group_driver(group_id: int, company_id: int, eld_driver_id: str | None, eld_driver_name: str | None = None) -> bool:
     with get_conn() as conn:
-        cur = conn.execute(
-            """UPDATE driver_groups SET eld_driver_id = ?, eld_driver_name = ? WHERE id = ?
-               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+        conn.execute(
+            """UPDATE driver_groups SET eld_driver_id = %s, eld_driver_name = %s WHERE id = %s
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)""",
             (eld_driver_id, eld_driver_name, group_id, company_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 # ── Driver groups ─────────────────────────────────────────────────────────────
 
 def link_group(dispatcher_id: int, chat_id: int, name: str) -> dict:
     with get_conn() as conn:
-        existing = conn.execute(
-            "SELECT * FROM driver_groups WHERE chat_id = ? AND dispatcher_id = ?",
+        conn.execute(
+            "SELECT * FROM driver_groups WHERE chat_id = %s AND dispatcher_id = %s",
             (chat_id, dispatcher_id),
-        ).fetchone()
+        )
+        existing = conn.fetchone()
         if existing:
             return dict(existing)
 
-        any_existing = conn.execute(
-            "SELECT * FROM driver_groups WHERE chat_id = ?", (chat_id,)
-        ).fetchone()
+        conn.execute(
+            "SELECT * FROM driver_groups WHERE chat_id = %s", (chat_id,)
+        )
+        any_existing = conn.fetchone()
         if any_existing:
             conn.execute(
-                "UPDATE driver_groups SET dispatcher_id = ?, name = ? WHERE chat_id = ?",
+                "UPDATE driver_groups SET dispatcher_id = %s, name = %s WHERE chat_id = %s",
                 (dispatcher_id, name, chat_id),
             )
-            row = conn.execute(
-                "SELECT * FROM driver_groups WHERE chat_id = ?", (chat_id,)
-            ).fetchone()
+            conn.execute(
+                "SELECT * FROM driver_groups WHERE chat_id = %s", (chat_id,)
+            )
+            row = conn.fetchone()
             return dict(row)
 
-        cur = conn.execute(
-            "INSERT INTO driver_groups (dispatcher_id, chat_id, name) VALUES (?, ?, ?)",
+        conn.execute(
+            "INSERT INTO driver_groups (dispatcher_id, chat_id, name) VALUES (%s, %s, %s) RETURNING id",
             (dispatcher_id, chat_id, name),
         )
-        return {"id": cur.lastrowid, "dispatcher_id": dispatcher_id, "chat_id": chat_id, "name": name}
+        row = conn.fetchone()
+        return {"id": row["id"], "dispatcher_id": dispatcher_id, "chat_id": chat_id, "name": name}
 
 
 def get_groups(company_id: int) -> list[dict]:
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             """SELECT dg.* FROM driver_groups dg
                JOIN dispatchers d ON dg.dispatcher_id = d.id
-               WHERE d.company_id = ?""",
+               WHERE d.company_id = %s""",
             (company_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def get_group(group_id: int, company_id: int) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute(
+        conn.execute(
             """SELECT dg.* FROM driver_groups dg
                JOIN dispatchers d ON dg.dispatcher_id = d.id
-               WHERE dg.id = ? AND d.company_id = ?""",
+               WHERE dg.id = %s AND d.company_id = %s""",
             (group_id, company_id),
-        ).fetchone()
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def rename_group(group_id: int, company_id: int, name: str) -> bool:
     with get_conn() as conn:
-        cur = conn.execute(
-            """UPDATE driver_groups SET name = ? WHERE id = ?
-               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+        conn.execute(
+            """UPDATE driver_groups SET name = %s WHERE id = %s
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)""",
             (name, group_id, company_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def delete_group(group_id: int, company_id: int) -> bool:
     with get_conn() as conn:
-        cur = conn.execute(
-            """DELETE FROM driver_groups WHERE id = ?
-               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+        conn.execute(
+            """DELETE FROM driver_groups WHERE id = %s
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)""",
             (group_id, company_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 # ── Loads ─────────────────────────────────────────────────────────────────────
 
 def create_load(dispatcher_id: int, data: dict) -> dict:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
-        cur = conn.execute(
+        conn.execute(
             """INSERT INTO loads
                (dispatcher_id, group_id, load_number, status,
                 origin_state, destination_state, total_rate_usd, miles,
                 pickup_address, pickup_date, delivery_address, delivery_date,
                 stops_json, current_stop_index, created_at)
-               VALUES (?, ?, ?, 'upcoming', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)""",
+               VALUES (%s, %s, %s, 'upcoming', %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s) RETURNING id""",
             (
                 dispatcher_id,
                 data.get("group_id"),
@@ -595,345 +540,375 @@ def create_load(dispatcher_id: int, data: dict) -> dict:
                 now,
             ),
         )
-        return get_load_by_id(cur.lastrowid)
+        row = conn.fetchone()
+        load_id = row["id"]
+    return get_load_by_id(load_id)
 
 
 def get_load(load_id: int, company_id: int) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute(
+        conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
                       d.name as dispatcher_name
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
-               WHERE l.id = ? AND d.company_id = ?""",
+               WHERE l.id = %s AND d.company_id = %s""",
             (load_id, company_id),
-        ).fetchone()
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def get_load_by_id(load_id: int) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute(
+        conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
                       d.name as dispatcher_name
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
-               WHERE l.id = ?""",
+               WHERE l.id = %s""",
             (load_id,),
-        ).fetchone()
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def get_loads(company_id: int) -> list[dict]:
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
                       d.name as dispatcher_name
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
-               WHERE d.company_id = ?
+               WHERE d.company_id = %s
                ORDER BY l.created_at DESC""",
             (company_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def update_load_status(load_id: int, company_id: int, status: str, current_stop_index: int | None = None) -> bool:
     with get_conn() as conn:
         if current_stop_index is not None:
-            cur = conn.execute(
-                """UPDATE loads SET status = ?, current_stop_index = ? WHERE id = ?
-                   AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+            conn.execute(
+                """UPDATE loads SET status = %s, current_stop_index = %s WHERE id = %s
+                   AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)""",
                 (status, current_stop_index, load_id, company_id),
             )
         else:
-            cur = conn.execute(
-                """UPDATE loads SET status = ? WHERE id = ?
-                   AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+            conn.execute(
+                """UPDATE loads SET status = %s WHERE id = %s
+                   AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)""",
                 (status, load_id, company_id),
             )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
+
+
+def update_load_fields(load_id: int, company_id: int, fields: dict) -> bool:
+    allowed = {"group_id", "load_number", "origin_state", "destination_state",
+               "total_rate_usd", "miles", "pickup_address", "pickup_date",
+               "delivery_address", "delivery_date", "stops_json"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return False
+    setters = ", ".join(f"{k} = %s" for k in updates)
+    with get_conn() as conn:
+        conn.execute(
+            f"""UPDATE loads SET {setters} WHERE id = %s
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)""",
+            (*updates.values(), load_id, company_id),
+        )
+        return conn.rowcount > 0
 
 
 def update_load_stop_index(load_id: int, company_id: int, index: int) -> bool:
     with get_conn() as conn:
-        cur = conn.execute(
-            """UPDATE loads SET current_stop_index = ? WHERE id = ?
-               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+        conn.execute(
+            """UPDATE loads SET current_stop_index = %s WHERE id = %s
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)""",
             (index, load_id, company_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def update_load_eta(load_id: int, eta_utc: str, eta_miles: float) -> bool:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
-        cur = conn.execute(
-            "UPDATE loads SET eta_utc = ?, eta_miles = ?, last_eta_update = ?, eta_alert_sent = 0 WHERE id = ?",
+        conn.execute(
+            "UPDATE loads SET eta_utc = %s, eta_miles = %s, last_eta_update = %s, eta_alert_sent = FALSE WHERE id = %s",
             (eta_utc, eta_miles, now, load_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def delete_load(load_id: int, company_id: int) -> bool:
     with get_conn() as conn:
-        cur = conn.execute(
-            """DELETE FROM loads WHERE id = ?
-               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+        conn.execute(
+            """DELETE FROM loads WHERE id = %s
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)""",
             (load_id, company_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def update_load_file(load_id: int, file_path: str) -> bool:
     with get_conn() as conn:
-        cur = conn.execute(
-            "UPDATE loads SET file_path = ? WHERE id = ?",
+        conn.execute(
+            "UPDATE loads SET file_path = %s WHERE id = %s",
             (file_path, load_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def update_load_auto_send(load_id: int, company_id: int, hours: int) -> bool:
     with get_conn() as conn:
-        cur = conn.execute(
-            """UPDATE loads SET auto_send_hours = ? WHERE id = ?
-               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)""",
+        conn.execute(
+            """UPDATE loads SET auto_send_hours = %s WHERE id = %s
+               AND dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)""",
             (hours, load_id, company_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def update_last_auto_send(load_id: int) -> bool:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
-        cur = conn.execute(
-            "UPDATE loads SET last_auto_send = ? WHERE id = ?",
+        conn.execute(
+            "UPDATE loads SET last_auto_send = %s WHERE id = %s",
             (now, load_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def set_eta_alert_sent(load_id: int) -> bool:
     with get_conn() as conn:
-        cur = conn.execute(
-            "UPDATE loads SET eta_alert_sent = 1 WHERE id = ?",
+        conn.execute(
+            "UPDATE loads SET eta_alert_sent = TRUE WHERE id = %s",
             (load_id,),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def get_active_load_by_chat_id(chat_id: int) -> dict | None:
     """Returns the most recent dispatched load for a given Telegram chat_id."""
     with get_conn() as conn:
-        row = conn.execute(
+        conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
                       dg.chat_id as group_chat_id, d.name as dispatcher_name, d.company_id
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
-               WHERE dg.chat_id = ? AND l.status = 'dispatched'
+               WHERE dg.chat_id = %s AND l.status = 'dispatched'
                ORDER BY l.created_at DESC
                LIMIT 1""",
             (chat_id,),
-        ).fetchone()
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def get_upcoming_load_by_chat_id(chat_id: int) -> dict | None:
     """Returns the most recent upcoming load for a given Telegram chat_id."""
     with get_conn() as conn:
-        row = conn.execute(
+        conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
                       dg.chat_id as group_chat_id, d.name as dispatcher_name, d.company_id
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
-               WHERE dg.chat_id = ? AND l.status = 'upcoming'
+               WHERE dg.chat_id = %s AND l.status = 'upcoming'
                ORDER BY l.created_at DESC
                LIMIT 1""",
             (chat_id,),
-        ).fetchone()
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def get_dispatched_loads_for_alerts() -> list[dict]:
     """Returns dispatched loads with ETA set that haven't had an alert sent yet."""
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.chat_id as group_chat_id
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
                WHERE l.status = 'dispatched'
                  AND l.eta_utc IS NOT NULL
-                 AND l.eta_alert_sent = 0
+                 AND l.eta_alert_sent = FALSE
                  AND dg.chat_id IS NOT NULL"""
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def get_company_info(dispatcher_id: int) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM company_info WHERE dispatcher_id = ?", (dispatcher_id,)
-        ).fetchone()
+        conn.execute(
+            "SELECT * FROM company_info WHERE dispatcher_id = %s", (dispatcher_id,)
+        )
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def save_company_info(dispatcher_id: int, data: dict) -> None:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     fields = ["company_name", "address", "phone", "email", "mc_number",
               "dot_number", "bank_name", "bank_account", "bank_routing", "payment_terms"]
     with get_conn() as conn:
         conn.execute(
             f"""INSERT INTO company_info (dispatcher_id, {', '.join(fields)}, updated_at)
-                VALUES (?, {', '.join('?' for _ in fields)}, ?)
+                VALUES (%s, {', '.join('%s' for _ in fields)}, %s)
                 ON CONFLICT(dispatcher_id) DO UPDATE SET
-                {', '.join(f'{f} = excluded.{f}' for f in fields)},
-                updated_at = excluded.updated_at""",
+                {', '.join(f'{f} = EXCLUDED.{f}' for f in fields)},
+                updated_at = EXCLUDED.updated_at""",
             (dispatcher_id, *[data.get(f) for f in fields], now),
         )
 
 
 def get_global_setting(key: str) -> str | None:
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT value FROM global_settings WHERE key = ?", (key,)
-        ).fetchone()
+        conn.execute(
+            "SELECT value FROM global_settings WHERE key = %s", (key,)
+        )
+        row = conn.fetchone()
         return row["value"] if row else None
 
 
 def set_global_setting(key: str, value: str) -> None:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
         conn.execute(
-            """INSERT INTO global_settings (key, value, updated_at) VALUES (?, ?, ?)
-               ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at""",
+            """INSERT INTO global_settings (key, value, updated_at) VALUES (%s, %s, %s)
+               ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at""",
             (key, value, now),
         )
 
 
 def get_google_maps_key(dispatcher_id: int) -> str | None:
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT google_maps_key FROM company_info WHERE dispatcher_id = ?", (dispatcher_id,)
-        ).fetchone()
+        conn.execute(
+            "SELECT google_maps_key FROM company_info WHERE dispatcher_id = %s", (dispatcher_id,)
+        )
+        row = conn.fetchone()
         return row["google_maps_key"] if row else None
 
 
 def save_google_maps_key(dispatcher_id: int, key: str) -> None:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
         conn.execute(
             """INSERT INTO company_info (dispatcher_id, google_maps_key, updated_at)
-               VALUES (?, ?, ?)
+               VALUES (%s, %s, %s)
                ON CONFLICT(dispatcher_id) DO UPDATE SET
-               google_maps_key = excluded.google_maps_key,
-               updated_at = excluded.updated_at""",
+               google_maps_key = EXCLUDED.google_maps_key,
+               updated_at = EXCLUDED.updated_at""",
             (dispatcher_id, key, now),
         )
 
 
 def add_load_pod(load_id: int, file_path: str, filename: str) -> dict:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO load_pods (load_id, file_path, filename, uploaded_at) VALUES (?, ?, ?, ?)",
+        conn.execute(
+            "INSERT INTO load_pods (load_id, file_path, filename, uploaded_at) VALUES (%s, %s, %s, %s) RETURNING id",
             (load_id, file_path, filename, now),
         )
-        return {"id": cur.lastrowid, "load_id": load_id, "filename": filename, "uploaded_at": now}
+        row = conn.fetchone()
+        return {"id": row["id"], "load_id": load_id, "filename": filename, "uploaded_at": now.isoformat()}
 
 
 def get_load_pods(load_id: int) -> list[dict]:
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM load_pods WHERE load_id = ? ORDER BY uploaded_at",
+        conn.execute(
+            "SELECT * FROM load_pods WHERE load_id = %s ORDER BY uploaded_at",
             (load_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def delete_load_pod(pod_id: int, load_id: int) -> str | None:
     """Returns file_path if deleted, else None."""
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT file_path FROM load_pods WHERE id = ? AND load_id = ?", (pod_id, load_id)
-        ).fetchone()
+        conn.execute(
+            "SELECT file_path FROM load_pods WHERE id = %s AND load_id = %s", (pod_id, load_id)
+        )
+        row = conn.fetchone()
         if not row:
             return None
-        conn.execute("DELETE FROM load_pods WHERE id = ?", (pod_id,))
+        conn.execute("DELETE FROM load_pods WHERE id = %s", (pod_id,))
         return row["file_path"]
 
 
 # ── Companies ─────────────────────────────────────────────────────────────────
 
 def create_company(name: str) -> dict:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
-        cur = conn.execute("INSERT INTO companies (name, created_at) VALUES (?, ?)", (name, now))
-        return {"id": cur.lastrowid, "name": name, "created_at": now}
+        conn.execute("INSERT INTO companies (name, created_at) VALUES (%s, %s) RETURNING id", (name, now))
+        row = conn.fetchone()
+        return {"id": row["id"], "name": name, "created_at": now.isoformat()}
 
 
 def get_all_companies() -> list[dict]:
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             """SELECT c.id, c.name, c.created_at,
                       (SELECT d2.name FROM dispatchers d2 WHERE d2.company_id = c.id AND d2.role = 'admin' LIMIT 1) as admin_name,
                       (SELECT d2.email FROM dispatchers d2 WHERE d2.company_id = c.id AND d2.role = 'admin' LIMIT 1) as admin_email,
                       COUNT(DISTINCT CASE WHEN d.role = 'user' THEN d.id END) as user_count,
                       COUNT(DISTINCT l.id) as load_count,
-                      COALESCE(SUM(CASE WHEN l.status='delivered' THEN CAST(REPLACE(REPLACE(l.total_rate_usd,'$',''),',','') AS REAL) ELSE 0 END), 0) as revenue
+                      COALESCE(SUM(CASE WHEN l.status='delivered' THEN CAST(REPLACE(REPLACE(l.total_rate_usd,'$',''),',','') AS DOUBLE PRECISION) ELSE 0 END), 0) as revenue
                FROM companies c
                LEFT JOIN dispatchers d ON d.company_id = c.id
                LEFT JOIN loads l ON l.dispatcher_id = d.id
-               GROUP BY c.id
+               GROUP BY c.id, c.name, c.created_at
                ORDER BY c.created_at"""
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def get_company(company_id: int) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
+        conn.execute("SELECT * FROM companies WHERE id = %s", (company_id,))
+        row = conn.fetchone()
         return dict(row) if row else None
 
 
 def update_company(company_id: int, name: str) -> bool:
     with get_conn() as conn:
-        cur = conn.execute("UPDATE companies SET name = ? WHERE id = ?", (name, company_id))
-        return cur.rowcount > 0
+        conn.execute("UPDATE companies SET name = %s WHERE id = %s", (name, company_id))
+        return conn.rowcount > 0
 
 
 def delete_company(company_id: int) -> bool:
     with get_conn() as conn:
-        cur = conn.execute("DELETE FROM companies WHERE id = ?", (company_id,))
-        return cur.rowcount > 0
+        conn.execute("DELETE FROM companies WHERE id = %s", (company_id,))
+        return conn.rowcount > 0
 
 
 def get_admin_stats() -> dict:
     """Global stats for superadmin panel."""
     with get_conn() as conn:
-        total_companies = conn.execute("SELECT COUNT(*) FROM companies").fetchone()[0]
-        total_admins = conn.execute(
-            "SELECT COUNT(*) FROM dispatchers WHERE role = 'admin'"
-        ).fetchone()[0]
-        total_users = conn.execute(
-            "SELECT COUNT(*) FROM dispatchers WHERE role = 'user'"
-        ).fetchone()[0]
-        total_drivers = conn.execute("SELECT COUNT(*) FROM driver_groups").fetchone()[0]
-        total_loads = conn.execute("SELECT COUNT(*) FROM loads").fetchone()[0]
-        total_revenue = conn.execute(
-            "SELECT SUM(CAST(REPLACE(REPLACE(total_rate_usd,'$',''),',','') AS REAL)) FROM loads WHERE status = 'delivered'"
-        ).fetchone()[0] or 0
-        dispatched = conn.execute(
-            "SELECT COUNT(*) FROM loads WHERE status = 'dispatched'"
-        ).fetchone()[0]
-        delivered = conn.execute(
-            "SELECT COUNT(*) FROM loads WHERE status = 'delivered'"
-        ).fetchone()[0]
+        conn.execute("SELECT COUNT(*) AS cnt FROM companies")
+        total_companies = conn.fetchone()["cnt"]
+        conn.execute("SELECT COUNT(*) AS cnt FROM dispatchers WHERE role = 'admin'")
+        total_admins = conn.fetchone()["cnt"]
+        conn.execute("SELECT COUNT(*) AS cnt FROM dispatchers WHERE role = 'user'")
+        total_users = conn.fetchone()["cnt"]
+        conn.execute("SELECT COUNT(*) AS cnt FROM driver_groups")
+        total_drivers = conn.fetchone()["cnt"]
+        conn.execute("SELECT COUNT(*) AS cnt FROM loads")
+        total_loads = conn.fetchone()["cnt"]
+        conn.execute(
+            "SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(total_rate_usd,'$',''),',','') AS DOUBLE PRECISION)), 0) AS total FROM loads WHERE status = 'delivered'"
+        )
+        total_revenue = conn.fetchone()["total"]
+        conn.execute("SELECT COUNT(*) AS cnt FROM loads WHERE status = 'dispatched'")
+        dispatched = conn.fetchone()["cnt"]
+        conn.execute("SELECT COUNT(*) AS cnt FROM loads WHERE status = 'delivered'")
+        delivered = conn.fetchone()["cnt"]
     return {
         "total_companies": total_companies,
         "total_admins": total_admins,
@@ -949,7 +924,7 @@ def get_admin_stats() -> dict:
 def get_loads_for_auto_send() -> list[dict]:
     """Returns dispatched loads with auto-send enabled, including ELD config."""
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
                       dg.chat_id as group_chat_id,
                       ec.provider as eld_provider, ec.api_key as eld_api_key,
@@ -968,8 +943,8 @@ def get_loads_for_auto_send() -> list[dict]:
                  AND dg.chat_id IS NOT NULL
                  AND dg.eld_driver_id IS NOT NULL
                  AND ec.provider IS NOT NULL"""
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def create_audit_log(
@@ -980,41 +955,42 @@ def create_audit_log(
     entity_id: str | None = None,
     metadata: dict | None = None,
 ) -> dict:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     metadata_json = json.dumps(metadata or {}, ensure_ascii=True, separators=(",", ":"))
     with get_conn() as conn:
-        cur = conn.execute(
+        conn.execute(
             """INSERT INTO audit_logs (
                    actor_dispatcher_id, company_id, action, entity_type, entity_id, metadata_json, created_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               ) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (actor_dispatcher_id, company_id, action, entity_type, entity_id, metadata_json, now),
         )
+        row = conn.fetchone()
         return {
-            "id": cur.lastrowid,
+            "id": row["id"],
             "actor_dispatcher_id": actor_dispatcher_id,
             "company_id": company_id,
             "action": action,
             "entity_type": entity_type,
             "entity_id": entity_id,
             "metadata": metadata or {},
-            "created_at": now,
+            "created_at": now.isoformat(),
         }
 
 
 def get_audit_logs(company_id: int, limit: int = 100) -> list[dict]:
     safe_limit = max(1, min(int(limit), 500))
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             """SELECT al.*, d.name as actor_name, d.email as actor_email
                FROM audit_logs al
                LEFT JOIN dispatchers d ON d.id = al.actor_dispatcher_id
-               WHERE al.company_id = ?
+               WHERE al.company_id = %s
                ORDER BY al.created_at DESC
-               LIMIT ?""",
+               LIMIT %s""",
             (company_id, safe_limit),
-        ).fetchall()
+        )
         result = []
-        for row in rows:
+        for row in conn.fetchall():
             item = dict(row)
             try:
                 item["metadata"] = json.loads(item.get("metadata_json") or "{}")
@@ -1029,39 +1005,40 @@ def get_audit_logs(company_id: int, limit: int = 100) -> list[dict]:
 def get_pay_tiers(company_id: int) -> list[dict]:
     """Returns all tiers for a company (both company-wide and per-worker)."""
     with get_conn() as conn:
-        rows = conn.execute(
+        conn.execute(
             """SELECT pt.*, d.name as dispatcher_name
                FROM pay_tiers pt
                LEFT JOIN dispatchers d ON pt.dispatcher_id = d.id
-               WHERE pt.company_id = ?
+               WHERE pt.company_id = %s
                ORDER BY pt.dispatcher_id NULLS FIRST, pt.min_gross DESC""",
             (company_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def create_pay_tier(company_id: int, dispatcher_id: int | None,
                     min_gross: float, max_gross: float | None,
                     min_rpm: float, percentage: float) -> dict:
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc)
     with get_conn() as conn:
-        cur = conn.execute(
+        conn.execute(
             """INSERT INTO pay_tiers (company_id, dispatcher_id, min_gross, max_gross, min_rpm, percentage, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (company_id, dispatcher_id, min_gross, max_gross, min_rpm, percentage, now),
         )
-        return {"id": cur.lastrowid, "company_id": company_id, "dispatcher_id": dispatcher_id,
+        row = conn.fetchone()
+        return {"id": row["id"], "company_id": company_id, "dispatcher_id": dispatcher_id,
                 "min_gross": min_gross, "max_gross": max_gross, "min_rpm": min_rpm,
-                "percentage": percentage, "created_at": now}
+                "percentage": percentage, "created_at": now.isoformat()}
 
 
 def delete_pay_tier(tier_id: int, company_id: int) -> bool:
     with get_conn() as conn:
-        cur = conn.execute(
-            "DELETE FROM pay_tiers WHERE id = ? AND company_id = ?",
+        conn.execute(
+            "DELETE FROM pay_tiers WHERE id = %s AND company_id = %s",
             (tier_id, company_id),
         )
-        return cur.rowcount > 0
+        return conn.rowcount > 0
 
 
 def get_earnings(company_id: int, dispatcher_id: int | None = None) -> list[dict]:
@@ -1070,58 +1047,59 @@ def get_earnings(company_id: int, dispatcher_id: int | None = None) -> list[dict
     """
     with get_conn() as conn:
         if dispatcher_id:
-            rows = conn.execute(
+            conn.execute(
                 """SELECT l.*, d.name as dispatcher_name, d.id as worker_id
                    FROM loads l
                    JOIN dispatchers d ON l.dispatcher_id = d.id
-                   WHERE d.company_id = ? AND l.dispatcher_id = ? AND l.status = 'delivered'
+                   WHERE d.company_id = %s AND l.dispatcher_id = %s AND l.status = 'delivered'
                    ORDER BY l.created_at DESC""",
                 (company_id, dispatcher_id),
-            ).fetchall()
+            )
         else:
-            rows = conn.execute(
+            conn.execute(
                 """SELECT l.*, d.name as dispatcher_name, d.id as worker_id
                    FROM loads l
                    JOIN dispatchers d ON l.dispatcher_id = d.id
-                   WHERE d.company_id = ? AND l.status = 'delivered'
+                   WHERE d.company_id = %s AND l.status = 'delivered'
                    ORDER BY l.created_at DESC""",
                 (company_id,),
-            ).fetchall()
+            )
+        rows = conn.fetchall()
 
-        tiers = get_pay_tiers(company_id)
-        company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
+    tiers = get_pay_tiers(company_id)
+    company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
 
-        result = []
-        for row in rows:
-            load = dict(row)
-            worker_id = load["worker_id"]
-            worker_tiers = [t for t in tiers if t["dispatcher_id"] == worker_id]
-            active_tiers = worker_tiers if worker_tiers else company_tiers
+    result = []
+    for row in rows:
+        load = dict(row)
+        worker_id = load["worker_id"]
+        worker_tiers = [t for t in tiers if t["dispatcher_id"] == worker_id]
+        active_tiers = worker_tiers if worker_tiers else company_tiers
 
-            def _parse_num(v):
-                if not v:
-                    return 0.0
-                return float(str(v).replace("$", "").replace(",", "").strip() or 0)
+        def _parse_num(v):
+            if not v:
+                return 0.0
+            return float(str(v).replace("$", "").replace(",", "").strip() or 0)
 
-            gross = _parse_num(load.get("total_rate_usd"))
-            miles = _parse_num(load.get("miles"))
-            rpm = gross / miles if miles > 0 else None
+        gross = _parse_num(load.get("total_rate_usd"))
+        miles = _parse_num(load.get("miles"))
+        rpm = gross / miles if miles > 0 else None
 
-            earning = 0.0
-            matched_tier = None
-            for tier in sorted(active_tiers, key=lambda t: t["min_gross"], reverse=True):
-                gross_ok = gross >= tier["min_gross"]
-                max_ok = tier["max_gross"] is None or gross < tier["max_gross"]
-                # skip RPM check if miles data is missing
-                rpm_ok = rpm is None or rpm >= tier["min_rpm"]
-                if gross_ok and max_ok and rpm_ok:
-                    earning = round(gross * tier["percentage"] / 100, 2)
-                    matched_tier = tier
-                    break
+        earning = 0.0
+        matched_tier = None
+        for tier in sorted(active_tiers, key=lambda t: t["min_gross"], reverse=True):
+            gross_ok = gross >= tier["min_gross"]
+            max_ok = tier["max_gross"] is None or gross < tier["max_gross"]
+            # skip RPM check if miles data is missing
+            rpm_ok = rpm is None or rpm >= tier["min_rpm"]
+            if gross_ok and max_ok and rpm_ok:
+                earning = round(gross * tier["percentage"] / 100, 2)
+                matched_tier = tier
+                break
 
-            load["rpm"] = round(rpm, 2) if rpm is not None else None
-            load["earning"] = earning
-            load["tier_percentage"] = matched_tier["percentage"] if matched_tier else None
-            result.append(load)
+        load["rpm"] = round(rpm, 2) if rpm is not None else None
+        load["earning"] = earning
+        load["tier_percentage"] = matched_tier["percentage"] if matched_tier else None
+        result.append(load)
 
-        return result
+    return result

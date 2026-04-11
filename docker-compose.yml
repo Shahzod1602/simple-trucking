@@ -1,16 +1,37 @@
-version: "3.9"
-
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: ratecon_db
+    restart: always
+    environment:
+      POSTGRES_USER: ratecon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ratecon_secret}
+      POSTGRES_DB: ratecon
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ratecon"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
     container_name: ratecon_app
     restart: always
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql://ratecon:${POSTGRES_PASSWORD:-ratecon_secret}@db:5432/ratecon
     ports:
       - "8002:8000"
     volumes:
       - ./uploads:/app/uploads
-      - ./ratecon.db:/app/ratecon.db
+    depends_on:
+      db:
+        condition: service_healthy
     dns:
       - 8.8.8.8
       - 8.8.4.4
+
+volumes:
+  pgdata:

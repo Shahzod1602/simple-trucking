@@ -11,6 +11,20 @@ from database import get_dispatcher_by_token, link_group
 
 logger = logging.getLogger(__name__)
 
+
+def _to_datetime(val) -> datetime | None:
+    """Convert a value (datetime or string) to a timezone-aware datetime."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        if val.tzinfo is None:
+            return val.replace(tzinfo=timezone.utc)
+        return val
+    s = str(val)
+    if not s.endswith("Z") and "+" not in s:
+        s += "+00:00"
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
 _offset = 0
 _stop_event = threading.Event()
 
@@ -89,13 +103,37 @@ def _build_status_message(load: dict, eld_cfg: dict | None = None) -> str | None
         status_line = "🟢rolling" if speed_mph > 3 else "🔴stopped"
         load_id_display = load.get("load_number") or load["id"]
 
-        return (
-            f"Load Id: {load_id_display}\n\n"
-            f"Current location: {current_addr}\n\n"
-            f"Miles left: {miles_left}\n\n"
-            f"Heading ➤ {heading}\n\n"
-            f"Status: {status_line}"
-        )
+        # Use company template if available
+        import collections as _collections
+        company_id = load.get("company_id")
+        tpl = None
+        if company_id:
+            tpl = database.get_global_setting(f"status_template_{company_id}")
+        if not tpl:
+            tpl = (
+                "Load Id: {load_id}\n\n"
+                "Current location: {current_location}\n\n"
+                "Miles left: {miles_left}\n\n"
+                "Heading ➤ {heading}\n\n"
+                "Status: {status}"
+            )
+        variables = {
+            "load_id": load_id_display,
+            "current_location": current_addr,
+            "miles_left": miles_left,
+            "heading": heading,
+            "status": status_line,
+            "speed": f"{speed_mph:.0f} mph" if speed_mph else "0 mph",
+            "lat": f"{lat:.4f}",
+            "lon": f"{lon:.4f}",
+            "driver_name": load.get("driver_name") or "",
+            "pickup_address": load.get("pickup_address") or "",
+            "delivery_address": load.get("delivery_address") or "",
+        }
+        try:
+            return tpl.format_map(_collections.defaultdict(lambda: "N/A", variables))
+        except Exception:
+            return tpl
     except Exception as e:
         logger.warning("_build_status_message error: %s", e)
         return None
@@ -173,10 +211,7 @@ def _process_updates(updates: list[dict]):
                 _reply(message, "No ETA calculated yet. Ask your dispatcher to refresh ETA.")
                 continue
             try:
-                eta_str = load["eta_utc"]
-                if not eta_str.endswith("Z") and "+" not in eta_str:
-                    eta_str += "+00:00"
-                eta_dt = datetime.fromisoformat(eta_str.replace("Z", "+00:00"))
+                eta_dt = _to_datetime(load["eta_utc"])
                 local_str = eta_dt.strftime("%b %d %I:%M %p UTC")
                 mi = f" ({load['eta_miles']} mi)" if load.get("eta_miles") else ""
                 load_id_display = load.get("load_number") or load["id"]
@@ -276,10 +311,7 @@ def _eta_alert_loop():
             now = datetime.now(timezone.utc)
             for load in loads:
                 try:
-                    eta_str = load["eta_utc"]
-                    if not eta_str.endswith("Z") and "+" not in eta_str:
-                        eta_str += "+00:00"
-                    eta_dt = datetime.fromisoformat(eta_str.replace("Z", "+00:00"))
+                    eta_dt = _to_datetime(load["eta_utc"])
                     diff_min = (eta_dt - now).total_seconds() / 60
                     if 0 <= diff_min <= 60:
                         chat_id = load.get("group_chat_id")
@@ -312,11 +344,7 @@ def _auto_send_loop():
                         continue
                     last_raw = load.get("last_auto_send")
                     if last_raw:
-                        if not last_raw.endswith("Z") and "+" not in last_raw:
-                            last_raw += "+00:00"
-                        last_dt = datetime.fromisoformat(last_raw.replace("Z", "+00:00"))
-                        if last_dt.tzinfo is None:
-                            last_dt = last_dt.replace(tzinfo=timezone.utc)
+                        last_dt = _to_datetime(last_raw)
                         elapsed_h = (now - last_dt).total_seconds() / 3600
                         if elapsed_h < hours:
                             continue

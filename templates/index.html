@@ -365,9 +365,21 @@
     .settings-title {
       font-family: 'Barlow Condensed', sans-serif;
       font-size: 0.95rem; font-weight: 700; color: var(--text);
-      margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+      margin-bottom: 0; padding: 14px 0 14px 0; border-bottom: 1px solid var(--border);
       letter-spacing: 0.5px; text-transform: uppercase;
+      cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+      user-select: none;
     }
+    .settings-title::after {
+      content: ''; display: inline-block; width: 8px; height: 8px;
+      border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted);
+      transform: rotate(45deg); transition: transform 0.2s; flex-shrink: 0; margin-left: 8px;
+    }
+    .settings-title.open::after { transform: rotate(-135deg); }
+    .settings-title.open { margin-bottom: 14px; }
+    .settings-body { display: none; }
+    .settings-body.open { display: block; }
+    .tpl-inner-tab.active { color: var(--primary) !important; border-bottom-color: var(--primary) !important; }
     .field { margin-bottom: 13px; }
     .field label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
     .field input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: 'IBM Plex Sans', sans-serif; font-size: 0.9rem; color: var(--text); background: var(--card-inner); outline: none; transition: border-color 0.15s; }
@@ -836,115 +848,194 @@
         </div>
         <div class="card settings-section">
           <div class="settings-title">Account Info</div>
-          <div class="field"><label>Full Name</label><input type="text" id="s-name" readonly /></div>
-          <div class="field"><label>Email</label><input type="email" id="s-email" readonly /></div>
+          <div class="settings-body">
+            <div class="field"><label>Full Name</label><input type="text" id="s-name" readonly /></div>
+            <div class="field"><label>Email</label><input type="email" id="s-email" readonly /></div>
+          </div>
         </div>
         <div class="card settings-section">
           <div class="settings-title">Change Password</div>
-          <div class="err-banner" id="pw-err"></div>
-          <div class="ok-banner" id="pw-ok">Password changed successfully!</div>
-          <div class="field"><label>Current Password</label><input type="password" id="pw-current" placeholder="••••••••" /></div>
-          <div class="field"><label>New Password</label><input type="password" id="pw-new" placeholder="At least 6 characters" /></div>
-          <div class="field"><label>Confirm New Password</label><input type="password" id="pw-confirm" placeholder="Repeat new password" /></div>
-          <button class="btn-blue" id="pw-save-btn" style="margin-top:4px;">Update Password</button>
+          <div class="settings-body">
+            <div class="err-banner" id="pw-err"></div>
+            <div class="ok-banner" id="pw-ok">Password changed successfully!</div>
+            <div class="field"><label>Current Password</label><input type="password" id="pw-current" placeholder="••••••••" /></div>
+            <div class="field"><label>New Password</label><input type="password" id="pw-new" placeholder="At least 6 characters" /></div>
+            <div class="field"><label>Confirm New Password</label><input type="password" id="pw-confirm" placeholder="Repeat new password" /></div>
+            <button class="btn-blue" id="pw-save-btn" style="margin-top:4px;">Update Password</button>
+          </div>
         </div>
         <div class="card settings-section" id="eld-section" style="display:none">
           <div class="settings-title">ELD Integration</div>
-          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Connect one or more ELD accounts to enable automatic ETA calculation and truck tracking.</p>
-          <div class="err-banner" id="eld-err"></div>
-          <div class="ok-banner" id="eld-ok"></div>
-          <div id="eld-connected-list" style="margin-bottom:16px;"></div>
-          <div id="eld-actions" style="margin-bottom:12px;display:none;">
-            <button class="btn-outline" id="eld-new-btn">+ Create New ELD</button>
-          </div>
-          <div id="eld-add-form" style="border-top:1px solid var(--border);padding-top:16px;">
-            <div style="font-size:0.85rem;font-weight:600;margin-bottom:12px;color:var(--text-muted);">Add Provider</div>
-            <div class="field">
-              <label>Provider</label>
-              <select id="eld-provider">
-                <option value="">Select provider...</option>
-                <option value="samsara">Samsara</option>
-                <option value="motive">Motive (KeepTrucking)</option>
-                <option value="zippyeld">ZippyELD</option>
-                <option value="evoeld">EVO ELD</option>
-              </select>
+          <div class="settings-body">
+            <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Connect one or more ELD accounts to enable automatic ETA calculation and truck tracking.</p>
+            <div class="err-banner" id="eld-err"></div>
+            <div class="ok-banner" id="eld-ok"></div>
+            <div id="eld-connected-list" style="margin-bottom:16px;"></div>
+            <div id="eld-actions" style="margin-bottom:12px;display:none;">
+              <button class="btn-outline" id="eld-new-btn">+ Create New ELD</button>
             </div>
-            <div class="field">
-              <label>API Key</label>
-              <input type="password" id="eld-apikey" placeholder="Enter API key" autocomplete="new-password" />
-            </div>
-            <div class="field" id="eld-provider-token-field" style="display:none;">
-              <label>Provider Token</label>
-              <input type="password" id="eld-provider-token" placeholder="Enter provider token" autocomplete="new-password" />
-            </div>
-            <div class="field" id="eld-company-field" style="display:none;">
-              <label>USDOT Number</label>
-              <input type="text" id="eld-company" placeholder="Enter USDOT number" autocomplete="off" />
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <button class="btn-outline" id="eld-cancel-btn" style="display:none;">Cancel</button>
-              <button class="btn-blue" id="eld-save-btn">Create New ELD</button>
+            <div id="eld-add-form" style="border-top:1px solid var(--border);padding-top:16px;">
+              <div style="font-size:0.85rem;font-weight:600;margin-bottom:12px;color:var(--text-muted);">Add Provider</div>
+              <div class="field">
+                <label>Provider</label>
+                <select id="eld-provider">
+                  <option value="">Select provider...</option>
+                  <option value="samsara">Samsara</option>
+                  <option value="motive">Motive (KeepTrucking)</option>
+                  <option value="zippyeld">ZippyELD</option>
+                  <option value="evoeld">EVO ELD</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>API Key</label>
+                <input type="password" id="eld-apikey" placeholder="Enter API key" autocomplete="new-password" />
+              </div>
+              <div class="field" id="eld-provider-token-field" style="display:none;">
+                <label>Provider Token</label>
+                <input type="password" id="eld-provider-token" placeholder="Enter provider token" autocomplete="new-password" />
+              </div>
+              <div class="field" id="eld-company-field" style="display:none;">
+                <label>USDOT Number</label>
+                <input type="text" id="eld-company" placeholder="Enter USDOT number" autocomplete="off" />
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn-outline" id="eld-cancel-btn" style="display:none;">Cancel</button>
+                <button class="btn-blue" id="eld-save-btn">Create New ELD</button>
+              </div>
             </div>
           </div>
         </div>
         <div class="card settings-section" id="company-info-section" style="display:none">
           <div class="settings-title">Company Info (for Invoices)</div>
-          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">This info will appear on your invoices.</p>
-          <div class="err-banner" id="ci-err"></div>
-          <div class="ok-banner" id="ci-ok">Saved!</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
-            <div class="field"><label>Company Name</label><input type="text" id="ci-name" placeholder="ABC Trucking LLC" /></div>
-            <div class="field"><label>Phone</label><input type="text" id="ci-phone" placeholder="+1 555 000 0000" /></div>
-            <div class="field" style="grid-column:1/-1"><label>Address</label><input type="text" id="ci-address" placeholder="123 Main St, Dallas, TX 75001" /></div>
-            <div class="field"><label>Email</label><input type="email" id="ci-email" placeholder="billing@company.com" /></div>
-            <div class="field"><label>Payment Terms</label>
-              <select id="ci-terms">
-                <option value="Net 15">Net 15</option>
-                <option value="Net 30" selected>Net 30</option>
-                <option value="Net 45">Net 45</option>
-                <option value="Due on receipt">Due on receipt</option>
-              </select>
+          <div class="settings-body">
+            <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">This info will appear on your invoices.</p>
+            <div class="err-banner" id="ci-err"></div>
+            <div class="ok-banner" id="ci-ok">Saved!</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
+              <div class="field"><label>Company Name</label><input type="text" id="ci-name" placeholder="ABC Trucking LLC" /></div>
+              <div class="field"><label>Phone</label><input type="text" id="ci-phone" placeholder="+1 555 000 0000" /></div>
+              <div class="field" style="grid-column:1/-1"><label>Address</label><input type="text" id="ci-address" placeholder="123 Main St, Dallas, TX 75001" /></div>
+              <div class="field"><label>Email</label><input type="email" id="ci-email" placeholder="billing@company.com" /></div>
+              <div class="field"><label>Payment Terms</label>
+                <select id="ci-terms">
+                  <option value="Net 15">Net 15</option>
+                  <option value="Net 30" selected>Net 30</option>
+                  <option value="Net 45">Net 45</option>
+                  <option value="Due on receipt">Due on receipt</option>
+                </select>
+              </div>
+              <div class="field"><label>MC Number</label><input type="text" id="ci-mc" placeholder="MC-123456" /></div>
+              <div class="field"><label>DOT Number</label><input type="text" id="ci-dot" placeholder="DOT-123456" /></div>
             </div>
-            <div class="field"><label>MC Number</label><input type="text" id="ci-mc" placeholder="MC-123456" /></div>
-            <div class="field"><label>DOT Number</label><input type="text" id="ci-dot" placeholder="DOT-123456" /></div>
+            <div style="margin-top:4px;margin-bottom:10px;font-size:0.8rem;font-weight:700;color:var(--text-muted);">Bank / Payment Details</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;">
+              <div class="field"><label>Bank Name</label><input type="text" id="ci-bank" placeholder="Chase Bank" /></div>
+              <div class="field"><label>Account #</label><input type="text" id="ci-account" placeholder="000000000" /></div>
+              <div class="field"><label>Routing #</label><input type="text" id="ci-routing" placeholder="021000021" /></div>
+            </div>
+            <button class="btn-blue" id="ci-save-btn" style="margin-top:4px;">Save Company Info</button>
           </div>
-          <div style="margin-top:4px;margin-bottom:10px;font-size:0.8rem;font-weight:700;color:var(--text-muted);">Bank / Payment Details</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px;">
-            <div class="field"><label>Bank Name</label><input type="text" id="ci-bank" placeholder="Chase Bank" /></div>
-            <div class="field"><label>Account #</label><input type="text" id="ci-account" placeholder="000000000" /></div>
-            <div class="field"><label>Routing #</label><input type="text" id="ci-routing" placeholder="021000021" /></div>
-          </div>
-          <button class="btn-blue" id="ci-save-btn" style="margin-top:4px;">Save Company Info</button>
         </div>
         <!-- Team Members — visible to admin/superadmin only -->
         <div class="card settings-section" id="team-section" style="display:none;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-            <div class="settings-title" style="margin-bottom:0;">Team Members</div>
-            <button class="btn-blue" onclick="openTeamAddPanel()" style="font-size:0.82rem;padding:7px 14px;">+ Add User</button>
-          </div>
-          <!-- Add user form -->
-          <div id="team-add-panel" style="display:none;background:var(--card-inner,var(--bg));border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
-            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">New User Account</div>
-            <div class="err-banner" id="tm-err"></div>
-            <div class="ok-banner" id="tm-ok"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div class="field"><label>Full Name</label><input type="text" id="tm-name" placeholder="Jane Doe" maxlength="80"/></div>
-              <div class="field"><label>Email</label><input type="email" id="tm-email" placeholder="jane@company.com"/></div>
+          <div class="settings-title" style="margin-bottom:0;">Team Members</div>
+          <div class="settings-body">
+            <div style="display:flex;justify-content:flex-end;margin-bottom:16px;margin-top:14px;">
+              <button class="btn-blue" onclick="openTeamAddPanel()" style="font-size:0.82rem;padding:7px 14px;">+ Add User</button>
             </div>
-            <div class="field" style="max-width:280px;"><label>Password</label><input type="password" id="tm-pass" placeholder="At least 6 characters"/></div>
-            <div style="display:flex;gap:8px;margin-top:4px;">
-              <button class="btn-outline" onclick="closeTeamAddPanel()">Cancel</button>
-              <button class="btn-blue" id="tm-btn" onclick="doCreateTeamUser()">Create User</button>
+            <!-- Add user form -->
+            <div id="team-add-panel" style="display:none;background:var(--card-inner,var(--bg));border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
+              <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">New User Account</div>
+              <div class="err-banner" id="tm-err"></div>
+              <div class="ok-banner" id="tm-ok"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="field"><label>Full Name</label><input type="text" id="tm-name" placeholder="Jane Doe" maxlength="80"/></div>
+                <div class="field"><label>Email</label><input type="email" id="tm-email" placeholder="jane@company.com"/></div>
+              </div>
+              <div class="field" style="max-width:280px;"><label>Password</label><input type="password" id="tm-pass" placeholder="At least 6 characters"/></div>
+              <div style="display:flex;gap:8px;margin-top:4px;">
+                <button class="btn-outline" onclick="closeTeamAddPanel()">Cancel</button>
+                <button class="btn-blue" id="tm-btn" onclick="doCreateTeamUser()">Create User</button>
+              </div>
+            </div>
+            <!-- Users list -->
+            <div id="team-users-list"></div>
+          </div>
+        </div>
+
+        <div class="card settings-section" id="template-section" style="display:none;">
+          <div class="settings-title">Templates</div>
+          <div class="settings-body">
+            <!-- Inner tabs -->
+            <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px;">
+              <button class="tpl-inner-tab active" data-tpl-tab="status" style="padding:10px 18px;font-size:0.82rem;font-weight:700;border:none;background:none;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.15s;">Status Message</button>
+              <button class="tpl-inner-tab" data-tpl-tab="ratecon" style="padding:10px 18px;font-size:0.82rem;font-weight:700;border:none;background:none;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.15s;">Ratecon Extract</button>
+            </div>
+
+            <!-- Status Message pane -->
+            <div class="tpl-inner-pane active" id="tpl-pane-status">
+              <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:12px;">Customize the status message sent to Telegram. Use variables below in curly braces.</p>
+              <div class="err-banner" id="tpl-err"></div>
+              <div class="ok-banner" id="tpl-ok"></div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;" id="tpl-vars"></div>
+              <div class="field">
+                <label>Message Template</label>
+                <textarea id="tpl-editor" rows="8" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:'IBM Plex Mono',monospace;font-size:0.82rem;color:var(--text);background:var(--card-inner);outline:none;resize:vertical;line-height:1.5;" spellcheck="false"></textarea>
+              </div>
+              <div style="margin-bottom:14px;">
+                <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;">Preview</label>
+                <div id="tpl-preview" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:0.85rem;white-space:pre-wrap;color:var(--text);line-height:1.6;"></div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn-blue" id="tpl-save-btn">Save Template</button>
+                <button class="btn-outline" id="tpl-reset-btn">Reset to Default</button>
+              </div>
+            </div>
+
+            <!-- Ratecon Extract pane -->
+            <div class="tpl-inner-pane" id="tpl-pane-ratecon" style="display:none;">
+              <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:12px;">Customize the message format when extracting ratecon data. Use <code style="background:var(--bg);padding:2px 5px;border-radius:4px;">{{variable}}</code> syntax. For stops use <code style="background:var(--bg);padding:2px 5px;border-radius:4px;">{{#stops}}...{{/stops}}</code> block.</p>
+              <div class="err-banner" id="rc-tpl-err"></div>
+              <div class="ok-banner" id="rc-tpl-ok"></div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+                <span style="font-size:0.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;width:100%;margin-bottom:2px;">Top-level</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{load_number}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{carrier}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{broker}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{total_rate_usd}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{miles}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{commodity}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{weight}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{customer_ref}}</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+                <span style="font-size:0.7rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;width:100%;margin-bottom:2px;">Inside {{#stops}}...{{/stops}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{stop_number}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{date}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{type}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{facility}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{street}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{city_state_zip}}</span>
+                <span class="rc-ph-tag" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;">{{reference}}</span>
+              </div>
+              <div class="field">
+                <label>Template</label>
+                <textarea id="rc-tpl-editor" rows="14" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:'IBM Plex Mono',monospace;font-size:0.82rem;color:var(--text);background:var(--card-inner);outline:none;resize:vertical;line-height:1.5;" spellcheck="false"></textarea>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn-blue" id="rc-tpl-save-btn">Save Template</button>
+                <button class="btn-outline" id="rc-tpl-reset-btn">Reset to Default</button>
+              </div>
             </div>
           </div>
-          <!-- Users list -->
-          <div id="team-users-list"></div>
         </div>
 
         <div class="card settings-section">
           <div class="settings-title">Session</div>
-          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:14px;">Sign out from your account on this device.</p>
-          <button class="btn-danger" id="settings-logout-btn">Sign out</button>
+          <div class="settings-body">
+            <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:14px;">Sign out from your account on this device.</p>
+            <button class="btn-danger" id="settings-logout-btn">Sign out</button>
+          </div>
         </div>
       </div>
 
@@ -1129,6 +1220,12 @@
   <div class="overlay" id="create-load-modal">
     <div class="modal" style="max-width:560px;">
       <div class="modal-title"><i class="ph-bold ph-plus-circle" style="vertical-align:-2px;margin-right:7px;"></i>New Load</div>
+      <div style="margin-bottom:10px;">
+        <div class="modal-section-label">Assign Driver Group</div>
+        <select id="cl-group" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;cursor:pointer;appearance:none;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E&quot;);background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;">
+          <option value="">No driver assigned</option>
+        </select>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div>
           <div class="modal-section-label">Load Number</div>
@@ -1151,16 +1248,16 @@
           <input id="cl-pickup-addr" type="text" placeholder="e.g. 123 Main St, Dallas, TX" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
         </div>
         <div>
-          <div class="modal-section-label">Pickup Date</div>
-          <input id="cl-pickup-date" type="date" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+          <div class="modal-section-label">Pickup Date & Time</div>
+          <input id="cl-pickup-date" type="datetime-local" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
         </div>
         <div>
           <div class="modal-section-label">Delivery Address</div>
           <input id="cl-delivery-addr" type="text" placeholder="e.g. 456 Oak Ave, Los Angeles, CA" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
         </div>
         <div>
-          <div class="modal-section-label">Delivery Date</div>
-          <input id="cl-delivery-date" type="date" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+          <div class="modal-section-label">Delivery Date & Time</div>
+          <input id="cl-delivery-date" type="datetime-local" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
         </div>
         <div>
           <div class="modal-section-label">Miles</div>
@@ -1171,6 +1268,63 @@
       <div class="modal-footer">
         <button class="btn-modal-cancel" onclick="closeCreateLoadModal()">Cancel</button>
         <button class="btn-blue" id="cl-save-btn" style="flex:1;padding:11px;border-radius:8px;font-size:0.92rem;font-weight:600;cursor:pointer;" onclick="submitCreateLoad()">Save Load</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Load Modal -->
+  <div class="overlay" id="edit-load-modal">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-title"><i class="ph-bold ph-pencil-simple" style="vertical-align:-2px;margin-right:7px;"></i>Edit Load</div>
+      <input type="hidden" id="el-id">
+      <div style="margin-bottom:10px;">
+        <div class="modal-section-label">Assign Driver Group</div>
+        <select id="el-group" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;cursor:pointer;appearance:none;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E&quot;);background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;">
+          <option value="0">No driver assigned</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <div class="modal-section-label">Load Number</div>
+          <input id="el-load-number" type="text" placeholder="e.g. RC-12345" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Total Rate ($)</div>
+          <input id="el-rate" type="text" placeholder="e.g. 2500" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Origin State</div>
+          <input id="el-origin" type="text" placeholder="e.g. TX" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Destination State</div>
+          <input id="el-dest" type="text" placeholder="e.g. CA" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Pickup Address</div>
+          <input id="el-pickup-addr" type="text" placeholder="e.g. 123 Main St, Dallas, TX" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Pickup Date & Time</div>
+          <input id="el-pickup-date" type="datetime-local" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Delivery Address</div>
+          <input id="el-delivery-addr" type="text" placeholder="e.g. 456 Oak Ave, Los Angeles, CA" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Delivery Date & Time</div>
+          <input id="el-delivery-date" type="datetime-local" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+        <div>
+          <div class="modal-section-label">Miles</div>
+          <input id="el-miles" type="text" placeholder="e.g. 1200" style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;color:var(--text);background:var(--card-inner,var(--bg));outline:none;">
+        </div>
+      </div>
+      <div class="modal-status err" id="el-status"></div>
+      <div class="modal-footer">
+        <button class="btn-modal-cancel" onclick="closeEditLoadModal()">Cancel</button>
+        <button class="btn-blue" id="el-save-btn" style="flex:1;padding:11px;border-radius:8px;font-size:0.92rem;font-weight:600;cursor:pointer;" onclick="submitEditLoad()">Save Changes</button>
       </div>
     </div>
   </div>
@@ -1254,7 +1408,7 @@ Rate: {{total_rate_usd}}
 4. NO BOL or POD (must have clear PDF format paperwork) - 10% from load rate`;
 
     // ── State ─────────────────────────────────────────────────────────────
-    let currentTpl   = localStorage.getItem(TPL_KEY) || DEFAULT_TPL;
+    let currentTpl   = DEFAULT_TPL;
     let token        = localStorage.getItem(TOKEN_KEY);
     let userName     = localStorage.getItem(NAME_KEY);
     let userId       = null;
@@ -1320,6 +1474,15 @@ Rate: {{total_rate_usd}}
         }
         if (userRole === 'superadmin') document.getElementById('admin-nav').hidden = false;
         startAlertPolling();
+        // Load ratecon template from server
+        try {
+          const tr = await fetch('/api/settings/ratecon-template', { headers: authH() });
+          if (tr.ok) {
+            const td = await tr.json();
+            currentTpl = td.template || DEFAULT_TPL;
+            document.getElementById('tpl-ta').value = currentTpl;
+          }
+        } catch {}
       } catch { renderUser(); }
     }
 
@@ -1469,18 +1632,33 @@ Rate: {{total_rate_usd}}
       const open = document.getElementById('tpl-wrap').classList.toggle('open');
       document.getElementById('tpl-toggle').textContent = open ? 'Close' : 'Edit';
     });
-    document.getElementById('save-tpl').addEventListener('click', () => {
+    document.getElementById('save-tpl').addEventListener('click', async () => {
       currentTpl = document.getElementById('tpl-ta').value;
-      localStorage.setItem(TPL_KEY, currentTpl);
+      if (token) {
+        try {
+          const r = await fetch('/api/settings/ratecon-template', {
+            method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ template: currentTpl }),
+          });
+          if (!r.ok) { const d = await r.json(); toast(d.detail || 'Error saving', 'error'); return; }
+        } catch { toast('Connection error', 'error'); return; }
+      }
+      // Sync with settings page editor
+      const rcEd = document.getElementById('rc-tpl-editor');
+      if (rcEd) rcEd.value = currentTpl;
       const note = document.getElementById('save-note');
       note.style.display = 'inline'; setTimeout(() => note.style.display = 'none', 2000);
       toast('Template saved', 'success');
     });
-    document.getElementById('reset-tpl').addEventListener('click', () => {
+    document.getElementById('reset-tpl').addEventListener('click', async () => {
       if (!confirm('Reset template to default?')) return;
       currentTpl = DEFAULT_TPL;
       document.getElementById('tpl-ta').value = DEFAULT_TPL;
-      localStorage.removeItem(TPL_KEY);
+      const rcEd = document.getElementById('rc-tpl-editor');
+      if (rcEd) rcEd.value = DEFAULT_TPL;
+      if (token) {
+        try { await fetch('/api/settings/ratecon-template', { method: 'DELETE', headers: authH() }); } catch {}
+      }
       toast('Template reset to default');
     });
     document.querySelectorAll('.ph-tag').forEach(tag => {
@@ -1729,6 +1907,35 @@ Rate: {{total_rate_usd}}
 
     document.getElementById('settings-logout-btn').addEventListener('click', doLogout);
 
+    // ── Settings Accordion ──
+    document.querySelectorAll('#page-settings .settings-title').forEach(title => {
+      title.addEventListener('click', () => {
+        const body = title.nextElementSibling;
+        if (!body || !body.classList.contains('settings-body')) return;
+        const isOpen = body.classList.contains('open');
+        // close all
+        document.querySelectorAll('#page-settings .settings-title').forEach(t => t.classList.remove('open'));
+        document.querySelectorAll('#page-settings .settings-body').forEach(b => b.classList.remove('open'));
+        // toggle clicked
+        if (!isOpen) {
+          title.classList.add('open');
+          body.classList.add('open');
+        }
+      });
+    });
+
+    // ── Templates inner tabs ──
+    document.querySelectorAll('.tpl-inner-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tpl-inner-tab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tpl-inner-pane').forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
+        btn.classList.add('active');
+        const pane = document.getElementById('tpl-pane-' + btn.dataset.tplTab);
+        pane.classList.add('active');
+        pane.style.display = '';
+      });
+    });
+
     function loadSettings() {
       document.getElementById('s-name').value  = userName || '';
       document.getElementById('s-email').value = userEmail || '';
@@ -1741,13 +1948,160 @@ Rate: {{total_rate_usd}}
       document.getElementById('eld-section').style.display = isAdmin ? '' : 'none';
       document.getElementById('company-info-section').style.display = isAdmin ? '' : 'none';
       const teamSection = document.getElementById('team-section');
+      const tplSection = document.getElementById('template-section');
       if (isAdmin) {
         teamSection.style.display = '';
+        tplSection.style.display = '';
         loadTeamUsers();
+        loadStatusTemplate();
+        loadRateconTemplate();
       } else {
         teamSection.style.display = 'none';
+        tplSection.style.display = 'none';
       }
     }
+
+    // ── Status Template ────────────────────────────────────────────────
+    let _tplDefault = '';
+    let _tplVariables = [];
+    const _tplSampleData = {
+      load_id: '0965183', current_location: 'I-75, Atlanta, GA', miles_left: '450.2 mi',
+      heading: 'SMYRNA, DE', status: '🟢rolling', speed: '62 mph',
+      lat: '33.7490', lon: '-84.3880', driver_name: 'John Smith',
+      pickup_address: '220 River Dr, CARTERSVILLE, GA', delivery_address: '4880 Wheatleys Pond Rd, SMYRNA, DE',
+    };
+
+    function _tplPreview(tpl) {
+      try {
+        let result = tpl;
+        for (const [k, v] of Object.entries(_tplSampleData)) {
+          result = result.replaceAll(`{${k}}`, v);
+        }
+        return result;
+      } catch { return tpl; }
+    }
+
+    async function loadStatusTemplate() {
+      try {
+        const r = await fetch('/api/settings/status-template', { headers: authH() });
+        if (!r.ok) return;
+        const d = await r.json();
+        _tplDefault = d.default;
+        _tplVariables = d.variables || [];
+        document.getElementById('tpl-editor').value = d.template;
+        document.getElementById('tpl-preview').textContent = _tplPreview(d.template);
+        // Render variable chips
+        const varsEl = document.getElementById('tpl-vars');
+        varsEl.innerHTML = _tplVariables.map(v =>
+          `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--primary-light);border:1px solid rgba(69,133,255,0.2);border-radius:6px;font-size:0.75rem;cursor:pointer;user-select:none;" onclick="insertTplVar('${v.key}')" title="Click to insert"><code style="font-weight:700;color:var(--primary);">{${v.key}}</code><span style="color:var(--text-muted);">${v.label}</span></span>`
+        ).join('');
+      } catch {}
+    }
+
+    window.insertTplVar = function(key) {
+      const ed = document.getElementById('tpl-editor');
+      const start = ed.selectionStart;
+      const end = ed.selectionEnd;
+      const text = ed.value;
+      const insert = `{${key}}`;
+      ed.value = text.substring(0, start) + insert + text.substring(end);
+      ed.selectionStart = ed.selectionEnd = start + insert.length;
+      ed.focus();
+      document.getElementById('tpl-preview').textContent = _tplPreview(ed.value);
+    };
+
+    document.getElementById('tpl-editor').addEventListener('input', (e) => {
+      document.getElementById('tpl-preview').textContent = _tplPreview(e.target.value);
+    });
+
+    document.getElementById('tpl-save-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('tpl-save-btn');
+      const errEl = document.getElementById('tpl-err');
+      const okEl = document.getElementById('tpl-ok');
+      errEl.style.display = 'none'; okEl.style.display = 'none';
+      const template = document.getElementById('tpl-editor').value.trim();
+      if (!template) { errEl.textContent = 'Template cannot be empty'; errEl.style.display = 'block'; return; }
+      btn.disabled = true; btn.textContent = 'Saving...';
+      try {
+        const r = await fetch('/api/settings/status-template', {
+          method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template }),
+        });
+        if (!r.ok) { const d = await r.json(); errEl.textContent = d.detail || 'Error'; errEl.style.display = 'block'; return; }
+        okEl.textContent = 'Template saved!'; okEl.style.display = 'block';
+        toast('Status template saved', 'success');
+      } catch { errEl.textContent = 'Connection error'; errEl.style.display = 'block'; }
+      finally { btn.disabled = false; btn.textContent = 'Save Template'; }
+    });
+
+    document.getElementById('tpl-reset-btn').addEventListener('click', async () => {
+      if (!confirm('Reset template to default?')) return;
+      try {
+        await fetch('/api/settings/status-template', { method: 'DELETE', headers: authH() });
+        document.getElementById('tpl-editor').value = _tplDefault;
+        document.getElementById('tpl-preview').textContent = _tplPreview(_tplDefault);
+        document.getElementById('tpl-ok').textContent = 'Reset to default'; document.getElementById('tpl-ok').style.display = 'block';
+        toast('Template reset to default');
+      } catch {}
+    });
+
+    // ── Ratecon Template (Settings) ───────────────────────────────────
+    async function loadRateconTemplate() {
+      try {
+        const r = await fetch('/api/settings/ratecon-template', { headers: authH() });
+        if (!r.ok) return;
+        const d = await r.json();
+        document.getElementById('rc-tpl-editor').value = d.template;
+      } catch {}
+    }
+
+    document.querySelectorAll('.rc-ph-tag').forEach(tag => {
+      tag.addEventListener('click', () => {
+        const ta = document.getElementById('rc-tpl-editor');
+        const s = ta.selectionStart, e = ta.selectionEnd;
+        const txt = tag.textContent;
+        ta.value = ta.value.slice(0, s) + txt + ta.value.slice(e);
+        ta.selectionStart = ta.selectionEnd = s + txt.length;
+        ta.focus();
+      });
+    });
+
+    document.getElementById('rc-tpl-save-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('rc-tpl-save-btn');
+      const errEl = document.getElementById('rc-tpl-err');
+      const okEl = document.getElementById('rc-tpl-ok');
+      errEl.style.display = 'none'; okEl.style.display = 'none';
+      const template = document.getElementById('rc-tpl-editor').value.trim();
+      if (!template) { errEl.textContent = 'Template cannot be empty'; errEl.style.display = 'block'; return; }
+      btn.disabled = true; btn.textContent = 'Saving...';
+      try {
+        const r = await fetch('/api/settings/ratecon-template', {
+          method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template }),
+        });
+        if (!r.ok) { const d = await r.json(); errEl.textContent = d.detail || 'Error'; errEl.style.display = 'block'; return; }
+        // Sync with extract page
+        currentTpl = template;
+        document.getElementById('tpl-ta').value = template;
+        okEl.textContent = 'Template saved!'; okEl.style.display = 'block';
+        toast('Ratecon template saved', 'success');
+      } catch { errEl.textContent = 'Connection error'; errEl.style.display = 'block'; }
+      finally { btn.disabled = false; btn.textContent = 'Save Template'; }
+    });
+
+    document.getElementById('rc-tpl-reset-btn').addEventListener('click', async () => {
+      if (!confirm('Reset ratecon template to default?')) return;
+      try {
+        await fetch('/api/settings/ratecon-template', { method: 'DELETE', headers: authH() });
+        document.getElementById('rc-tpl-editor').value = DEFAULT_TPL;
+        // Sync with extract page
+        currentTpl = DEFAULT_TPL;
+        document.getElementById('tpl-ta').value = DEFAULT_TPL;
+        document.getElementById('rc-tpl-ok').textContent = 'Reset to default';
+        document.getElementById('rc-tpl-ok').style.display = 'block';
+        toast('Ratecon template reset to default');
+      } catch {}
+    });
 
     function openTeamAddPanel() {
       ['tm-err','tm-ok'].forEach(id => { const el = document.getElementById(id); el.style.display='none'; el.textContent=''; });
@@ -2680,9 +3034,10 @@ Rate: {{total_rate_usd}}
     function fmtDelay(h) {
       if (h === null) return '<span class="delay-zero">--</span>';
       const abs = Math.abs(h);
-      if (abs < 0.5) return '<span class="delay-zero">0.0h</span>';
-      if (h > 0) return `<span class="delay-pos">+${abs.toFixed(1)}h</span>`;
-      return `<span class="delay-neg">-${abs.toFixed(1)}h</span>`;
+      if (abs > 720) return '<span class="delay-zero">--</span>';
+      if (abs < 0.5) return '<span class="delay-zero">On time</span>';
+      if (h > 0) return `<span class="delay-pos">+${abs.toFixed(1)}h late</span>`;
+      return `<span class="delay-neg">${abs.toFixed(1)}h early</span>`;
     }
 
     function fmtEta(load) {
@@ -2783,6 +3138,9 @@ Rate: {{total_rate_usd}}
               <option value="4" ${autoVal===4?'selected':''}>⏱ 4h</option>
               <option value="6" ${autoVal===6?'selected':''}>⏱ 6h</option>
             </select>
+            <button class="btn-eta-refresh" title="Edit load" onclick="openEditLoadModal(${l.id})">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
             <button class="btn-del-load" title="Delete load" onclick="deleteLoad(${l.id}, this)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
             </button>
@@ -2812,10 +3170,36 @@ Rate: {{total_rate_usd}}
         </div>`;
     }
 
-    function openCreateLoadModal() {
+    function _fmtDtLocal(v) {
+      // "2026-04-11T08:30" → "04/11/2026 0830"
+      if (!v) return null;
+      const d = new Date(v);
+      if (isNaN(d)) return v;
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mi = String(d.getMinutes()).padStart(2,'0');
+      return `${mm}/${dd}/${d.getFullYear()} ${hh}${mi}`;
+    }
+
+    async function openCreateLoadModal() {
       ['cl-load-number','cl-rate','cl-origin','cl-dest','cl-pickup-addr','cl-pickup-date','cl-delivery-addr','cl-delivery-date','cl-miles'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('cl-group').value = '';
       document.getElementById('cl-status').textContent = '';
       document.getElementById('create-load-modal').classList.add('open');
+      // Load groups into select
+      try {
+        const r = await fetch('/api/groups', { headers: authH() });
+        if (r.ok) {
+          const groups = await r.json();
+          const sel = document.getElementById('cl-group');
+          sel.innerHTML = '<option value="">No driver assigned</option>';
+          groups.forEach(g => {
+            const driverInfo = g.eld_driver_name ? ` — ${g.eld_driver_name}` : '';
+            sel.innerHTML += `<option value="${g.id}">${esc(g.name)}${driverInfo}</option>`;
+          });
+        }
+      } catch {}
     }
 
     function closeCreateLoadModal() {
@@ -2829,15 +3213,17 @@ Rate: {{total_rate_usd}}
       btn.disabled = true;
       btn.textContent = 'Saving...';
       try {
+        const gv = document.getElementById('cl-group').value;
         const body = {
+          group_id: gv ? parseInt(gv) : null,
           load_number: document.getElementById('cl-load-number').value.trim() || null,
           total_rate_usd: document.getElementById('cl-rate').value.trim() || null,
           origin_state: document.getElementById('cl-origin').value.trim() || null,
           destination_state: document.getElementById('cl-dest').value.trim() || null,
           pickup_address: document.getElementById('cl-pickup-addr').value.trim() || null,
-          pickup_date: document.getElementById('cl-pickup-date').value || null,
+          pickup_date: _fmtDtLocal(document.getElementById('cl-pickup-date').value),
           delivery_address: document.getElementById('cl-delivery-addr').value.trim() || null,
-          delivery_date: document.getElementById('cl-delivery-date').value || null,
+          delivery_date: _fmtDtLocal(document.getElementById('cl-delivery-date').value),
           miles: document.getElementById('cl-miles').value.trim() || null,
         };
         const r = await fetch('/api/loads', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -2847,6 +3233,101 @@ Rate: {{total_rate_usd}}
         toast('Load created', 'success');
       } catch { statusEl.textContent = 'Connection error'; }
       finally { btn.disabled = false; btn.textContent = 'Save Load'; }
+    }
+
+    // ── Edit Load Modal ────────────────────────────────────────────────
+    function _parseDateToLocal(v) {
+      // "04/11/2026 0830" or "2026-04-11T08:30" → value for datetime-local input
+      if (!v) return '';
+      // Try MM/DD/YYYY HHMM format
+      const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})\s*(\d{2})(\d{2})$/);
+      if (m) return `${m[3]}-${m[1]}-${m[2]}T${m[4]}:${m[5]}`;
+      // Try ISO
+      const d = new Date(v);
+      if (!isNaN(d)) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+      return '';
+    }
+
+    let _editLoadCache = null;
+
+    async function openEditLoadModal(loadId) {
+      document.getElementById('el-status').textContent = '';
+      document.getElementById('edit-load-modal').classList.add('open');
+      // Fetch load data
+      try {
+        const r = await fetch('/api/loads', { headers: authH() });
+        if (!r.ok) return;
+        const data = await r.json();
+        const load = (data.loads || []).find(l => l.id === loadId);
+        if (!load) { document.getElementById('el-status').textContent = 'Load not found'; return; }
+        _editLoadCache = load;
+        document.getElementById('el-id').value = load.id;
+        document.getElementById('el-load-number').value = load.load_number || '';
+        document.getElementById('el-rate').value = load.total_rate_usd || '';
+        document.getElementById('el-origin').value = load.origin_state || '';
+        document.getElementById('el-dest').value = load.destination_state || '';
+        document.getElementById('el-pickup-addr').value = load.pickup_address || '';
+        document.getElementById('el-pickup-date').value = _parseDateToLocal(load.pickup_date);
+        document.getElementById('el-delivery-addr').value = load.delivery_address || '';
+        document.getElementById('el-delivery-date').value = _parseDateToLocal(load.delivery_date);
+        document.getElementById('el-miles').value = load.miles || '';
+        // Load groups
+        const gr = await fetch('/api/groups', { headers: authH() });
+        if (gr.ok) {
+          const groups = await gr.json();
+          const sel = document.getElementById('el-group');
+          sel.innerHTML = '<option value="0">No driver assigned</option>';
+          groups.forEach(g => {
+            const driverInfo = g.eld_driver_name ? ` — ${g.eld_driver_name}` : '';
+            sel.innerHTML += `<option value="${g.id}">${esc(g.name)}${driverInfo}</option>`;
+          });
+          sel.value = load.group_id || '0';
+        }
+      } catch { document.getElementById('el-status').textContent = 'Error loading data'; }
+    }
+
+    function closeEditLoadModal() {
+      document.getElementById('edit-load-modal').classList.remove('open');
+      _editLoadCache = null;
+    }
+
+    document.getElementById('edit-load-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeEditLoadModal(); });
+
+    async function submitEditLoad() {
+      const btn = document.getElementById('el-save-btn');
+      const statusEl = document.getElementById('el-status');
+      statusEl.textContent = '';
+      btn.disabled = true; btn.textContent = 'Saving...';
+      try {
+        const loadId = document.getElementById('el-id').value;
+        const gv = document.getElementById('el-group').value;
+        const body = {
+          group_id: gv ? parseInt(gv) : 0,
+          load_number: document.getElementById('el-load-number').value.trim() || null,
+          total_rate_usd: document.getElementById('el-rate').value.trim() || null,
+          origin_state: document.getElementById('el-origin').value.trim() || null,
+          destination_state: document.getElementById('el-dest').value.trim() || null,
+          pickup_address: document.getElementById('el-pickup-addr').value.trim() || null,
+          pickup_date: _fmtDtLocal(document.getElementById('el-pickup-date').value),
+          delivery_address: document.getElementById('el-delivery-addr').value.trim() || null,
+          delivery_date: _fmtDtLocal(document.getElementById('el-delivery-date').value),
+          miles: document.getElementById('el-miles').value.trim() || null,
+        };
+        // Remove null fields to avoid overwriting with null
+        Object.keys(body).forEach(k => { if (body[k] === null) delete body[k]; });
+        const r = await fetch(`/api/loads/${loadId}`, {
+          method: 'PUT', headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) { const d = await r.json(); statusEl.textContent = d.detail || 'Error'; return; }
+        closeEditLoadModal();
+        loadLoadsPage();
+        toast('Load updated', 'success');
+      } catch { statusEl.textContent = 'Connection error'; }
+      finally { btn.disabled = false; btn.textContent = 'Save Changes'; }
     }
 
     async function refreshEta(loadId, btn) {

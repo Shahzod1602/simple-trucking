@@ -3,6 +3,7 @@ import asyncio
 import os
 import tempfile
 import time
+import collections
 from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -111,6 +112,29 @@ def _enforce_eld_rate_limit(dispatcher_id: int, endpoint_key: str):
             detail=f"Too many ELD requests. Try again in {ELD_RATE_LIMIT_WINDOW_SECS} seconds.",
         )
     q.append(now)
+
+
+DEFAULT_STATUS_TEMPLATE = (
+    "Load Id: {load_id}\n\n"
+    "Current location: {current_location}\n\n"
+    "Miles left: {miles_left}\n\n"
+    "Heading ➤ {heading}\n\n"
+    "Status: {status}"
+)
+
+
+def format_status_message(template: str, variables: dict) -> str:
+    """Format a status template with the given variables. Unknown placeholders are left as-is."""
+    try:
+        return template.format_map(collections.defaultdict(lambda: "N/A", variables))
+    except Exception:
+        return DEFAULT_STATUS_TEMPLATE.format_map(collections.defaultdict(lambda: "N/A", variables))
+
+
+def get_status_template(company_id: int) -> str:
+    """Get the status message template for a company, falling back to default."""
+    tpl = database.get_global_setting(f"status_template_{company_id}")
+    return tpl or DEFAULT_STATUS_TEMPLATE
 
 
 def _retry_sync_call(fn, *args, retries: int = 2, base_delay: float = 0.35, **kwargs):
@@ -364,7 +388,7 @@ async def api_health():
     db_error = None
     try:
         with database.get_conn() as conn:
-            conn.execute("SELECT 1").fetchone()
+            conn.execute("SELECT 1")
     except Exception as exc:
         db_ok = False
         db_error = str(exc)
@@ -1043,6 +1067,126 @@ async def api_gmaps_delete(authorization: str | None = Header(default=None)):
     return {"ok": True}
 
 
+# ── Status Template API ──────────────────────────────────────────────────────
+
+@app.get("/api/settings/status-template")
+async def api_status_template_get(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    template = get_status_template(company_id)
+    variables = [
+        {"key": "load_id", "label": "Load number"},
+        {"key": "current_location", "label": "Current address"},
+        {"key": "miles_left", "label": "Miles remaining"},
+        {"key": "heading", "label": "Heading (city, state)"},
+        {"key": "status", "label": "Status (rolling/stopped)"},
+        {"key": "speed", "label": "Speed (mph)"},
+        {"key": "lat", "label": "Latitude"},
+        {"key": "lon", "label": "Longitude"},
+        {"key": "driver_name", "label": "Driver name"},
+        {"key": "pickup_address", "label": "Pickup address"},
+        {"key": "delivery_address", "label": "Delivery address"},
+    ]
+    # Generate preview
+    preview = format_status_message(template, {
+        "load_id": "0965183",
+        "current_location": "I-75, Atlanta, GA",
+        "miles_left": "450.2 mi",
+        "heading": "SMYRNA, DE",
+        "status": "🟢rolling",
+        "speed": "62 mph",
+        "lat": "33.7490",
+        "lon": "-84.3880",
+        "driver_name": "John Smith",
+        "pickup_address": "220 River Dr, CARTERSVILLE, GA",
+        "delivery_address": "4880 Wheatleys Pond Rd, SMYRNA, DE",
+    })
+    return {"template": template, "default": DEFAULT_STATUS_TEMPLATE, "variables": variables, "preview": preview}
+
+
+class StatusTemplateBody(BaseModel):
+    template: str
+
+
+@app.post("/api/settings/status-template")
+async def api_status_template_save(body: StatusTemplateBody, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    if dispatcher["role"] not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Only admins can change templates")
+    template = body.template.strip()
+    if not template:
+        raise HTTPException(status_code=400, detail="Template cannot be empty")
+    database.set_global_setting(f"status_template_{company_id}", template)
+    return {"ok": True}
+
+
+@app.delete("/api/settings/status-template")
+async def api_status_template_reset(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    if dispatcher["role"] not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Only admins can change templates")
+    database.set_global_setting(f"status_template_{company_id}", "")
+    return {"ok": True}
+
+
+# ── Ratecon Template API ──────────────────────────────────────────────────────
+
+RATECON_DEFAULT_TEMPLATE = """🚛 NEW TRIP {{load_number}}
+{{carrier}}
+{{#stops}}
+🏁 STOP {{stop_number}}
+APPT: {{date}}
+
+Facility: {{facility}}
+{{street}} , {{city_state_zip}}
+PU/DEL #: {{reference}}
+
+=======================
+{{/stops}}
+Miles: {{miles}}
+Rate: {{total_rate_usd}}
+
+===================================
+❗️❗️❗️CHARGES❗️❗️❗️
+1. 20% fee if not accepting the tracking sent by broker and send the prove of screenshot in the group!!!
+2. LATE TO SHIPPER or RECEIVER (without permissible reason) - 10% from load rate.
+3. NO TRAILER PICS FOR BOTH HOOK AND DROP FROM EACH STOP (must have pics from all sides with tires) - 10% from load rate.
+4. NO BOL or POD (must have clear PDF format paperwork) - 10% from load rate"""
+
+
+@app.get("/api/settings/ratecon-template")
+async def api_ratecon_template_get(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    tpl = database.get_global_setting(f"ratecon_template_{company_id}")
+    return {"template": tpl or RATECON_DEFAULT_TEMPLATE, "default": RATECON_DEFAULT_TEMPLATE}
+
+
+@app.post("/api/settings/ratecon-template")
+async def api_ratecon_template_save(body: StatusTemplateBody, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    if dispatcher["role"] not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Only admins can change templates")
+    template = body.template.strip()
+    if not template:
+        raise HTTPException(status_code=400, detail="Template cannot be empty")
+    database.set_global_setting(f"ratecon_template_{company_id}", template)
+    return {"ok": True}
+
+
+@app.delete("/api/settings/ratecon-template")
+async def api_ratecon_template_reset(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    if dispatcher["role"] not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="Only admins can change templates")
+    database.set_global_setting(f"ratecon_template_{company_id}", "")
+    return {"ok": True}
+
+
 @app.get("/api/trucks")
 async def api_trucks(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
@@ -1072,7 +1216,7 @@ async def api_assign_driver(
 
 
 @app.get("/api/eta")
-async def api_eta(
+def api_eta(
     group_id: int,
     address: str,
     buffer: float = 0,
@@ -1138,6 +1282,41 @@ async def api_create_load(
 async def api_get_loads(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
     return {"loads": database.get_loads(get_company_id(dispatcher))}
+
+
+class EditLoadBody(BaseModel):
+    group_id: int | None = None
+    load_number: str | None = None
+    origin_state: str | None = None
+    destination_state: str | None = None
+    total_rate_usd: str | None = None
+    miles: str | None = None
+    pickup_address: str | None = None
+    pickup_date: str | None = None
+    delivery_address: str | None = None
+    delivery_date: str | None = None
+    stops_json: str | None = None
+
+
+@app.put("/api/loads/{load_id}")
+async def api_edit_load(
+    load_id: int,
+    body: EditLoadBody,
+    authorization: str | None = Header(default=None),
+):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    load = database.get_load(load_id, company_id)
+    if not load:
+        raise HTTPException(status_code=404, detail="Load not found")
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    # Allow explicitly setting group_id to null by sending 0
+    if body.group_id == 0:
+        fields["group_id"] = None
+    if not fields:
+        return {"ok": True, "load": load}
+    database.update_load_fields(load_id, company_id, fields)
+    return {"ok": True, "load": database.get_load(load_id, company_id)}
 
 
 class UpdateLoadStatusBody(BaseModel):
@@ -1214,7 +1393,7 @@ async def api_delete_load(
 
 
 @app.post("/api/loads/{load_id}/eta")
-async def api_load_eta(
+def api_load_eta(
     load_id: int,
     authorization: str | None = Header(default=None),
 ):
@@ -1263,7 +1442,7 @@ async def api_load_eta(
 
 
 @app.post("/api/loads/{load_id}/send-status")
-async def api_load_send_status(
+def api_load_send_status(
     load_id: int,
     authorization: str | None = Header(default=None),
 ):
@@ -1296,14 +1475,24 @@ async def api_load_send_status(
         # Reverse geocode current position
         current_addr = routing.reverse_geocode(lat, lon) or f"{lat:.4f}, {lon:.4f}"
 
-        # Miles remaining to next stop
-        next_address = (
-            load.get("pickup_address") if load["status"] == "upcoming"
-            else load.get("delivery_address")
-        )
-        miles_left = "N/A"
-        heading = ""
+        # Determine next stop address from stops_json or fallback fields
+        import json as _json
+        stops = _json.loads(load.get("stops_json") or "[]")
+        current_idx = load.get("current_stop_index", 0)
+        if stops and current_idx < len(stops):
+            stop = stops[current_idx]
+            next_address = stop.get("address") or ""
+            stop_city = stop.get("city") or ""
+            stop_state = stop.get("state") or ""
+        else:
+            next_address = (
+                load.get("pickup_address") if load["status"] == "upcoming"
+                else load.get("delivery_address")
+            )
+            stop_city = ""
+            stop_state = ""
 
+        miles_left = "N/A"
         if next_address:
             gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
             destination = routing.geocode(next_address, gmaps_key)
@@ -1311,23 +1500,35 @@ async def api_load_send_status(
                 route = routing.get_route({"lat": lat, "lon": lon}, destination, gmaps_key)
                 miles_left = f"{round(route['distance_meters'] / 1609.34, 1)} mi"
 
-        # Parse heading from next stop address: "STREET, CITY, STATE, ZIP"
-        addr_parts = [p.strip() for p in (next_address or "").split(",")]
-        if len(addr_parts) >= 3:
-            heading = f"{addr_parts[-3]}, {addr_parts[-2]}"
-        elif len(addr_parts) == 2:
-            heading = ", ".join(addr_parts[:2])
+        # Build heading: city, state from stop data or parse from address
+        if stop_city and stop_state:
+            heading = f"{stop_city}, {stop_state}"
+        else:
+            addr_parts = [p.strip() for p in (next_address or "").split(",")]
+            if len(addr_parts) >= 3:
+                heading = f"{addr_parts[-3]}, {addr_parts[-2]}"
+            elif len(addr_parts) == 2:
+                heading = ", ".join(addr_parts[:2])
+            else:
+                heading = next_address or ""
 
         status_line = "🟢rolling" if speed_mph > 3 else "🔴stopped"
         load_id_display = load.get("load_number") or load["id"]
 
-        message = (
-            f"Load Id: {load_id_display}\n\n"
-            f"Current location: {current_addr}\n\n"
-            f"Miles left: {miles_left}\n\n"
-            f"Heading ➤ {heading}\n\n"
-            f"Status: {status_line}"
-        )
+        template = get_status_template(get_company_id(dispatcher))
+        message = format_status_message(template, {
+            "load_id": load_id_display,
+            "current_location": current_addr,
+            "miles_left": miles_left,
+            "heading": heading,
+            "status": status_line,
+            "speed": f"{speed_mph:.0f} mph" if speed_mph else "0 mph",
+            "lat": f"{lat:.4f}",
+            "lon": f"{lon:.4f}",
+            "driver_name": load.get("driver_name") or "",
+            "pickup_address": load.get("pickup_address") or "",
+            "delivery_address": load.get("delivery_address") or "",
+        })
 
         tg.send_message(group["chat_id"], message)
         return {"ok": True, "message": message}
@@ -1436,33 +1637,35 @@ async def api_invoice(
 async def api_analytics(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
     company_id = get_company_id(dispatcher)
-    company_filter = "dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = ?)"
+    company_filter = "dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)"
     with database.get_conn() as conn:
-        total_rev = conn.execute(
-            f"SELECT SUM(CAST(total_rate_usd AS REAL)) FROM loads WHERE {company_filter} AND status = 'delivered'",
+        conn.execute(
+            f"SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(total_rate_usd,'$',''),',','') AS DOUBLE PRECISION)), 0) AS total FROM loads WHERE {company_filter} AND status = 'delivered'",
             (company_id,),
-        ).fetchone()[0] or 0
+        )
+        total_rev = conn.fetchone()["total"]
 
-        total_miles = conn.execute(
-            f"SELECT SUM(CAST(miles AS REAL)) FROM loads WHERE {company_filter} AND status = 'delivered'",
+        conn.execute(
+            f"SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(miles,'$',''),',','') AS DOUBLE PRECISION)), 0) AS total FROM loads WHERE {company_filter} AND status = 'delivered'",
             (company_id,),
-        ).fetchone()[0] or 0
+        )
+        total_miles = conn.fetchone()["total"]
 
-        counts_rows = conn.execute(
+        conn.execute(
             f"SELECT status, COUNT(*) as cnt FROM loads WHERE {company_filter} GROUP BY status",
             (company_id,),
-        ).fetchall()
-        counts = {r["status"]: r["cnt"] for r in counts_rows}
+        )
+        counts = {r["status"]: r["cnt"] for r in conn.fetchall()}
 
-        monthly_rows = conn.execute(
-            f"""SELECT strftime('%Y-%m', created_at) as month,
-                      SUM(CAST(total_rate_usd AS REAL)) as revenue,
+        conn.execute(
+            f"""SELECT to_char(created_at, 'YYYY-MM') as month,
+                      SUM(CAST(REPLACE(REPLACE(total_rate_usd,'$',''),',','') AS DOUBLE PRECISION)) as revenue,
                       COUNT(*) as loads
                FROM loads WHERE {company_filter} AND status = 'delivered'
                GROUP BY month ORDER BY month ASC LIMIT 6""",
             (company_id,),
-        ).fetchall()
-        monthly = [dict(r) for r in monthly_rows]
+        )
+        monthly = [dict(r) for r in conn.fetchall()]
 
     return {
         "total_revenue": round(total_rev, 2),

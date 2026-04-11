@@ -1274,9 +1274,33 @@ async def api_create_load(
     authorization: str | None = Header(default=None),
 ):
     dispatcher = require_dispatcher(authorization)
-    load = database.create_load(dispatcher["id"], body.model_dump())
+    data = body.model_dump()
+    load = database.create_load(dispatcher["id"], data)
     if not load:
         raise HTTPException(status_code=500, detail="Failed to create load")
+
+    # Auto-calculate deadhead if driver assigned
+    if data.get("group_id") and data.get("pickup_address"):
+        try:
+            company_id = get_company_id(dispatcher)
+            group = database.get_group(data["group_id"], company_id)
+            if group and group.get("eld_driver_id"):
+                location = _get_driver_location(group["eld_driver_id"], dispatcher["id"])
+                if location:
+                    import routing
+                    gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
+                    dest = routing.geocode(data["pickup_address"], gmaps_key)
+                    if dest:
+                        route = routing.get_route(
+                            {"lat": location["lat"], "lon": location["lon"]},
+                            dest, gmaps_key
+                        )
+                        dhd = str(round(route["distance_meters"] / 1609.34, 1))
+                        database.update_load_fields(load["id"], company_id, {"deadhead_miles": dhd})
+                        load["deadhead_miles"] = dhd
+        except Exception:
+            pass
+
     return load
 
 
@@ -1317,8 +1341,37 @@ async def api_edit_load(
         fields["group_id"] = None
     if not fields:
         return {"ok": True, "load": load}
+
+    # Auto-calculate deadhead miles when driver (group) is assigned
+    dhd_miles = None
+    new_group_id = fields.get("group_id")
+    if new_group_id and new_group_id != load.get("group_id"):
+        try:
+            group = database.get_group(new_group_id, company_id)
+            if group and group.get("eld_driver_id"):
+                location = _get_driver_location(group["eld_driver_id"], dispatcher["id"])
+                pickup = load.get("pickup_address") or fields.get("pickup_address")
+                if location and pickup:
+                    import routing
+                    gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
+                    dest = routing.geocode(pickup, gmaps_key)
+                    if dest:
+                        route = routing.get_route(
+                            {"lat": location["lat"], "lon": location["lon"]},
+                            dest, gmaps_key
+                        )
+                        dhd_miles = str(round(route["distance_meters"] / 1609.34, 1))
+                        fields["deadhead_miles"] = dhd_miles
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("DHD calc failed: %s", e)
+
     database.update_load_fields(load_id, company_id, fields)
-    return {"ok": True, "load": database.get_load(load_id, company_id)}
+    updated = database.get_load(load_id, company_id)
+    result = {"ok": True, "load": updated}
+    if dhd_miles:
+        result["deadhead_miles"] = dhd_miles
+    return result
 
 
 class UpdateLoadStatusBody(BaseModel):

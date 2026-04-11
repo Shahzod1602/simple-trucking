@@ -2098,7 +2098,8 @@ async def api_kpi_my(
         week_start = monday.isoformat()
 
     entries = database.get_kpi_entries_for_dispatcher(company_id, dispatcher["id"], week_start)
-    available_loads = database.get_dispatcher_loads_for_select(dispatcher["id"], company_id)
+    is_admin = dispatcher.get("role") in ("admin", "superadmin")
+    available_loads = database.get_dispatcher_loads_for_select(dispatcher["id"], company_id, is_admin)
     tiers = database.get_pay_tiers(company_id)
     company_tiers = [t for t in tiers if t["dispatcher_id"] is None]
 

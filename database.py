@@ -1235,21 +1235,36 @@ def get_kpi_entries_for_dispatcher(company_id: int, dispatcher_id: int, week_sta
         return [dict(r) for r in conn.fetchall()]
 
 
-def get_dispatcher_loads_for_select(dispatcher_id: int, company_id: int) -> list[dict]:
-    """Get dispatcher's recent loads for KPI entry dropdown."""
+def get_dispatcher_loads_for_select(dispatcher_id: int, company_id: int, is_admin: bool = False) -> list[dict]:
+    """Get loads for KPI entry dropdown. Admins see all company loads."""
     with get_conn() as conn:
-        conn.execute(
-            """SELECT l.id, l.load_number, l.total_rate_usd, l.miles, l.pickup_date,
-                      l.origin_state, l.destination_state, l.broker_name,
-                      dg.name as driver_name
-               FROM loads l
-               LEFT JOIN driver_groups dg ON l.group_id = dg.id
-               WHERE l.dispatcher_id = %s
-                 AND l.status IN ('dispatched', 'delivered')
-               ORDER BY l.pickup_date DESC
-               LIMIT 50""",
-            (dispatcher_id,),
-        )
+        if is_admin:
+            conn.execute(
+                """SELECT l.id, l.load_number, l.total_rate_usd, l.miles, l.pickup_date,
+                          l.origin_state, l.destination_state, l.broker_name,
+                          dg.name as driver_name
+                   FROM loads l
+                   LEFT JOIN driver_groups dg ON l.group_id = dg.id
+                   JOIN dispatchers d ON l.dispatcher_id = d.id
+                   WHERE d.company_id = %s
+                     AND l.status IN ('dispatched', 'delivered')
+                   ORDER BY l.pickup_date DESC
+                   LIMIT 50""",
+                (company_id,),
+            )
+        else:
+            conn.execute(
+                """SELECT l.id, l.load_number, l.total_rate_usd, l.miles, l.pickup_date,
+                          l.origin_state, l.destination_state, l.broker_name,
+                          dg.name as driver_name
+                   FROM loads l
+                   LEFT JOIN driver_groups dg ON l.group_id = dg.id
+                   WHERE l.dispatcher_id = %s
+                     AND l.status IN ('dispatched', 'delivered')
+                   ORDER BY l.pickup_date DESC
+                   LIMIT 50""",
+                (dispatcher_id,),
+            )
         return [dict(r) for r in conn.fetchall()]
 
 

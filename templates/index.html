@@ -2420,39 +2420,70 @@ Rate: {{total_rate_usd}}
 
     function renderKpiEntries(dispatchers) {
       const el = document.getElementById('kpi-entries-content');
-      if (!dispatchers.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No dispatcher reports for this week</div>'; return; }
+      if (!dispatchers.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;padding:20px 0;text-align:center;">No dispatcher reports for this week</div>'; return; }
       let html = '';
       let grandCost = 0, grandMiles = 0, grandEarning = 0;
 
-      dispatchers.forEach(d => {
+      dispatchers.forEach((d, idx) => {
         grandCost += d.total_cost; grandMiles += d.total_miles; grandEarning += d.earning;
         const rpmC = d.rpm >= 2.5 ? '#16a34a' : d.rpm >= 2.0 ? '#d97706' : '#ef4444';
         const pctC = d.tier_percentage >= 3 ? '#16a34a' : d.tier_percentage >= 2 ? '#2563eb' : d.tier_percentage >= 1.5 ? '#d97706' : '#6b7280';
+        const initials = d.dispatcher_name.slice(0,2).toUpperCase();
+        const rankBg = idx === 0 ? 'linear-gradient(135deg,#f59e0b,#d97706)' : idx === 1 ? 'linear-gradient(135deg,#94a3b8,#64748b)' : idx === 2 ? 'linear-gradient(135deg,#b45309,#92400e)' : 'var(--bg-secondary)';
+        const rankColor = idx < 3 ? '#fff' : 'var(--text-muted)';
 
-        html += `<div style="margin-bottom:16px;">`;
-        html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid var(--border);">`;
-        html += `<span style="font-weight:700;font-size:0.9rem;">${esc(d.dispatcher_name)}</span>`;
-        html += `<span style="font-size:0.82rem;">
-          <span style="color:#16a34a;font-weight:700;">$${d.total_cost.toLocaleString()}</span>
-          <span style="color:var(--text-muted);margin:0 6px;">|</span>
-          ${d.total_miles.toLocaleString()} mi
-          <span style="color:var(--text-muted);margin:0 6px;">|</span>
-          <span style="color:${rpmC};font-weight:700;">RPM $${d.rpm.toFixed(2)}</span>
-          <span style="color:var(--text-muted);margin:0 6px;">|</span>
-          <span style="color:${pctC};font-weight:700;">${d.tier_percentage != null ? d.tier_percentage + '%' : '—'}</span>
-          <span style="color:var(--text-muted);margin:0 6px;">→</span>
-          <span style="color:#d97706;font-weight:800;">$${d.earning.toFixed(2)}</span>
-        </span>`;
+        html += `<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden;">`;
+        // Header
+        html += `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-secondary);">`;
+        html += `<div style="width:36px;height:36px;border-radius:50%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.78rem;color:${rankColor};flex-shrink:0;">${initials}</div>`;
+        html += `<div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.92rem;">${esc(d.dispatcher_name)}</div>
+          <div style="font-size:0.75rem;color:var(--text-muted);">${d.entries.length} load${d.entries.length !== 1 ? 's' : ''}</div>
+        </div>`;
+        html += `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+          <div style="text-align:center;">
+            <div style="font-size:0.65rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;">Revenue</div>
+            <div style="font-size:1.05rem;font-weight:800;color:#16a34a;">$${d.total_cost.toLocaleString()}</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.65rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;">Miles</div>
+            <div style="font-size:1.05rem;font-weight:700;">${d.total_miles.toLocaleString()}</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.65rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;">RPM</div>
+            <div style="font-size:1.05rem;font-weight:800;color:${rpmC};">$${d.rpm.toFixed(2)}</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:0.65rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;">Tier</div>
+            <div style="font-size:1.05rem;font-weight:800;color:${pctC};">${d.tier_percentage != null ? d.tier_percentage + '%' : '—'}</div>
+          </div>
+          <div style="text-align:center;background:rgba(217,119,6,0.1);padding:6px 12px;border-radius:8px;">
+            <div style="font-size:0.65rem;font-weight:600;color:#d97706;text-transform:uppercase;">Earning</div>
+            <div style="font-size:1.1rem;font-weight:800;color:#d97706;">$${d.earning.toFixed(2)}</div>
+          </div>
+        </div>`;
         html += `</div>`;
-        html += `<table style="width:100%;border-collapse:collapse;font-size:0.8rem;"><tbody>`;
+        // Entries table
+        html += `<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+          <thead><tr style="background:rgba(255,255,255,0.02);">
+            <th style="text-align:left;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:0.72rem;">Load #</th>
+            <th style="text-align:left;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:0.72rem;">Route</th>
+            <th style="text-align:left;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:0.72rem;">Broker</th>
+            <th style="text-align:right;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:0.72rem;">Cost</th>
+            <th style="text-align:right;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:0.72rem;">Miles</th>
+            <th style="text-align:right;padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:0.72rem;">RPM</th>
+          </tr></thead><tbody>`;
         d.entries.forEach(e => {
-          const route = (e.origin_state && e.destination_state) ? `${e.origin_state}→${e.destination_state}` : '—';
-          html += `<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:5px 6px;font-weight:600;">${esc(e.load_number || 'Manual')}</td>
-            <td style="padding:5px 6px;color:var(--text-muted);">${route}</td>
-            <td style="padding:5px 6px;color:var(--text-muted);">${esc(e.broker_name || '—')}</td>
-            <td style="padding:5px 6px;text-align:right;color:#16a34a;font-weight:600;">$${e.cost.toLocaleString()}</td>
-            <td style="padding:5px 6px;text-align:right;">${e.miles.toLocaleString()} mi</td>
+          const route = (e.origin_state && e.destination_state) ? `${e.origin_state} → ${e.destination_state}` : '—';
+          const brokerBg = e.broker_name === 'SPOT' ? '#fef08a' : e.broker_name ? 'rgba(79,124,255,0.12)' : 'transparent';
+          const eRpm = e.miles > 0 ? (e.cost / e.miles).toFixed(2) : '—';
+          html += `<tr style="border-top:1px solid var(--border);">
+            <td style="padding:7px 10px;font-weight:700;">${esc(e.load_number || 'Manual')}</td>
+            <td style="padding:7px 10px;color:var(--text-muted);">${route}</td>
+            <td style="padding:7px 10px;"><span style="background:${brokerBg};padding:2px 8px;border-radius:4px;font-weight:600;font-size:0.74rem;">${esc(e.broker_name || '—')}</span></td>
+            <td style="padding:7px 10px;text-align:right;font-weight:700;color:#16a34a;">$${e.cost.toLocaleString()}</td>
+            <td style="padding:7px 10px;text-align:right;">${e.miles.toLocaleString()}</td>
+            <td style="padding:7px 10px;text-align:right;font-weight:600;color:var(--text-muted);">$${eRpm}</td>
           </tr>`;
         });
         html += `</tbody></table></div>`;
@@ -2460,14 +2491,14 @@ Rate: {{total_rate_usd}}
 
       // Grand total
       const avgRpm = grandMiles > 0 ? grandCost / grandMiles : 0;
-      html += `<div style="border-top:3px solid var(--border);padding:10px 0;display:flex;justify-content:space-between;font-weight:800;font-size:0.9rem;">
-        <span>Total (${dispatchers.length} dispatchers)</span>
-        <span>
-          <span style="color:#16a34a;">$${grandCost.toLocaleString()}</span> |
-          ${grandMiles.toLocaleString()} mi |
-          RPM $${avgRpm.toFixed(2)} |
-          <span style="color:#d97706;">$${grandEarning.toFixed(2)}</span>
-        </span>
+      html += `<div style="margin-top:4px;padding:14px 16px;border-radius:10px;background:var(--bg-secondary);display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-weight:800;font-size:0.9rem;">${dispatchers.length} Dispatcher${dispatchers.length !== 1 ? 's' : ''}</div>
+        <div style="display:flex;gap:20px;font-size:0.88rem;">
+          <span><span style="color:var(--text-muted);font-size:0.72rem;font-weight:600;">REVENUE</span> <span style="font-weight:800;color:#16a34a;">$${grandCost.toLocaleString()}</span></span>
+          <span><span style="color:var(--text-muted);font-size:0.72rem;font-weight:600;">MILES</span> <span style="font-weight:800;">${grandMiles.toLocaleString()}</span></span>
+          <span><span style="color:var(--text-muted);font-size:0.72rem;font-weight:600;">RPM</span> <span style="font-weight:800;">$${avgRpm.toFixed(2)}</span></span>
+          <span><span style="color:var(--text-muted);font-size:0.72rem;font-weight:600;">EARNINGS</span> <span style="font-weight:800;color:#d97706;">$${grandEarning.toFixed(2)}</span></span>
+        </div>
       </div>`;
       el.innerHTML = html;
     }

@@ -2134,10 +2134,13 @@ async def api_kpi_entry_save(
 ):
     dispatcher = require_dispatcher(authorization)
     company_id = get_company_id(dispatcher)
-    result = database.add_kpi_entry(
-        company_id, dispatcher["id"], body.week_start,
-        body.load_id, body.miles, body.cost,
-    )
+    try:
+        result = database.add_kpi_entry(
+            company_id, dispatcher["id"], body.week_start,
+            body.load_id, body.miles, body.cost,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return result
 
 

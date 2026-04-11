@@ -1205,6 +1205,12 @@ def add_kpi_entry(company_id: int, dispatcher_id: int, week_start: str,
                   load_id: int | None, miles: float, cost: float) -> dict:
     now = datetime.now(timezone.utc)
     with get_conn() as conn:
+        if load_id:
+            conn.execute(
+                "SELECT id FROM kpi_entries WHERE load_id = %s", (load_id,)
+            )
+            if conn.fetchone():
+                raise ValueError("This load is already assigned to a KPI entry")
         conn.execute(
             """INSERT INTO kpi_entries (company_id, dispatcher_id, week_start, load_id, miles, cost, updated_at)
                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",

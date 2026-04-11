@@ -729,7 +729,6 @@
           <button class="loads-tab active" data-filter="all" onclick="filterLoads('all',this)">All</button>
           <button class="loads-tab" data-filter="upcoming" onclick="filterLoads('upcoming',this)">Upcoming</button>
           <button class="loads-tab" data-filter="dispatched" onclick="filterLoads('dispatched',this)">Dispatched</button>
-          <button class="loads-tab" data-filter="in-transit" onclick="filterLoads('in-transit',this)">In-Transit</button>
           <button class="loads-tab" data-filter="delivered" onclick="filterLoads('delivered',this)">Delivered</button>
           <button class="loads-tab" data-filter="cancelled" onclick="filterLoads('cancelled',this)">Cancelled</button>
         </div>
@@ -3541,7 +3540,7 @@ Rate: {{total_rate_usd}}
       document.querySelectorAll('.loads-tab').forEach(t => {
         const f = t.dataset.filter;
         const count = f === 'all' ? _allLoads.length : _allLoads.filter(l => l.status === f).length;
-        const label = { all:'All', upcoming:'Upcoming', dispatched:'Dispatched', 'in-transit':'In-Transit', delivered:'Delivered', cancelled:'Cancelled' }[f];
+        const label = { all:'All', upcoming:'Upcoming', dispatched:'Dispatched', delivered:'Delivered', cancelled:'Cancelled' }[f];
         t.textContent = count > 0 ? `${label} (${count})` : label;
       });
       renderLoadsTable(filtered);

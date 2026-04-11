@@ -7,6 +7,16 @@ services:
       POSTGRES_USER: ratecon
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ratecon_secret}
       POSTGRES_DB: ratecon
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "effective_cache_size=1GB"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -35,3 +45,5 @@ services:
 
 volumes:
   pgdata:
+    external: true
+    name: simpletrucking_pgdata

@@ -8,14 +8,30 @@ from datetime import datetime, timezone
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql://ratecon:ratecon@localhost:5432/ratecon",
 )
 
+_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+
+
+def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    global _pool
+    if _pool is None or _pool.closed:
+        _pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=2,
+            maxconn=20,
+            dsn=DATABASE_URL,
+        )
+    return _pool
+
 
 def init_db():
+    # Ensure the connection pool is initialized on startup
+    _get_pool()
     with get_conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -230,8 +246,10 @@ def ensure_superadmin(email: str, password: str):
 
 @contextmanager
 def get_conn():
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    pool = _get_pool()
+    conn = pool.getconn()
     try:
+        conn.cursor_factory = psycopg2.extras.RealDictCursor
         cur = conn.cursor()
         yield cur
         conn.commit()
@@ -239,7 +257,7 @@ def get_conn():
         conn.rollback()
         raise
     finally:
-        conn.close()
+        pool.putconn(conn)
 
 
 # ── Password ──────────────────────────────────────────────────────────────────

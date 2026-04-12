@@ -503,10 +503,10 @@
     .ls-badge-btn { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
     .ls-badge-btn::after { content: '▾'; font-size: 0.6rem; opacity: 0.7; }
     .ls-badge-btn:hover { filter: brightness(1.15); }
-    .status-menu { position: absolute; z-index: 1000; background: var(--bg-card, #1a1f2e); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); min-width: 140px; font-family: 'Barlow Condensed', sans-serif; }
-    .status-menu button { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; background: none; border: none; color: var(--text, #e5e7eb); padding: 7px 10px; border-radius: 5px; cursor: pointer; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
-    .status-menu button:hover { background: rgba(255,255,255,0.06); }
-    .status-menu button.current { color: var(--text-muted, #8a93a6); cursor: default; }
+    .status-menu { position: absolute; z-index: 1000; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 4px; box-shadow: var(--card-shadow); min-width: 140px; font-family: 'Barlow Condensed', sans-serif; }
+    .status-menu button { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; background: none; border: none; color: var(--text); padding: 7px 10px; border-radius: 5px; cursor: pointer; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+    .status-menu button:hover { background: var(--card-inner); }
+    .status-menu button.current { color: var(--text-muted); cursor: default; }
     .status-menu button.current:hover { background: none; }
     .status-menu .dot { width: 8px; height: 8px; border-radius: 50%; }
     .status-menu .dot.upcoming { background: #6e8099; }

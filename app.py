@@ -1656,7 +1656,8 @@ async def extract_ratecon(file: UploadFile = File(...)):
 
     try:
         from extractor.llm_extractor import extract
-        ratecon = extract(tmp_path)
+        gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
+        ratecon = extract(tmp_path, gmaps_api_key=gmaps_key or None)
         return {"status": "ok", "data": ratecon.model_dump()}
     except ValidationError as e:
         errors = [

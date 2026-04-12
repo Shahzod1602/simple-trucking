@@ -39,9 +39,31 @@ IMPORTANT:
 """
 
 
-def extract(file_path: str) -> RateCon:
+def _stop_address_string(stop) -> str:
+    a = stop.address
+    parts = [a.address_line_2, a.city, a.state, a.zip, a.country]
+    return ", ".join(p for p in parts if p)
+
+
+def _fill_missing_miles(ratecon: RateCon, api_key: str | None) -> None:
+    if ratecon.miles:
+        return
+    try:
+        from routing import calculate_total_miles
+        addresses = [_stop_address_string(s) for s in ratecon.stops]
+        miles = calculate_total_miles(addresses, api_key)
+        if miles:
+            ratecon.miles = str(miles)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Miles fallback calc failed: %s", e)
+
+
+def extract(file_path: str, gmaps_api_key: str | None = None) -> RateCon:
     """
     Reads a PDF or image ratecon file and returns a validated RateCon object.
+    If the extracted miles field is empty, falls back to calculating total
+    driving miles via Google Maps (with OSRM fallback) from the stops.
     """
     from extractor.pdf_reader import read_file
 
@@ -71,4 +93,6 @@ def extract(file_path: str) -> RateCon:
         ),
     )
 
-    return RateCon.model_validate_json(response.text)
+    ratecon = RateCon.model_validate_json(response.text)
+    _fill_missing_miles(ratecon, gmaps_api_key)
+    return ratecon

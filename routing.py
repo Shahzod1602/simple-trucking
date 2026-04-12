@@ -146,6 +146,33 @@ def get_route(origin: dict, destination: dict, api_key: str | None = None) -> di
     }
 
 
+def calculate_total_miles(addresses: list[str], api_key: str | None = None) -> float | None:
+    """
+    Geocode a list of stop addresses and return total driving miles across
+    consecutive legs (pickup -> ... -> delivery). Returns None if any stop
+    fails to geocode or any leg fails to route.
+    """
+    if not addresses or len(addresses) < 2:
+        return None
+
+    points: list[dict] = []
+    for addr in addresses:
+        geo = geocode(addr, api_key)
+        if not geo:
+            return None
+        points.append(geo)
+
+    total_meters = 0
+    for i in range(len(points) - 1):
+        try:
+            route = get_route(points[i], points[i + 1], api_key)
+        except Exception:
+            return None
+        total_meters += route["distance_meters"]
+
+    return round(total_meters / 1609.34, 1)
+
+
 def calculate_eta(origin: dict, destination: dict, buffer_hours: float = 0, api_key: str | None = None) -> dict:
     """
     Full ETA calculation from origin {lat,lon} to destination {lat,lon}.

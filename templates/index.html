@@ -500,6 +500,18 @@
     .ls-upcoming { background: rgba(100,116,139,0.12); color: #6e8099; padding: 2px 9px; border-radius: 4px; font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem; font-weight: 700; white-space: nowrap; letter-spacing: 0.5px; text-transform: uppercase; border: 1px solid rgba(100,116,139,0.18); }
     .ls-dispatched { background: rgba(59,130,246,0.12); color: #60a5fa; padding: 2px 9px; border-radius: 4px; font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem; font-weight: 700; white-space: nowrap; letter-spacing: 0.5px; text-transform: uppercase; border: 1px solid rgba(59,130,246,0.2); }
     .ls-delivered { background: rgba(34,197,94,0.12); color: #4ade80; padding: 2px 9px; border-radius: 4px; font-family: 'Barlow Condensed', sans-serif; font-size: 0.75rem; font-weight: 700; white-space: nowrap; letter-spacing: 0.5px; text-transform: uppercase; border: 1px solid rgba(34,197,94,0.2); }
+    .ls-badge-btn { cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+    .ls-badge-btn::after { content: '▾'; font-size: 0.6rem; opacity: 0.7; }
+    .ls-badge-btn:hover { filter: brightness(1.15); }
+    .status-menu { position: absolute; z-index: 1000; background: var(--bg-card, #1a1f2e); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); min-width: 140px; font-family: 'Barlow Condensed', sans-serif; }
+    .status-menu button { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; background: none; border: none; color: var(--text, #e5e7eb); padding: 7px 10px; border-radius: 5px; cursor: pointer; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+    .status-menu button:hover { background: rgba(255,255,255,0.06); }
+    .status-menu button.current { color: var(--text-muted, #8a93a6); cursor: default; }
+    .status-menu button.current:hover { background: none; }
+    .status-menu .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .status-menu .dot.upcoming { background: #6e8099; }
+    .status-menu .dot.dispatched { background: #60a5fa; }
+    .status-menu .dot.delivered { background: #4ade80; }
     .load-driver { color: #60a5fa; font-weight: 500; cursor: pointer; font-size: 0.82rem; }
     .load-driver.no-driver { color: var(--text-muted); font-weight: 400; }
     .load-route { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; }
@@ -3541,10 +3553,43 @@ Rate: {{total_rate_usd}}
       return `<span class="load-last-eta">${d.toLocaleString('en-US',{month:'2-digit',day:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>`;
     }
 
-    function statusBadge(s) {
+    function statusBadge(s, id) {
       const map = { upcoming: 'ls-upcoming', dispatched: 'ls-dispatched', delivered: 'ls-delivered' };
       const cls = map[s] || 'ls-upcoming';
-      return `<span class="${cls}">${s.charAt(0).toUpperCase()+s.slice(1)}</span>`;
+      const label = s.charAt(0).toUpperCase()+s.slice(1);
+      if (id == null) return `<span class="${cls}">${label}</span>`;
+      return `<button type="button" class="${cls} ls-badge-btn" onclick="openStatusMenu(event, ${id}, '${s}')" title="Change status">${label}</button>`;
+    }
+
+    const STATUS_ORDER = ['upcoming', 'dispatched', 'delivered'];
+
+    function openStatusMenu(e, loadId, current) {
+      e.stopPropagation();
+      closeStatusMenu();
+      const menu = document.createElement('div');
+      menu.className = 'status-menu';
+      menu.id = 'status-menu-active';
+      menu.innerHTML = STATUS_ORDER.map(s => {
+        const isCurrent = s === current;
+        const label = s.charAt(0).toUpperCase() + s.slice(1);
+        return `<button type="button" class="${isCurrent?'current':''}" ${isCurrent?'disabled':`onclick="changeStatus(${loadId},'${s}','${current}')"`}>
+          <span style="display:flex;align-items:center;gap:8px;"><span class="dot ${s}"></span>${label}</span>
+          ${isCurrent?'<span style="font-size:0.9rem;">✓</span>':''}
+        </button>`;
+      }).join('');
+      document.body.appendChild(menu);
+      const rect = e.currentTarget.getBoundingClientRect();
+      const menuW = 160;
+      let left = rect.left + window.scrollX;
+      if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
+      menu.style.left = left + 'px';
+      menu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+      setTimeout(() => document.addEventListener('click', closeStatusMenu, { once: true }), 0);
+    }
+
+    function closeStatusMenu() {
+      const m = document.getElementById('status-menu-active');
+      if (m) m.remove();
     }
 
     let _allLoads = [];
@@ -3624,7 +3669,7 @@ Rate: {{total_rate_usd}}
         const autoVal = l.auto_send_hours || 0;
         return `<tr data-id="${l.id}" data-status="${l.status}">
           <td><div class="load-id">${l.id}</div><div class="load-ref">${esc(l.load_number || '--')}</div></td>
-          <td>${statusBadge(l.status)}<div style="margin-top:4px;">${statusActions(l)}</div></td>
+          <td>${statusBadge(l.status, l.id)}<div style="margin-top:4px;">${statusActions(l)}</div></td>
           <td class="${l.driver_name ? 'load-driver' : 'load-driver no-driver'}">${esc(l.driver_name || '--')}</td>
           <td style="color:var(--text-muted);font-size:0.82rem;">${esc(l.dispatcher_name || '--')}</td>
           <td class="load-route">${esc(l.origin_state || '?')} → ${esc(l.destination_state || '?')}</td>
@@ -3853,7 +3898,19 @@ Rate: {{total_rate_usd}}
       finally { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'; }
     }
 
-    async function changeStatus(loadId, status) {
+    async function changeStatus(loadId, status, currentStatus) {
+      closeStatusMenu();
+      if (currentStatus && status === currentStatus) return;
+      if (currentStatus) {
+        const curIdx = STATUS_ORDER.indexOf(currentStatus);
+        const newIdx = STATUS_ORDER.indexOf(status);
+        const isBackward = curIdx >= 0 && newIdx >= 0 && newIdx < curIdx;
+        const fromDelivered = currentStatus === 'delivered';
+        if (isBackward || fromDelivered) {
+          const msg = `Revert load from "${currentStatus}" back to "${status}"?`;
+          if (!confirm(msg)) return;
+        }
+      }
       const r = await fetch(`/api/loads/${loadId}/status`, {
         method: 'PATCH', headers: {...authH(), 'Content-Type': 'application/json'},
         body: JSON.stringify({ status })

@@ -307,6 +307,16 @@ async def setup():
     return FileResponse("templates/setup.html")
 
 
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy():
+    return FileResponse("templates/privacy.html")
+
+
+@app.get("/terms", response_class=HTMLResponse)
+async def terms():
+    return FileResponse("templates/terms.html")
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel():
     return FileResponse("templates/admin.html")

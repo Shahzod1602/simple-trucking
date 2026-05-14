@@ -114,7 +114,11 @@
       letter-spacing: 0.5px; text-transform: uppercase;
     }
 
-    .sidebar-nav { flex: 1; padding: 10px 8px; display: flex; flex-direction: column; gap: 1px; }
+    .sidebar-nav { flex: 1; padding: 10px 8px; display: flex; flex-direction: column; gap: 1px; overflow-y: auto; min-height: 0; }
+    .sidebar-nav::-webkit-scrollbar { width: 6px; }
+    .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+    .sidebar-nav::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
     .nav-label {
       font-family: 'Barlow Condensed', sans-serif;
       font-size: 0.66rem; font-weight: 700; color: var(--sidebar-text);

@@ -591,29 +591,77 @@
       </div>
     </div>
     <nav class="sidebar-nav">
-      <div class="nav-label">Main</div>
-      <button class="nav-item active" data-page="extract">
+      <div class="nav-label">Overview</div>
+      <button class="nav-item active" data-page="dashboard">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span> Dashboard
+      </button>
+      <button class="nav-item" data-page="mailbox">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span> Mailbox
+        <span class="nav-badge" id="mailbox-badge" style="display:none;"></span>
+      </button>
+      <button class="nav-item" data-page="extract">
         <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Extract
       </button>
+
+      <div class="nav-label">Load Management</div>
       <button class="nav-item" data-page="loads">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></span> Loads
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></span> All Loads
         <span class="nav-badge" id="alert-badge" style="display:none;"></span>
       </button>
-      <button class="nav-item" data-page="analytics">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span> Analytics
+      <button class="nav-item" data-page="live-loads">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg></span> Live Loads
       </button>
       <button class="nav-item" data-page="map">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg></span> Map
-      </button>
-      <button class="nav-item" data-page="trucks">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></span> Trucks
-      </button>
-      <button class="nav-item" data-page="groups">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Groups
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg></span> Dispatch Map
       </button>
       <button class="nav-item" data-page="history">
         <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span> History
       </button>
+
+      <div class="nav-label">Customer Mgmt</div>
+      <button class="nav-item" data-page="customers">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> Customers
+      </button>
+      <button class="nav-item" data-page="vendors">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> Vendors
+      </button>
+      <button class="nav-item" data-page="locations">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span> Locations
+      </button>
+
+      <div class="nav-label">Fleet Mgmt</div>
+      <button class="nav-item" data-page="trucks">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></span> Trucks
+      </button>
+      <button class="nav-item" data-page="trailers">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="1"/><circle cx="7" cy="20" r="2"/><circle cx="17" cy="20" r="2"/></svg></span> Trailers
+      </button>
+      <button class="nav-item" data-page="work-orders">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span> Work Orders
+      </button>
+
+      <div class="nav-label">HR / Safety</div>
+      <button class="nav-item" data-page="groups">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Drivers
+      </button>
+      <button class="nav-item" data-page="driver-documents">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span> Documents
+      </button>
+      <button class="nav-item" data-page="safety-tasks">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> Safety Tasks
+      </button>
+
+      <div class="nav-label">Accounting</div>
+      <button class="nav-item" data-page="analytics">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span> Analytics
+      </button>
+      <button class="nav-item" data-page="bills">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg></span> Bills
+      </button>
+      <button class="nav-item" data-page="transactions">
+        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span> Transactions
+      </button>
+
       <div class="nav-label">Account</div>
       <button class="nav-item" data-page="telegram">
         <span class="nav-icon">
@@ -653,7 +701,7 @@
     <div class="content">
 
       <!-- ── Extract ── -->
-      <div class="page active" id="page-extract">
+      <div class="page" id="page-extract">
         <div class="page-header">
           <h1 class="page-title">Rate Con Extractor</h1>
           <p class="page-subtitle">Upload a PDF or image — data is extracted automatically</p>
@@ -1194,6 +1242,189 @@
         </div>
       </div>
 
+      <!-- ── Dashboard ── -->
+      <div class="page" id="page-dashboard">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Dashboard</h1>
+            <p class="page-subtitle">A quick look at your business today</p>
+          </div>
+          <button class="btn-outline" onclick="loadDashboardPage()">↺ Refresh</button>
+        </div>
+        <div id="dashboard-content"><div style="padding:32px;text-align:center;color:var(--text-muted);">Loading...</div></div>
+      </div>
+
+      <!-- ── Mailbox ── -->
+      <div class="page" id="page-mailbox">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Mailbox</h1>
+            <p class="page-subtitle">Broker emails and system messages</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('mailbox')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('mailbox')">+ New Message</button>
+          </div>
+        </div>
+        <div id="page-mailbox-content"></div>
+      </div>
+
+      <!-- ── Live Loads ── -->
+      <div class="page" id="page-live-loads">
+        <div class="page-header">
+          <h1 class="page-title">Live Loads</h1>
+          <p class="page-subtitle">Loads currently in transit</p>
+        </div>
+        <div id="live-loads-content"></div>
+      </div>
+
+      <!-- ── Customers ── -->
+      <div class="page" id="page-customers">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Customers</h1>
+            <p class="page-subtitle">Brokers and shippers you work with</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('customers')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('customers')">+ New Customer</button>
+          </div>
+        </div>
+        <div id="page-customers-content"></div>
+      </div>
+
+      <!-- ── Vendors ── -->
+      <div class="page" id="page-vendors">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Vendors</h1>
+            <p class="page-subtitle">Suppliers, mechanics, fuel, insurance</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('vendors')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('vendors')">+ New Vendor</button>
+          </div>
+        </div>
+        <div id="page-vendors-content"></div>
+      </div>
+
+      <!-- ── Locations ── -->
+      <div class="page" id="page-locations">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Locations</h1>
+            <p class="page-subtitle">Saved pickup and delivery places</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('locations')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('locations')">+ New Location</button>
+          </div>
+        </div>
+        <div id="page-locations-content"></div>
+      </div>
+
+      <!-- ── Trailers ── -->
+      <div class="page" id="page-trailers">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Trailers</h1>
+            <p class="page-subtitle">Equipment inventory</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('trailers')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('trailers')">+ New Trailer</button>
+          </div>
+        </div>
+        <div id="page-trailers-content"></div>
+      </div>
+
+      <!-- ── Work Orders ── -->
+      <div class="page" id="page-work-orders">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Work Orders</h1>
+            <p class="page-subtitle">Maintenance and repairs</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('work-orders')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('work-orders')">+ New Work Order</button>
+          </div>
+        </div>
+        <div id="page-work-orders-content"></div>
+      </div>
+
+      <!-- ── Driver Documents ── -->
+      <div class="page" id="page-driver-documents">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Driver Documents</h1>
+            <p class="page-subtitle">CDL, medical card, insurance — expiry tracking</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('driver-documents')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('driver-documents')">+ New Document</button>
+          </div>
+        </div>
+        <div id="page-driver-documents-content"></div>
+      </div>
+
+      <!-- ── Safety Tasks ── -->
+      <div class="page" id="page-safety-tasks">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Safety Tasks</h1>
+            <p class="page-subtitle">Inspections, drug tests, compliance</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('safety-tasks')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('safety-tasks')">+ New Task</button>
+          </div>
+        </div>
+        <div id="page-safety-tasks-content"></div>
+      </div>
+
+      <!-- ── Bills ── -->
+      <div class="page" id="page-bills">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Bills</h1>
+            <p class="page-subtitle">Vendor invoices and bills payable</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('bills')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('bills')">+ New Bill</button>
+          </div>
+        </div>
+        <div id="page-bills-content"></div>
+      </div>
+
+      <!-- ── Transactions ── -->
+      <div class="page" id="page-transactions">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Transactions</h1>
+            <p class="page-subtitle">Income and expenses ledger</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('transactions')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('transactions')">+ New Transaction</button>
+          </div>
+        </div>
+        <div id="page-transactions-content"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Generic Entity Modal -->
+  <div class="overlay" id="entity-modal" style="display:none;">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-title" id="entity-modal-title">New Record</div>
+      <div id="entity-modal-fields" style="display:grid;gap:10px;margin-bottom:14px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn-outline" onclick="closeEntityModal()">Cancel</button>
+        <button class="btn-blue" id="entity-modal-save" onclick="saveEntityModal()">Save</button>
+      </div>
     </div>
   </div>
 
@@ -1555,17 +1786,29 @@ Rate: {{total_rate_usd}}
     }
 
     // ── Navigation ────────────────────────────────────────────────────────
-    const pageTitles = { extract:'Extract', loads:'Loads', groups:'Groups', history:'History', settings:'Settings', admin:'Admin', analytics:'Analytics', map:'Map', trucks:'Trucks', telegram:'Telegram', kpi:'KPI Board' };
+    const pageTitles = {
+      dashboard:'Dashboard', mailbox:'Mailbox', extract:'Extract',
+      loads:'All Loads', 'live-loads':'Live Loads', map:'Dispatch Map', history:'History',
+      customers:'Customers', vendors:'Vendors', locations:'Locations',
+      trucks:'Trucks', trailers:'Trailers', 'work-orders':'Work Orders',
+      groups:'Drivers', 'driver-documents':'Documents', 'safety-tasks':'Safety',
+      analytics:'Analytics', bills:'Bills', transactions:'Transactions',
+      telegram:'Telegram', settings:'Settings', kpi:'KPI Board', users:'Users', admin:'Admin'
+    };
+    const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions']);
     function goTo(page) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
-      document.getElementById('page-' + page).classList.add('active');
+      const target = document.getElementById('page-' + page);
+      if (target) target.classList.add('active');
       document.getElementById('mob-title').textContent = pageTitles[page] || page;
       const content = document.querySelector('.content');
-      if (page === 'loads' || page === 'analytics' || page === 'map' || page === 'trucks' || page === 'kpi') content.classList.add('wide');
+      if (widePages.has(page)) content.classList.add('wide');
       else content.classList.remove('wide');
       closeSidebar();
+      if (page === 'dashboard') loadDashboardPage();
       if (page === 'loads')     loadLoadsPage();
+      if (page === 'live-loads') loadLiveLoadsPage();
       if (page === 'groups')    loadGroups();
       if (page === 'history')   renderHistory();
       if (page === 'settings')  loadSettings();
@@ -1574,8 +1817,12 @@ Rate: {{total_rate_usd}}
       if (page === 'analytics') loadAnalyticsPage();
       if (page === 'map')       loadMapPage();
       if (page === 'trucks')    loadTrucksPage();
-      if (page === 'telegram')    loadTgGroups();
-      if (page === 'kpi') loadKpiPage();
+      if (page === 'telegram')  loadTgGroups();
+      if (page === 'kpi')       loadKpiPage();
+      // Generic entity pages
+      if (['mailbox','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions'].includes(page)) {
+        loadEntityPage(page);
+      }
     }
     document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => goTo(b.dataset.page)));
     function closeSidebar() {
@@ -4072,6 +4319,364 @@ Rate: {{total_rate_usd}}
     let revenueChart = null;
     let loadsChart = null;
 
+    // ── Dashboard ─────────────────────────────────────────────────────────
+    async function loadDashboardPage() {
+      const el = document.getElementById('dashboard-content');
+      if (!token) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-lock"></i></div><div class="empty-title">Sign in required</div></div>';
+        return;
+      }
+      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading...</div>';
+      try {
+        const r = await fetch('/api/dashboard/summary', { headers: authH() });
+        if (!r.ok) throw new Error('Failed');
+        const d = await r.json();
+        const fmtMoney = (n) => '$' + Math.round(n).toLocaleString();
+        const card = (title, value, sub, color) => `
+          <div class="card" style="padding:16px;min-height:96px;">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">${title}</div>
+            <div style="font-size:1.7rem;font-weight:700;color:${color || 'var(--text)'};line-height:1;">${value}</div>
+            ${sub ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;">${sub}</div>` : ''}
+          </div>`;
+        el.innerHTML = `
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px;">
+            ${card('Total Revenue', fmtMoney(d.total_revenue), `${d.total_loads} loads total`, '#22c55e')}
+            ${card('Active Loads', d.active_loads, 'In transit now', '#3b82f6')}
+            ${card('Upcoming', d.upcoming_loads, 'Pickup pending')}
+            ${card('Delivered', d.delivered_loads, 'Completed loads')}
+            ${card('Unread Mail', d.unread_mailbox, 'In your mailbox', d.unread_mailbox > 0 ? '#f59e0b' : null)}
+            ${card('Open Safety', d.open_safety_tasks, 'Pending tasks', d.open_safety_tasks > 0 ? '#ef4444' : null)}
+            ${card('Expiring Docs', d.expiring_documents, 'Within 30 days', d.expiring_documents > 0 ? '#ef4444' : null)}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+            ${card('Drivers', d.drivers)}
+            ${card('Customers', d.customers)}
+            ${card('Vendors', d.vendors)}
+            ${card('Trailers', d.trailers)}
+            ${card('Locations', d.locations)}
+          </div>`;
+        // Update mailbox badge
+        const badge = document.getElementById('mailbox-badge');
+        if (d.unread_mailbox > 0) {
+          badge.textContent = d.unread_mailbox;
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (e) {
+        el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Could not load dashboard</div>';
+      }
+    }
+
+    async function loadLiveLoadsPage() {
+      const el = document.getElementById('live-loads-content');
+      if (!token) { el.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-lock"></i></div><div class="empty-title">Sign in required</div></div>'; return; }
+      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading...</div>';
+      try {
+        const r = await fetch('/api/loads', { headers: authH() });
+        const d = await r.json();
+        const live = (d.loads || []).filter(l => l.status === 'dispatched');
+        if (!live.length) {
+          el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">No loads in transit right now</div>';
+          return;
+        }
+        const rows = live.map(l => `
+          <tr>
+            <td style="padding:10px;border-bottom:1px solid var(--border);"><strong>${l.load_number || '—'}</strong></td>
+            <td style="padding:10px;border-bottom:1px solid var(--border);">${l.broker_name || '—'}</td>
+            <td style="padding:10px;border-bottom:1px solid var(--border);">${l.origin_state || ''} → ${l.destination_state || ''}</td>
+            <td style="padding:10px;border-bottom:1px solid var(--border);">${l.total_rate_usd ? '$' + l.total_rate_usd : '—'}</td>
+            <td style="padding:10px;border-bottom:1px solid var(--border);">${l.eta_utc || '—'}</td>
+          </tr>`).join('');
+        el.innerHTML = `
+          <div class="card" style="padding:0;overflow:hidden;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+              <thead><tr style="background:var(--surface-2);">
+                <th style="padding:10px;text-align:left;font-weight:600;font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Load #</th>
+                <th style="padding:10px;text-align:left;font-weight:600;font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Broker</th>
+                <th style="padding:10px;text-align:left;font-weight:600;font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Route</th>
+                <th style="padding:10px;text-align:left;font-weight:600;font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Rate</th>
+                <th style="padding:10px;text-align:left;font-weight:600;font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">ETA</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+      } catch (e) {
+        el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Failed to load</div>';
+      }
+    }
+
+    // ── Generic entity CRUD ───────────────────────────────────────────────
+    const ENTITY_SCHEMAS = {
+      customers: {
+        title: 'Customer',
+        listCols: ['name','mc_number','contact_name','email','phone','payment_terms'],
+        fields: [
+          {k:'name', label:'Name', required:true},
+          {k:'mc_number', label:'MC#'},
+          {k:'dot_number', label:'DOT#'},
+          {k:'contact_name', label:'Contact Name'},
+          {k:'email', label:'Email', type:'email'},
+          {k:'phone', label:'Phone'},
+          {k:'address', label:'Address'},
+          {k:'credit_score', label:'Credit Score'},
+          {k:'payment_terms', label:'Payment Terms', placeholder:'Net 30'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      vendors: {
+        title: 'Vendor',
+        listCols: ['name','category','contact_name','email','phone','payment_terms'],
+        fields: [
+          {k:'name', label:'Name', required:true},
+          {k:'category', label:'Category', placeholder:'Fuel, Repair, Insurance...'},
+          {k:'contact_name', label:'Contact Name'},
+          {k:'email', label:'Email', type:'email'},
+          {k:'phone', label:'Phone'},
+          {k:'address', label:'Address'},
+          {k:'tax_id', label:'Tax ID / EIN'},
+          {k:'payment_terms', label:'Payment Terms'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      locations: {
+        title: 'Location',
+        listCols: ['name','city','state','location_type','contact_phone'],
+        fields: [
+          {k:'name', label:'Name', required:true, placeholder:'Walmart DC #42'},
+          {k:'address', label:'Address', required:true},
+          {k:'city', label:'City'},
+          {k:'state', label:'State'},
+          {k:'zip', label:'ZIP'},
+          {k:'location_type', label:'Type', placeholder:'Warehouse, Yard, Drop'},
+          {k:'contact_name', label:'Contact Name'},
+          {k:'contact_phone', label:'Contact Phone'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      trailers: {
+        title: 'Trailer',
+        listCols: ['unit_number','trailer_type','year','make','license_plate','status'],
+        fields: [
+          {k:'unit_number', label:'Unit #', required:true},
+          {k:'trailer_type', label:'Type', placeholder:'Dry Van, Reefer, Flatbed'},
+          {k:'year', label:'Year'},
+          {k:'make', label:'Make'},
+          {k:'vin', label:'VIN'},
+          {k:'license_plate', label:'License Plate'},
+          {k:'license_state', label:'License State'},
+          {k:'status', label:'Status', placeholder:'available'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      'work-orders': {
+        title: 'Work Order',
+        listCols: ['wo_number','title','equipment_type','status','priority','cost'],
+        fields: [
+          {k:'wo_number', label:'WO #'},
+          {k:'title', label:'Title', required:true},
+          {k:'equipment_type', label:'Equipment Type', placeholder:'truck / trailer'},
+          {k:'equipment_ref', label:'Equipment Ref (unit number)'},
+          {k:'opened_at', label:'Opened', type:'date'},
+          {k:'closed_at', label:'Closed', type:'date'},
+          {k:'cost', label:'Cost', type:'number'},
+          {k:'status', label:'Status', placeholder:'open'},
+          {k:'priority', label:'Priority', placeholder:'normal'},
+          {k:'description', label:'Description', type:'textarea'},
+        ]
+      },
+      'driver-documents': {
+        title: 'Document',
+        listCols: ['doc_type','doc_number','issue_date','expiry_date','notes'],
+        fields: [
+          {k:'driver_group_id', label:'Driver Group ID', type:'number'},
+          {k:'doc_type', label:'Document Type', required:true, placeholder:'CDL, Medical Card, Insurance'},
+          {k:'doc_number', label:'Document #'},
+          {k:'issue_date', label:'Issue Date', type:'date'},
+          {k:'expiry_date', label:'Expiry Date', type:'date'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      'safety-tasks': {
+        title: 'Safety Task',
+        listCols: ['title','task_type','due_date','priority','status'],
+        fields: [
+          {k:'title', label:'Title', required:true},
+          {k:'task_type', label:'Type', placeholder:'Inspection, Drug Test, Audit'},
+          {k:'driver_group_id', label:'Driver Group ID', type:'number'},
+          {k:'trailer_id', label:'Trailer ID', type:'number'},
+          {k:'due_date', label:'Due Date', type:'date'},
+          {k:'priority', label:'Priority', placeholder:'normal'},
+          {k:'status', label:'Status', placeholder:'open'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      bills: {
+        title: 'Bill',
+        listCols: ['bill_number','vendor_id','amount','bill_date','due_date','status'],
+        fields: [
+          {k:'bill_number', label:'Bill #'},
+          {k:'vendor_id', label:'Vendor ID', type:'number'},
+          {k:'amount', label:'Amount', type:'number', required:true},
+          {k:'bill_date', label:'Bill Date', type:'date'},
+          {k:'due_date', label:'Due Date', type:'date'},
+          {k:'status', label:'Status', placeholder:'unpaid'},
+          {k:'category', label:'Category'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      transactions: {
+        title: 'Transaction',
+        listCols: ['tx_date','tx_type','amount','category','description','reference'],
+        fields: [
+          {k:'tx_date', label:'Date', type:'date', required:true},
+          {k:'tx_type', label:'Type', required:true, placeholder:'income / expense'},
+          {k:'amount', label:'Amount', type:'number', required:true},
+          {k:'category', label:'Category'},
+          {k:'description', label:'Description'},
+          {k:'load_id', label:'Load ID', type:'number'},
+          {k:'bill_id', label:'Bill ID', type:'number'},
+          {k:'reference', label:'Reference'},
+        ]
+      },
+      mailbox: {
+        title: 'Message',
+        listCols: ['received_at','from_addr','subject','source','is_read'],
+        fields: [
+          {k:'from_addr', label:'From'},
+          {k:'subject', label:'Subject', required:true},
+          {k:'body', label:'Body', type:'textarea'},
+          {k:'source', label:'Source', placeholder:'system / email / telegram'},
+          {k:'load_id', label:'Load ID', type:'number'},
+        ]
+      },
+    };
+
+    async function loadEntityPage(slug) {
+      const schema = ENTITY_SCHEMAS[slug];
+      if (!schema) return;
+      const containerId = `page-${slug}-content`;
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      if (!token) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-lock"></i></div><div class="empty-title">Sign in required</div></div>';
+        return;
+      }
+      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading...</div>';
+      try {
+        const r = await fetch(`/api/entities/${slug}`, { headers: authH() });
+        if (!r.ok) throw new Error('Failed');
+        const d = await r.json();
+        const items = d.items || [];
+        if (!items.length) {
+          el.innerHTML = `<div class="card" style="padding:48px;text-align:center;">
+            <div style="font-size:2.5rem;margin-bottom:12px;opacity:0.4;">📋</div>
+            <div style="font-weight:600;margin-bottom:6px;">No ${schema.title.toLowerCase()}s yet</div>
+            <div style="font-size:0.83rem;color:var(--text-muted);margin-bottom:14px;">Click "New" above to add one</div>
+            <button class="btn-blue" onclick="openEntityModal('${slug}')">+ New ${schema.title}</button>
+          </div>`;
+          return;
+        }
+        const cols = schema.listCols;
+        const headers = cols.map(c => `<th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">${c.replace(/_/g,' ')}</th>`).join('');
+        const rows = items.map(it => {
+          const cells = cols.map(c => {
+            let v = it[c];
+            if (v === null || v === undefined || v === '') v = '—';
+            else if (typeof v === 'boolean') v = v ? 'Yes' : 'No';
+            else if (typeof v === 'number' && (c === 'amount' || c === 'cost')) v = '$' + v.toLocaleString();
+            else if (typeof v === 'string' && v.length > 60) v = v.substring(0,60) + '…';
+            return `<td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${v}</td>`;
+          }).join('');
+          return `<tr>${cells}<td style="padding:10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">
+            <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;" onclick='openEntityModal("${slug}", ${JSON.stringify(it).replace(/'/g, "&#39;")})'>Edit</button>
+            <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;color:#ef4444;" onclick="deleteEntity('${slug}', ${it.id})">Delete</button>
+          </td></tr>`;
+        }).join('');
+        el.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:var(--surface-2);">${headers}<th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+      } catch (e) {
+        el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Failed to load</div>';
+      }
+    }
+
+    let _entityEditing = null;
+    function openEntityModal(slug, existing) {
+      const schema = ENTITY_SCHEMAS[slug];
+      if (!schema) return;
+      _entityEditing = { slug, id: existing ? existing.id : null };
+      document.getElementById('entity-modal-title').textContent = (existing ? 'Edit ' : 'New ') + schema.title;
+      const fieldsEl = document.getElementById('entity-modal-fields');
+      fieldsEl.innerHTML = schema.fields.map(f => {
+        const v = existing ? (existing[f.k] ?? '') : '';
+        const safe = String(v).replace(/"/g,'&quot;');
+        const req = f.required ? 'required' : '';
+        if (f.type === 'textarea') {
+          return `<div class="field"><label>${f.label}${f.required?' *':''}</label>
+            <textarea id="ef-${f.k}" rows="3" placeholder="${f.placeholder||''}" ${req}>${safe}</textarea></div>`;
+        }
+        const t = f.type || 'text';
+        return `<div class="field"><label>${f.label}${f.required?' *':''}</label>
+          <input type="${t}" id="ef-${f.k}" value="${safe}" placeholder="${f.placeholder||''}" ${req}/></div>`;
+      }).join('');
+      document.getElementById('entity-modal').style.display = 'flex';
+    }
+
+    function closeEntityModal() {
+      document.getElementById('entity-modal').style.display = 'none';
+      _entityEditing = null;
+    }
+
+    async function saveEntityModal() {
+      if (!_entityEditing) return;
+      const { slug, id } = _entityEditing;
+      const schema = ENTITY_SCHEMAS[slug];
+      const body = {};
+      for (const f of schema.fields) {
+        const inp = document.getElementById('ef-' + f.k);
+        if (!inp) continue;
+        let v = inp.value;
+        if (v === '') continue;
+        if (f.type === 'number') v = Number(v);
+        body[f.k] = v;
+      }
+      try {
+        const url = id ? `/api/entities/${slug}/${id}` : `/api/entities/${slug}`;
+        const r = await fetch(url, {
+          method: id ? 'PATCH' : 'POST',
+          headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          alert(err.detail || 'Save failed');
+          return;
+        }
+        closeEntityModal();
+        loadEntityPage(slug);
+      } catch (e) {
+        alert('Save failed: ' + e.message);
+      }
+    }
+
+    async function deleteEntity(slug, id) {
+      if (!confirm('Delete this record?')) return;
+      try {
+        const r = await fetch(`/api/entities/${slug}/${id}`, { method: 'DELETE', headers: authH() });
+        if (!r.ok) {
+          alert('Delete failed');
+          return;
+        }
+        loadEntityPage(slug);
+      } catch (e) {
+        alert('Delete failed: ' + e.message);
+      }
+    }
+
     async function loadAnalyticsPage() {
       if (!token) {
         document.getElementById('analytics-content').innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-lock"></i></div><div class="empty-title">Sign in required</div></div>';
@@ -4500,7 +5105,13 @@ Rate: {{total_rate_usd}}
     document.getElementById('tg-send-btn').addEventListener('click', sendTgMessage);
 
     // ── Init ──────────────────────────────────────────────────────────────
-    initUser();
+    initUser().then(() => {
+      if (token) {
+        // Land on dashboard for signed-in users so the wide layout activates
+        document.querySelector('.content').classList.add('wide');
+        loadDashboardPage();
+      }
+    });
   </script>
 </body>
 </html>

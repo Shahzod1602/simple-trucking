@@ -206,6 +206,201 @@ def init_db():
         conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS broker_name TEXT")
         conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS deadhead_miles TEXT")
         conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS charge TEXT")
+        conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS motive_dispatch_id INTEGER")
+        conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS customer_id INTEGER")
+        conn.execute("ALTER TABLE loads ADD COLUMN IF NOT EXISTS trailer_id INTEGER")
+
+        # ── Customer Management ───────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS customers (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                mc_number TEXT,
+                dot_number TEXT,
+                contact_name TEXT,
+                email TEXT,
+                phone TEXT,
+                address TEXT,
+                credit_score TEXT,
+                payment_terms TEXT,
+                notes TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_company ON customers(company_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS vendors (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                category TEXT,
+                contact_name TEXT,
+                email TEXT,
+                phone TEXT,
+                address TEXT,
+                tax_id TEXT,
+                payment_terms TEXT,
+                notes TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_vendors_company ON vendors(company_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS locations (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                address TEXT NOT NULL,
+                city TEXT,
+                state TEXT,
+                zip TEXT,
+                latitude DOUBLE PRECISION,
+                longitude DOUBLE PRECISION,
+                location_type TEXT,
+                contact_name TEXT,
+                contact_phone TEXT,
+                notes TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_locations_company ON locations(company_id)")
+
+        # ── Fleet Management ──────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS trailers (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                unit_number TEXT NOT NULL,
+                trailer_type TEXT,
+                year TEXT,
+                make TEXT,
+                vin TEXT,
+                license_plate TEXT,
+                license_state TEXT,
+                status TEXT NOT NULL DEFAULT 'available',
+                notes TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trailers_company ON trailers(company_id)")
+
+        # ── Driver documents (CDL, medical card, etc.) ────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS driver_documents (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                driver_group_id INTEGER REFERENCES driver_groups(id) ON DELETE CASCADE,
+                doc_type TEXT NOT NULL,
+                doc_number TEXT,
+                issue_date DATE,
+                expiry_date DATE,
+                file_path TEXT,
+                notes TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_driver_docs_company ON driver_documents(company_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_driver_docs_expiry ON driver_documents(expiry_date)")
+
+        # ── Safety / Compliance ───────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS safety_tasks (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                task_type TEXT,
+                driver_group_id INTEGER REFERENCES driver_groups(id) ON DELETE SET NULL,
+                trailer_id INTEGER REFERENCES trailers(id) ON DELETE SET NULL,
+                due_date DATE,
+                completed_at TIMESTAMP,
+                priority TEXT NOT NULL DEFAULT 'normal',
+                status TEXT NOT NULL DEFAULT 'open',
+                notes TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_safety_company ON safety_tasks(company_id)")
+
+        # ── Accounting / Bills / Transactions ─────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS bills (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL,
+                bill_number TEXT,
+                amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+                bill_date DATE,
+                due_date DATE,
+                status TEXT NOT NULL DEFAULT 'unpaid',
+                category TEXT,
+                notes TEXT,
+                file_path TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bills_company ON bills(company_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                tx_date DATE NOT NULL,
+                tx_type TEXT NOT NULL,
+                amount DOUBLE PRECISION NOT NULL,
+                category TEXT,
+                description TEXT,
+                load_id INTEGER REFERENCES loads(id) ON DELETE SET NULL,
+                bill_id INTEGER REFERENCES bills(id) ON DELETE SET NULL,
+                driver_group_id INTEGER REFERENCES driver_groups(id) ON DELETE SET NULL,
+                reference TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_company_date ON transactions(company_id, tx_date DESC)")
+
+        # ── Maintenance / Work Orders ─────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS work_orders (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                wo_number TEXT,
+                title TEXT NOT NULL,
+                equipment_type TEXT,
+                equipment_ref TEXT,
+                trailer_id INTEGER REFERENCES trailers(id) ON DELETE SET NULL,
+                vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL,
+                opened_at DATE,
+                closed_at DATE,
+                cost DOUBLE PRECISION,
+                status TEXT NOT NULL DEFAULT 'open',
+                priority TEXT NOT NULL DEFAULT 'normal',
+                description TEXT,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_work_orders_company ON work_orders(company_id)")
+
+        # ── Mailbox (broker emails / notifications) ───────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mailbox_messages (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                dispatcher_id INTEGER REFERENCES dispatchers(id) ON DELETE SET NULL,
+                source TEXT NOT NULL DEFAULT 'system',
+                from_addr TEXT,
+                subject TEXT,
+                body TEXT,
+                load_id INTEGER REFERENCES loads(id) ON DELETE SET NULL,
+                is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                attachment_path TEXT,
+                received_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mailbox_company_received ON mailbox_messages(company_id, received_at DESC)")
 
         # Migrate kpi_entries: drop old unique constraint if exists (schema changed)
         try:
@@ -671,7 +866,7 @@ def update_load_fields(load_id: int, company_id: int, fields: dict) -> bool:
     allowed = {"group_id", "load_number", "origin_state", "destination_state",
                "total_rate_usd", "miles", "pickup_address", "pickup_date",
                "delivery_address", "delivery_date", "stops_json",
-               "broker_name", "deadhead_miles", "charge"}
+               "broker_name", "deadhead_miles", "charge", "motive_dispatch_id"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False
@@ -693,6 +888,38 @@ def update_load_stop_index(load_id: int, company_id: int, index: int) -> bool:
             (index, load_id, company_id),
         )
         return conn.rowcount > 0
+
+
+def get_load_by_motive_dispatch_id(motive_dispatch_id: int, company_id: int) -> dict | None:
+    """Motive dispatch_id bo'yicha yukni topish (dublikat import oldini olish)."""
+    with get_conn() as conn:
+        conn.execute(
+            """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
+                      d.name as dispatcher_name
+               FROM loads l
+               LEFT JOIN driver_groups dg ON l.group_id = dg.id
+               LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
+               WHERE l.motive_dispatch_id = %s AND d.company_id = %s""",
+            (motive_dispatch_id, company_id),
+        )
+        row = conn.fetchone()
+        return dict(row) if row else None
+
+
+def get_loads_with_motive_dispatch(company_id: int) -> list[dict]:
+    """Motive bilan sinxronlangan yuklar ro'yxati."""
+    with get_conn() as conn:
+        conn.execute(
+            """SELECT l.*, dg.name as driver_name, dg.eld_driver_id as driver_eld_id,
+                      d.name as dispatcher_name
+               FROM loads l
+               LEFT JOIN driver_groups dg ON l.group_id = dg.id
+               LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
+               WHERE l.motive_dispatch_id IS NOT NULL AND d.company_id = %s
+               ORDER BY l.created_at DESC""",
+            (company_id,),
+        )
+        return [dict(r) for r in conn.fetchall()]
 
 
 def update_load_eta(load_id: int, eta_utc: str, eta_miles: float) -> bool:
@@ -1312,3 +1539,174 @@ def get_all_kpi_entries(company_id: int, week_start: str) -> list[dict]:
             (company_id, week_start),
         )
         return [dict(r) for r in conn.fetchall()]
+
+
+# ── Generic CRUD helpers for company-scoped entities ──────────────────────────
+
+# Whitelisted columns per table to prevent SQL injection via field names
+_ENTITY_COLUMNS = {
+    "customers": ["name", "mc_number", "dot_number", "contact_name", "email", "phone",
+                  "address", "credit_score", "payment_terms", "notes"],
+    "vendors": ["name", "category", "contact_name", "email", "phone", "address",
+                "tax_id", "payment_terms", "notes"],
+    "locations": ["name", "address", "city", "state", "zip", "latitude", "longitude",
+                  "location_type", "contact_name", "contact_phone", "notes"],
+    "trailers": ["unit_number", "trailer_type", "year", "make", "vin", "license_plate",
+                 "license_state", "status", "notes"],
+    "driver_documents": ["driver_group_id", "doc_type", "doc_number", "issue_date",
+                         "expiry_date", "file_path", "notes"],
+    "safety_tasks": ["title", "task_type", "driver_group_id", "trailer_id", "due_date",
+                     "completed_at", "priority", "status", "notes"],
+    "bills": ["vendor_id", "bill_number", "amount", "bill_date", "due_date", "status",
+              "category", "notes", "file_path"],
+    "transactions": ["tx_date", "tx_type", "amount", "category", "description",
+                     "load_id", "bill_id", "driver_group_id", "reference"],
+    "work_orders": ["wo_number", "title", "equipment_type", "equipment_ref", "trailer_id",
+                    "vendor_id", "opened_at", "closed_at", "cost", "status", "priority",
+                    "description"],
+    "mailbox_messages": ["dispatcher_id", "source", "from_addr", "subject", "body",
+                         "load_id", "is_read", "attachment_path", "received_at"],
+}
+
+
+def _filter_fields(table: str, data: dict) -> dict:
+    allowed = set(_ENTITY_COLUMNS.get(table, []))
+    return {k: v for k, v in data.items() if k in allowed}
+
+
+def list_entities(table: str, company_id: int, limit: int = 500) -> list[dict]:
+    if table not in _ENTITY_COLUMNS:
+        raise ValueError(f"Unknown table: {table}")
+    with get_conn() as conn:
+        conn.execute(
+            f"SELECT * FROM {table} WHERE company_id = %s ORDER BY id DESC LIMIT %s",
+            (company_id, limit),
+        )
+        return [dict(r) for r in conn.fetchall()]
+
+
+def get_entity(table: str, entity_id: int, company_id: int) -> dict | None:
+    if table not in _ENTITY_COLUMNS:
+        raise ValueError(f"Unknown table: {table}")
+    with get_conn() as conn:
+        conn.execute(
+            f"SELECT * FROM {table} WHERE id = %s AND company_id = %s",
+            (entity_id, company_id),
+        )
+        row = conn.fetchone()
+        return dict(row) if row else None
+
+
+def create_entity(table: str, company_id: int, data: dict) -> dict:
+    if table not in _ENTITY_COLUMNS:
+        raise ValueError(f"Unknown table: {table}")
+    fields = _filter_fields(table, data)
+    now = datetime.now(timezone.utc)
+    cols = ["company_id"] + list(fields.keys()) + ["created_at"]
+    vals = [company_id] + list(fields.values()) + [now]
+    placeholders = ", ".join(["%s"] * len(vals))
+    col_list = ", ".join(cols)
+    with get_conn() as conn:
+        conn.execute(
+            f"INSERT INTO {table} ({col_list}) VALUES ({placeholders}) RETURNING *",
+            tuple(vals),
+        )
+        row = conn.fetchone()
+        return dict(row)
+
+
+def update_entity(table: str, entity_id: int, company_id: int, data: dict) -> dict | None:
+    if table not in _ENTITY_COLUMNS:
+        raise ValueError(f"Unknown table: {table}")
+    fields = _filter_fields(table, data)
+    if not fields:
+        return get_entity(table, entity_id, company_id)
+    setters = ", ".join(f"{k} = %s" for k in fields.keys())
+    with get_conn() as conn:
+        conn.execute(
+            f"UPDATE {table} SET {setters} WHERE id = %s AND company_id = %s RETURNING *",
+            (*fields.values(), entity_id, company_id),
+        )
+        row = conn.fetchone()
+        return dict(row) if row else None
+
+
+def delete_entity(table: str, entity_id: int, company_id: int) -> bool:
+    if table not in _ENTITY_COLUMNS:
+        raise ValueError(f"Unknown table: {table}")
+    with get_conn() as conn:
+        conn.execute(
+            f"DELETE FROM {table} WHERE id = %s AND company_id = %s",
+            (entity_id, company_id),
+        )
+        return conn.rowcount > 0
+
+
+# ── Dashboard summary ─────────────────────────────────────────────────────────
+
+def dashboard_summary(company_id: int) -> dict:
+    """Aggregate metrics for the dashboard landing page."""
+    with get_conn() as conn:
+        conn.execute(
+            """SELECT
+                 COUNT(*) FILTER (WHERE status = 'upcoming')   AS upcoming_loads,
+                 COUNT(*) FILTER (WHERE status = 'dispatched') AS active_loads,
+                 COUNT(*) FILTER (WHERE status = 'delivered')  AS delivered_loads,
+                 COUNT(*)                                       AS total_loads,
+                 COALESCE(SUM(CASE WHEN total_rate_usd ~ '^[0-9.]+$' THEN total_rate_usd::DOUBLE PRECISION ELSE 0 END), 0) AS total_revenue
+               FROM loads l
+               JOIN dispatchers d ON l.dispatcher_id = d.id
+               WHERE d.company_id = %s""",
+            (company_id,),
+        )
+        loads_row = conn.fetchone() or {}
+
+        conn.execute(
+            """SELECT COUNT(*) AS cnt FROM driver_groups dg
+               JOIN dispatchers d ON dg.dispatcher_id = d.id
+               WHERE d.company_id = %s""",
+            (company_id,),
+        )
+        drivers_row = conn.fetchone() or {}
+
+        counts = {}
+        for tbl in ("customers", "vendors", "trailers", "locations"):
+            conn.execute(f"SELECT COUNT(*) AS cnt FROM {tbl} WHERE company_id = %s", (company_id,))
+            counts[tbl] = (conn.fetchone() or {}).get("cnt", 0)
+
+        conn.execute(
+            "SELECT COUNT(*) AS cnt FROM mailbox_messages WHERE company_id = %s AND is_read = FALSE",
+            (company_id,),
+        )
+        unread = (conn.fetchone() or {}).get("cnt", 0)
+
+        conn.execute(
+            """SELECT COUNT(*) AS cnt FROM safety_tasks
+               WHERE company_id = %s AND status = 'open'""",
+            (company_id,),
+        )
+        open_safety = (conn.fetchone() or {}).get("cnt", 0)
+
+        conn.execute(
+            """SELECT COUNT(*) AS cnt FROM driver_documents
+               WHERE company_id = %s AND expiry_date IS NOT NULL
+                 AND expiry_date <= (CURRENT_DATE + INTERVAL '30 days')""",
+            (company_id,),
+        )
+        expiring_docs = (conn.fetchone() or {}).get("cnt", 0)
+
+        return {
+            "upcoming_loads": int(loads_row.get("upcoming_loads", 0) or 0),
+            "active_loads": int(loads_row.get("active_loads", 0) or 0),
+            "delivered_loads": int(loads_row.get("delivered_loads", 0) or 0),
+            "total_loads": int(loads_row.get("total_loads", 0) or 0),
+            "total_revenue": float(loads_row.get("total_revenue", 0) or 0),
+            "drivers": int(drivers_row.get("cnt", 0) or 0),
+            "customers": int(counts.get("customers", 0)),
+            "vendors": int(counts.get("vendors", 0)),
+            "trailers": int(counts.get("trailers", 0)),
+            "locations": int(counts.get("locations", 0)),
+            "unread_mailbox": int(unread or 0),
+            "open_safety_tasks": int(open_safety or 0),
+            "expiring_documents": int(expiring_docs or 0),
+        }

@@ -1093,6 +1093,192 @@ async def api_eld_drivers(authorization: str | None = Header(default=None)):
     return {"drivers": all_drivers}
 
 
+# ------------------------------------------------------------------ #
+#  Motive Dispatch endpoints
+# ------------------------------------------------------------------ #
+
+
+@app.get("/api/motive/dispatches")
+async def api_motive_dispatches(
+    status: str | None = Query(default=None),
+    page: int = Query(default=1),
+    authorization: str | None = Header(default=None),
+):
+    """Motive'dan dispatchlar ro'yxatini olish."""
+    dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "motive_dispatches_list")
+    configs = database.get_eld_configs(dispatcher["id"])
+    motive_cfg = next((c for c in configs if c["provider"] == "motive"), None)
+    if not motive_cfg:
+        raise HTTPException(status_code=400, detail="Motive ELD not configured")
+    from eld.motive import MotiveClient
+    client = MotiveClient(motive_cfg["api_key"])
+    result = _retry_sync_call(client.get_dispatches, status=status, page_no=page)
+    return result
+
+
+@app.post("/api/motive/dispatches/{dispatch_id}/import")
+async def api_motive_import_dispatch(
+    dispatch_id: int,
+    authorization: str | None = Header(default=None),
+):
+    """Motive'dan bitta dispatchni RateCon'ga import qilish."""
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    _enforce_eld_rate_limit(dispatcher["id"], "motive_dispatch_import")
+
+    # Dublikat tekshirish
+    existing = database.get_load_by_motive_dispatch_id(dispatch_id, company_id)
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Bu dispatch allaqachon import qilingan (load #{existing['id']})")
+
+    configs = database.get_eld_configs(dispatcher["id"])
+    motive_cfg = next((c for c in configs if c["provider"] == "motive"), None)
+    if not motive_cfg:
+        raise HTTPException(status_code=400, detail="Motive ELD not configured")
+
+    from eld.motive import MotiveClient
+    client = MotiveClient(motive_cfg["api_key"])
+    dispatch = _retry_sync_call(client.get_dispatch, dispatch_id)
+    if not dispatch:
+        raise HTTPException(status_code=404, detail="Dispatch not found in Motive")
+
+    # Parse va load yaratish
+    load_data = MotiveClient.parse_dispatch_to_load(dispatch)
+    eld_driver_id = load_data.pop("eld_driver_id", None)
+    load = database.create_load(dispatcher["id"], load_data)
+    if not load:
+        raise HTTPException(status_code=500, detail="Failed to create load")
+
+    # motive_dispatch_id saqlash
+    database.update_load_fields(load["id"], company_id, {"motive_dispatch_id": dispatch_id})
+    load["motive_dispatch_id"] = dispatch_id
+    return {"ok": True, "load": load, "eld_driver_id": eld_driver_id}
+
+
+class MotivePushBody(BaseModel):
+    vehicle_id: str
+
+
+@app.post("/api/loads/{load_id}/motive/push")
+async def api_motive_push_load(
+    load_id: int,
+    body: MotivePushBody,
+    authorization: str | None = Header(default=None),
+):
+    """RateCon yukini Motive'ga yuborish. Haydovchi ilovada ko'radi."""
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    _enforce_eld_rate_limit(dispatcher["id"], "motive_dispatch_push")
+
+    load = database.get_load(load_id, company_id)
+    if not load:
+        raise HTTPException(status_code=404, detail="Load not found")
+    if load.get("motive_dispatch_id"):
+        raise HTTPException(status_code=409, detail="Bu yuk allaqachon Motive'ga yuborilgan")
+
+    # Haydovchi driver_id olish
+    if not load.get("driver_eld_id"):
+        raise HTTPException(status_code=400, detail="Yukga ELD haydovchi tayinlanmagan")
+    eld_driver_id = load["driver_eld_id"]
+    # "motive:12345" formatdan driver_id ajratish
+    if ":" in eld_driver_id:
+        provider, driver_id = eld_driver_id.split(":", 1)
+        if provider != "motive":
+            raise HTTPException(status_code=400, detail=f"Haydovchi Motive provayderda emas ({provider})")
+    else:
+        driver_id = eld_driver_id
+
+    configs = database.get_eld_configs(dispatcher["id"])
+    motive_cfg = next((c for c in configs if c["provider"] == "motive"), None)
+    if not motive_cfg:
+        raise HTTPException(status_code=400, detail="Motive ELD not configured")
+
+    from eld.motive import MotiveClient
+    client = MotiveClient(motive_cfg["api_key"])
+    dispatch = _retry_sync_call(client.push_dispatch, load, driver_id, body.vehicle_id)
+
+    motive_id = dispatch.get("id")
+    if motive_id:
+        database.update_load_fields(load_id, company_id, {"motive_dispatch_id": motive_id})
+
+    return {"ok": True, "motive_dispatch_id": motive_id, "dispatch": dispatch}
+
+
+class MotiveSyncBody(BaseModel):
+    direction: str = "push"  # "push" yoki "pull"
+
+
+@app.post("/api/loads/{load_id}/motive/sync-status")
+async def api_motive_sync_status(
+    load_id: int,
+    body: MotiveSyncBody,
+    authorization: str | None = Header(default=None),
+):
+    """Motive va RateCon o'rtasida yuk statusini sinxronlash."""
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    _enforce_eld_rate_limit(dispatcher["id"], "motive_dispatch_sync")
+
+    load = database.get_load(load_id, company_id)
+    if not load:
+        raise HTTPException(status_code=404, detail="Load not found")
+    if not load.get("motive_dispatch_id"):
+        raise HTTPException(status_code=400, detail="Bu yuk Motive bilan bog'lanmagan")
+
+    configs = database.get_eld_configs(dispatcher["id"])
+    motive_cfg = next((c for c in configs if c["provider"] == "motive"), None)
+    if not motive_cfg:
+        raise HTTPException(status_code=400, detail="Motive ELD not configured")
+
+    from eld.motive import MotiveClient
+    client = MotiveClient(motive_cfg["api_key"])
+
+    if body.direction == "push":
+        # RateCon → Motive
+        motive_status = MotiveClient.STATUS_MAP.get(load["status"])
+        if not motive_status:
+            raise HTTPException(status_code=400, detail=f"Status '{load['status']}' Motive'ga map qilib bo'lmaydi")
+        dispatch = _retry_sync_call(
+            client.update_dispatch_status, load["motive_dispatch_id"], motive_status,
+        )
+        return {"ok": True, "direction": "push", "motive_status": motive_status, "dispatch": dispatch}
+
+    elif body.direction == "pull":
+        # Motive → RateCon
+        dispatch = _retry_sync_call(client.get_dispatch, load["motive_dispatch_id"])
+        if not dispatch:
+            raise HTTPException(status_code=404, detail="Dispatch not found in Motive")
+        motive_status = dispatch.get("status", "")
+        ratecon_status = MotiveClient.REVERSE_STATUS_MAP.get(motive_status)
+        if ratecon_status and ratecon_status != load["status"]:
+            database.update_load_status(load_id, company_id, ratecon_status)
+
+        # Stop progress yangilash
+        stops = sorted(dispatch.get("dispatch_stops", []), key=lambda s: s.get("number", 0))
+        current_index = 0
+        for i, s in enumerate(stops):
+            if s.get("departed_at"):
+                current_index = i + 1
+            elif s.get("arrived_at"):
+                current_index = i
+                break
+        if current_index != load.get("current_stop_index", 0):
+            database.update_load_stop_index(load_id, company_id, current_index)
+
+        updated_load = database.get_load(load_id, company_id)
+        return {
+            "ok": True,
+            "direction": "pull",
+            "motive_status": motive_status,
+            "ratecon_status": ratecon_status,
+            "current_stop_index": current_index,
+            "load": updated_load,
+        }
+
+    raise HTTPException(status_code=400, detail="direction 'push' yoki 'pull' bo'lishi kerak")
+
+
 @app.get("/api/settings/google-maps")
 async def api_gmaps_get(authorization: str | None = Header(default=None)):
     require_superadmin(authorization)
@@ -2278,6 +2464,115 @@ async def api_earnings(authorization: str | None = Header(default=None)):
     worker_id = None if is_admin else dispatcher["id"]
     loads = database.get_earnings(company_id, worker_id)
     return {"earnings": loads}
+
+
+# ── Dashboard summary ─────────────────────────────────────────────────────────
+
+@app.get("/api/dashboard/summary")
+async def api_dashboard_summary(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    return database.dashboard_summary(company_id)
+
+
+# ── Generic entity CRUD endpoints ─────────────────────────────────────────────
+# Tables wired through database.list_entities/create_entity/update_entity/delete_entity.
+# URL slug ↔ table mapping. Slugs are kebab-case; tables are snake_case.
+
+_ENTITY_ROUTES = {
+    "customers": "customers",
+    "vendors": "vendors",
+    "locations": "locations",
+    "trailers": "trailers",
+    "driver-documents": "driver_documents",
+    "safety-tasks": "safety_tasks",
+    "bills": "bills",
+    "transactions": "transactions",
+    "work-orders": "work_orders",
+    "mailbox": "mailbox_messages",
+}
+
+
+def _resolve_entity_table(slug: str) -> str:
+    table = _ENTITY_ROUTES.get(slug)
+    if not table:
+        raise HTTPException(status_code=404, detail="Unknown entity")
+    return table
+
+
+@app.get("/api/entities/{slug}")
+async def api_list_entities(slug: str, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    table = _resolve_entity_table(slug)
+    return {"items": database.list_entities(table, company_id)}
+
+
+@app.get("/api/entities/{slug}/{entity_id}")
+async def api_get_entity(slug: str, entity_id: int, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    table = _resolve_entity_table(slug)
+    row = database.get_entity(table, entity_id, company_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    return row
+
+
+@app.post("/api/entities/{slug}")
+async def api_create_entity(slug: str, request: Request, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    table = _resolve_entity_table(slug)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
+    # Mailbox needs received_at default
+    if table == "mailbox_messages" and not body.get("received_at"):
+        from datetime import datetime as _dt, timezone as _tz
+        body["received_at"] = _dt.now(_tz.utc).isoformat()
+    if table == "transactions" and not body.get("tx_date"):
+        from datetime import date as _date
+        body["tx_date"] = _date.today().isoformat()
+    try:
+        row = database.create_entity(table, company_id, body)
+    except Exception as exc:
+        logger.warning("Create %s failed: %s", table, exc)
+        raise HTTPException(status_code=400, detail=f"Could not create record: {exc}")
+    _audit_event(dispatcher, f"{table}.create", table, str(row.get("id")))
+    return row
+
+
+@app.patch("/api/entities/{slug}/{entity_id}")
+async def api_update_entity(slug: str, entity_id: int, request: Request, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    table = _resolve_entity_table(slug)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
+    row = database.update_entity(table, entity_id, company_id, body)
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    _audit_event(dispatcher, f"{table}.update", table, str(entity_id))
+    return row
+
+
+@app.delete("/api/entities/{slug}/{entity_id}")
+async def api_delete_entity(slug: str, entity_id: int, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    table = _resolve_entity_table(slug)
+    if not database.delete_entity(table, entity_id, company_id):
+        raise HTTPException(status_code=404, detail="Not found")
+    _audit_event(dispatcher, f"{table}.delete", table, str(entity_id))
+    return {"ok": True}
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 Geocoding (Google Maps or Nominatim fallback) and routing (Google Maps or OSRM fallback).
 """
 
+import math
 import os
 from datetime import datetime, timedelta
 
@@ -12,6 +13,21 @@ NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse"
 OSRM = "https://router.project-osrm.org/route/v1/driving"
 
 HEADERS = {"User-Agent": "SimpleTruckingETA/1.0"}
+
+EARTH_RADIUS_MILES = 3958.7613
+
+
+def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle ('as the crow flies') distance in miles between two points.
+
+    Used to pre-filter nearby trucks without any API call before refining the
+    top candidates with real driving distance via get_route().
+    """
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return EARTH_RADIUS_MILES * 2 * math.asin(min(1.0, math.sqrt(a)))
 
 
 def _get_gmaps_key(api_key: str | None = None) -> str:

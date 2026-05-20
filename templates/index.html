@@ -560,6 +560,26 @@
     #map-container { height: 500px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); }
     .map-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
     .map-status { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--text-muted); }
+    .nearby-input { padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: 'IBM Plex Sans', sans-serif; font-size: 0.84rem; color: var(--text); background: var(--card); outline: none; transition: border-color 0.15s; min-width: 220px; }
+    .nearby-input:focus { border-color: var(--primary); }
+    .nearby-select { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.82rem; color: var(--text); background: var(--card); cursor: pointer; }
+    .map-tip { font-size: 0.78rem; color: var(--text-muted); }
+    .map-layout { display: flex; gap: 12px; align-items: stretch; }
+    .map-layout #map-container { flex: 1; min-width: 0; }
+    #nearby-panel { width: 340px; flex-shrink: 0; height: 500px; overflow-y: auto; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; }
+    #nearby-panel .np-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+    #nearby-panel .np-title { font-family: 'Barlow Condensed', sans-serif; font-size: 0.95rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    #nearby-panel .np-sub { font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; }
+    .nearby-result { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+    .nearby-result:hover { border-color: var(--primary); background: var(--primary-light); }
+    .nearby-result .nr-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .nearby-result .nr-truck { font-weight: 700; font-size: 0.9rem; }
+    .nearby-result .nr-dist { font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; color: var(--primary); font-weight: 700; white-space: nowrap; }
+    .nearby-result .nr-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .nr-badge { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; }
+    .nr-badge.free { background: rgba(34,197,94,0.15); color: #16a34a; }
+    .nr-badge.busy { background: rgba(239,68,68,0.15); color: #dc2626; }
+    @media (max-width: 860px) { .map-layout { flex-direction: column; } #nearby-panel { width: auto; height: auto; max-height: 360px; } }
 
     /* ── File & auto-send buttons ── */
     .btn-file-upload { width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: none; color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 0.86rem; transition: all 0.15s; margin-left: 4px; }
@@ -1199,7 +1219,26 @@
           </label>
           <span class="map-status" id="map-status"></span>
         </div>
-        <div id="map-container"></div>
+        <div class="map-toolbar">
+          <input type="text" class="nearby-input" id="nearby-search" placeholder="Find trucks near address or city…" />
+          <button class="btn-outline" id="nearby-search-btn">🔍 Find nearby</button>
+          <select class="nearby-select" id="nearby-radius" title="Search radius">
+            <option value="50">Within 50 mi</option>
+            <option value="100">Within 100 mi</option>
+            <option value="150" selected>Within 150 mi</option>
+            <option value="250">Within 250 mi</option>
+            <option value="500">Within 500 mi</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-muted);cursor:pointer;">
+            <input type="checkbox" id="nearby-available" style="accent-color:var(--primary);"> Available only
+          </label>
+          <button class="btn-outline" id="nearby-clear" style="display:none;">✕ Clear</button>
+          <span class="map-tip">Tip: click anywhere on the map to drop a point.</span>
+        </div>
+        <div class="map-layout">
+          <div id="map-container"></div>
+          <div id="nearby-panel" style="display:none;"></div>
+        </div>
       </div>
 
       <!-- ── Trucks ── -->
@@ -4761,6 +4800,11 @@ Rate: {{total_rate_usd}}
     let leafletMap = null;
     let mapMarkers = [];
     let mapAutoRefreshTimer = null;
+    // ── Nearby-truck search state ──
+    let nearbyTarget = null;        // {lat, lon} of the chosen point
+    let nearbyTruckIds = null;      // Set of truck_ids inside the current radius (null = no active search)
+    let nearbyTargetMarker = null;
+    let nearbyRadiusCircle = null;
 
     async function loadMapPage() {
       if (!token) {
@@ -4775,6 +4819,7 @@ Rate: {{total_rate_usd}}
           attribution: '© OpenStreetMap contributors',
           maxZoom: 18,
         }).addTo(leafletMap);
+        leafletMap.on('click', e => runNearbySearch({ lat: e.latlng.lat, lon: e.latlng.lng }));
       }
       try {
         const r = await fetch('/api/map/locations', { headers: authH() });
@@ -4798,21 +4843,128 @@ Rate: {{total_rate_usd}}
         }
         locs.forEach(loc => {
           const marker = L.marker([loc.lat, loc.lon]).addTo(leafletMap);
+          marker._truckId = loc.truck_id;
           const speed = loc.speed_mph > 0 ? `${Math.round(loc.speed_mph)} mph` : 'Stopped';
           const driver = loc.driver_name ? `<br>Driver: ${esc(loc.driver_name)}` : '';
           const provider = loc.provider ? `<br>Provider: ${esc(loc.provider)}` : '';
           marker.bindPopup(`<strong>🚛 Truck ${esc(loc.truck_number || 'Unknown')}</strong>${driver}${provider}<br>Speed: ${speed}`);
           mapMarkers.push(marker);
         });
-        // Fit map to markers
-        if (mapMarkers.length === 1) {
-          leafletMap.setView([locs[0].lat, locs[0].lon], 8);
-        } else {
-          const group = L.featureGroup(mapMarkers);
-          leafletMap.fitBounds(group.getBounds().pad(0.2));
+        // Fit map to markers (skip when a nearby search owns the viewport)
+        if (!nearbyTarget) {
+          if (mapMarkers.length === 1) {
+            leafletMap.setView([locs[0].lat, locs[0].lon], 8);
+          } else {
+            const group = L.featureGroup(mapMarkers);
+            leafletMap.fitBounds(group.getBounds().pad(0.2));
+          }
         }
+        applyNearbyHighlight();   // dim/undim markers if a search is active
         document.getElementById('map-status').textContent = `${locs.length} truck${locs.length !== 1 ? 's' : ''} shown · Updated ${new Date().toLocaleTimeString()}`;
       } catch { document.getElementById('map-status').textContent = 'Failed to load locations'; }
+    }
+
+    // Dim markers outside the active radius; full opacity for matches.
+    function applyNearbyHighlight() {
+      mapMarkers.forEach(m => {
+        if (!nearbyTruckIds) { m.setOpacity(1); return; }
+        m.setOpacity(nearbyTruckIds.has(m._truckId) ? 1 : 0.3);
+      });
+    }
+
+    // Core: find trucks near a point. Pass {lat,lon} (map click) or {q} (address).
+    async function runNearbySearch(point) {
+      if (!token) { toast('Sign in required', 'error'); return; }
+      const panel = document.getElementById('nearby-panel');
+      const radius = document.getElementById('nearby-radius').value;
+      const availOnly = document.getElementById('nearby-available').checked;
+      // Make sure truck markers exist so we can highlight them.
+      if (!mapMarkers.length) await loadMapPage();
+
+      const params = new URLSearchParams({ radius_miles: radius, limit: '10', drive: 'true' });
+      if (availOnly) params.set('available_only', 'true');
+      if (point.q) params.set('q', point.q);
+      else { params.set('lat', point.lat); params.set('lon', point.lon); }
+
+      panel.style.display = 'block';
+      panel.innerHTML = '<p style="color:var(--text-muted);font-size:0.84rem;">Finding nearby trucks…</p>';
+      document.getElementById('nearby-clear').style.display = '';
+
+      let data;
+      try {
+        const r = await fetch('/api/map/nearby?' + params.toString(), { headers: authH() });
+        data = await r.json();
+        if (!r.ok) { panel.innerHTML = `<p style="color:var(--danger);font-size:0.84rem;">${esc(data.detail || 'Search failed')}</p>`; return; }
+      } catch { panel.innerHTML = '<p style="color:var(--danger);font-size:0.84rem;">Search failed</p>'; return; }
+
+      const tgt = data.target;
+      nearbyTarget = { lat: tgt.lat, lon: tgt.lon };
+      const trucks = data.trucks || [];
+      nearbyTruckIds = new Set(trucks.map(t => t.truck_id));
+
+      // Draw target marker + radius circle.
+      if (nearbyTargetMarker) nearbyTargetMarker.remove();
+      if (nearbyRadiusCircle) nearbyRadiusCircle.remove();
+      nearbyTargetMarker = L.circleMarker([tgt.lat, tgt.lon], {
+        radius: 8, color: '#dc2626', weight: 3, fillColor: '#dc2626', fillOpacity: 0.9,
+      }).addTo(leafletMap).bindPopup(`<strong>📍 Search point</strong><br>${esc(tgt.address || `${tgt.lat.toFixed(4)}, ${tgt.lon.toFixed(4)}`)}`);
+      nearbyRadiusCircle = L.circle([tgt.lat, tgt.lon], {
+        radius: data.radius_miles * 1609.34, color: '#2563eb', weight: 1, fillColor: '#2563eb', fillOpacity: 0.06,
+      }).addTo(leafletMap);
+
+      applyNearbyHighlight();
+      leafletMap.fitBounds(nearbyRadiusCircle.getBounds().pad(0.1));
+      renderNearbyPanel(data);
+      // Keep the search box in sync with the resolved address.
+      if (tgt.address) document.getElementById('nearby-search').value = tgt.address;
+    }
+
+    function renderNearbyPanel(data) {
+      const panel = document.getElementById('nearby-panel');
+      const trucks = data.trucks || [];
+      const where = data.target.address || `${data.target.lat.toFixed(4)}, ${data.target.lon.toFixed(4)}`;
+      const head = `<div class="np-head"><div>
+          <div class="np-title">Nearby trucks</div>
+          <div class="np-sub">${trucks.length} within ${Math.round(data.radius_miles)} mi${data.available_only ? ' · available only' : ''}<br>${esc(where)}</div>
+        </div></div>`;
+      if (!trucks.length) {
+        panel.innerHTML = head + '<p style="color:var(--text-muted);font-size:0.84rem;">No trucks in this radius. Try a wider radius or turn off "Available only".</p>';
+        return;
+      }
+      const items = trucks.map(t => {
+        const dist = (t.drive_miles != null) ? `${t.drive_miles} mi` : `${t.straight_miles} mi`;
+        const eta = (t.drive_minutes != null)
+          ? `🚚 ${t.drive_minutes < 60 ? t.drive_minutes + ' min' : (t.drive_minutes/60).toFixed(1) + ' h'} away`
+          : `${t.straight_miles} mi (straight)`;
+        const driver = t.driver_name ? esc(t.driver_name) : '—';
+        const moving = t.speed_mph > 3 ? '🟢 Rolling' : '🔴 Stopped';
+        const badge = t.available ? '<span class="nr-badge free">FREE</span>' : '<span class="nr-badge busy">ON LOAD</span>';
+        return `<div class="nearby-result" data-lat="${t.lat}" data-lon="${t.lon}" data-tid="${esc(String(t.truck_id))}">
+            <div class="nr-top"><span class="nr-truck">🚛 ${esc(t.truck_number)} ${badge}</span><span class="nr-dist">${dist}</span></div>
+            <div class="nr-meta"><span>👤 ${driver}</span><span>${eta}</span><span>${moving}</span></div>
+          </div>`;
+      }).join('');
+      panel.innerHTML = head + items;
+      panel.querySelectorAll('.nearby-result').forEach(el => {
+        el.addEventListener('click', () => {
+          const lat = parseFloat(el.dataset.lat), lon = parseFloat(el.dataset.lon);
+          leafletMap.setView([lat, lon], 9);
+          const m = mapMarkers.find(mk => String(mk._truckId) === el.dataset.tid);
+          if (m) m.openPopup();
+        });
+      });
+    }
+
+    function clearNearbySearch() {
+      nearbyTarget = null;
+      nearbyTruckIds = null;
+      if (nearbyTargetMarker) { nearbyTargetMarker.remove(); nearbyTargetMarker = null; }
+      if (nearbyRadiusCircle) { nearbyRadiusCircle.remove(); nearbyRadiusCircle = null; }
+      applyNearbyHighlight();
+      document.getElementById('nearby-panel').style.display = 'none';
+      document.getElementById('nearby-panel').innerHTML = '';
+      document.getElementById('nearby-clear').style.display = 'none';
+      document.getElementById('nearby-search').value = '';
     }
 
     document.getElementById('map-refresh-btn').addEventListener('click', loadMapPage);
@@ -4826,6 +4978,20 @@ Rate: {{total_rate_usd}}
         toast('Auto-refresh off');
       }
     });
+
+    // ── Nearby-truck search controls ──
+    function triggerNearbySearch() {
+      const q = document.getElementById('nearby-search').value.trim();
+      if (q) runNearbySearch({ q });
+      else if (nearbyTarget) runNearbySearch(nearbyTarget);   // re-run on current point
+      else toast('Type an address or click the map', 'error');
+    }
+    document.getElementById('nearby-search-btn').addEventListener('click', triggerNearbySearch);
+    document.getElementById('nearby-search').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); triggerNearbySearch(); } });
+    // Changing radius / filter re-runs the current search if one is active.
+    document.getElementById('nearby-radius').addEventListener('change', () => { if (nearbyTarget) runNearbySearch(nearbyTarget); });
+    document.getElementById('nearby-available').addEventListener('change', () => { if (nearbyTarget) runNearbySearch(nearbyTarget); });
+    document.getElementById('nearby-clear').addEventListener('click', clearNearbySearch);
 
     async function loadTrucksPage() {
       const el = document.getElementById('trucks-content');

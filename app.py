@@ -1994,6 +1994,116 @@ async def api_map_locations(authorization: str | None = Header(default=None)):
     return {"locations": locations}
 
 
+@app.get("/api/map/nearby")
+async def api_map_nearby(
+    lat: float | None = Query(default=None),
+    lon: float | None = Query(default=None),
+    q: str | None = Query(default=None, description="Address/place to search instead of lat/lon"),
+    radius_miles: float = Query(default=150),
+    limit: int = Query(default=10),
+    drive: bool = Query(default=True, description="Refine top results with real driving distance/time"),
+    available_only: bool = Query(default=False, description="Exclude trucks on an active load"),
+    authorization: str | None = Header(default=None),
+):
+    """Find trucks near a clicked point or searched address.
+
+    Hybrid strategy: haversine pre-filter over the (cached) fleet, then refine
+    only the top-N candidates with real driving distance/ETA via routing.
+    """
+    dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "map_locations_read")
+
+    gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
+
+    # Resolve the target point: explicit lat/lon wins, otherwise geocode `q`.
+    target_address: str | None = None
+    if lat is None or lon is None:
+        if not q or not q.strip():
+            raise HTTPException(status_code=400, detail="Provide lat & lon, or an address (q).")
+        geo = routing.geocode(q.strip(), gmaps_key)
+        if not geo:
+            raise HTTPException(status_code=400, detail=f"Could not find location: {q}")
+        lat, lon = geo["lat"], geo["lon"]
+        target_address = q.strip()
+
+    radius_miles = max(1.0, min(radius_miles, 3000.0))
+    limit = max(1, min(limit, 50))
+
+    trucks = _get_dispatcher_trucks(dispatcher["id"])
+
+    # Drivers currently on an active ('dispatched') load → "provider:raw_id" keys.
+    busy_keys: set[str] = set()
+    if available_only:
+        try:
+            for ld in database.get_loads(get_company_id(dispatcher)):
+                if ld.get("status") == "dispatched" and ld.get("driver_eld_id"):
+                    busy_keys.add(str(ld["driver_eld_id"]))
+        except Exception as exc:
+            logger.warning("nearby: failed to compute busy drivers: %s", exc)
+
+    def _is_busy(t: dict) -> bool:
+        drv = t.get("driver") or {}
+        if not drv.get("id"):
+            return False
+        # group eld_driver_id may be prefixed ("motive:123") or a bare id.
+        return f"{t.get('provider', '')}:{drv['id']}" in busy_keys or str(drv["id"]) in busy_keys
+
+    results = []
+    for t in trucks:
+        tlat, tlon = t.get("lat"), t.get("lon")
+        if tlat is None or tlon is None:
+            continue
+        busy = _is_busy(t)
+        if available_only and busy:
+            continue
+        dist = routing.haversine_miles(lat, lon, tlat, tlon)
+        if dist > radius_miles:
+            continue
+        drv = t.get("driver") or {}
+        results.append({
+            "truck_id": t.get("id"),
+            "truck_number": t.get("truck_number") or "Unknown",
+            "driver_name": drv.get("name") or None,
+            "provider": t.get("provider") or "",
+            "lat": tlat,
+            "lon": tlon,
+            "speed_mph": t.get("speed_mph") or 0,
+            "timestamp": t.get("timestamp"),
+            "straight_miles": round(dist, 1),
+            "available": not busy,
+        })
+
+    results.sort(key=lambda r: r["straight_miles"])
+    results = results[:limit]
+
+    # Hybrid refine: real driving distance/time for the shortlist only.
+    if drive and results:
+        target = {"lat": lat, "lon": lon}
+        for r in results:
+            try:
+                route = routing.get_route({"lat": r["lat"], "lon": r["lon"]}, target, gmaps_key)
+                r["drive_miles"] = round(route["distance_meters"] / 1609.34, 1)
+                r["drive_minutes"] = round(route["duration_seconds"] / 60)
+            except Exception:
+                r["drive_miles"] = None
+                r["drive_minutes"] = None
+        results.sort(key=lambda r: (r.get("drive_minutes") is None, r.get("drive_minutes") if r.get("drive_minutes") is not None else r["straight_miles"]))
+
+    if not target_address:
+        try:
+            target_address = routing.reverse_geocode(lat, lon)
+        except Exception:
+            target_address = None
+
+    return {
+        "target": {"lat": lat, "lon": lon, "address": target_address},
+        "radius_miles": radius_miles,
+        "available_only": available_only,
+        "count": len(results),
+        "trucks": results,
+    }
+
+
 # ── File storage API ──────────────────────────────────────────────────────────
 
 LOAD_FILE_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".webp"}

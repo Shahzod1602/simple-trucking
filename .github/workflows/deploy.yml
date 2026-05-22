@@ -19,7 +19,6 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           envs: GH_PAT
-          script_stop: true
           script: |
             set -e
             cd /opt/simple-trucking
@@ -31,7 +30,9 @@ jobs:
               ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
               git remote set-url origin git@github.com:Shahzod1602/simple-trucking.git
             fi
+            echo "=== Pulling latest code ==="
             git pull origin main
+            echo "=== Pull successful ==="
             ATTEMPT=1
             MAX_ATTEMPTS=3
             until [ "$ATTEMPT" -gt "$MAX_ATTEMPTS" ]; do

@@ -1946,8 +1946,10 @@ Rate: {{total_rate_usd}}
           resultTa.value = fillTpl(currentTpl, data.data);
           document.getElementById('json-out').textContent = JSON.stringify(data.data, null, 2);
           document.getElementById('res-tabs').style.display = 'flex';
-          document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', i===0));
-          document.querySelectorAll('.tab-pane').forEach((p,i) => p.classList.toggle('active', i===0));
+          const resTabs = document.querySelectorAll('#res-tabs .tab');
+          const resPanes = document.querySelectorAll('#result-section .tab-pane');
+          resTabs.forEach((t,i) => t.classList.toggle('active', i===0));
+          resPanes.forEach((p,i) => p.classList.toggle('active', i===0));
           if (token) { sendBtn.classList.add('visible'); document.getElementById('save-load-btn').classList.add('visible'); }
           showRouteMap(data.data.stops || []);
           toast('Data extracted successfully', 'success');
@@ -2015,10 +2017,10 @@ Rate: {{total_rate_usd}}
     });
 
     // ── Result tabs ───────────────────────────────────────────────────────
-    document.querySelectorAll('.tab').forEach(btn => {
+    document.querySelectorAll('#res-tabs .tab').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('#res-tabs .tab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#result-section .tab-pane').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById('tp-' + btn.dataset.tab).classList.add('active');
         if (btn.dataset.tab === 'routemap' && extractRouteMap) {

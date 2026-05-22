@@ -1878,6 +1878,7 @@ async def api_geocode_stops(body: GeocodeStopsBody):
     for stop in body.stops:
         addr = stop.get("address", {})
         parts = [
+            addr.get("address_line_1", ""),
             addr.get("address_line_2", ""),
             addr.get("city", ""),
             addr.get("state", ""),

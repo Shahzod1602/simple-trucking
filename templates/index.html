@@ -2052,7 +2052,20 @@ Rate: {{total_rate_usd}}
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stops }),
         });
-        if (!resp.ok) { tabBtn.style.display = 'none'; return; }
+        if (!resp.ok) {
+          console.error('geocode-stops error:', resp.status, await resp.text());
+          legend.textContent = 'Geocoding failed — could not map stops';
+          const container = document.getElementById('extract-route-map');
+          if (!extractRouteMap) {
+            extractRouteMap = L.map(container, { scrollWheelZoom: true }).setView([39.5, -98.35], 4);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              attribution: '&copy; OpenStreetMap contributors',
+              maxZoom: 18,
+            }).addTo(extractRouteMap);
+          }
+          setTimeout(() => { if (extractRouteMap) extractRouteMap.invalidateSize(); }, 200);
+          return;
+        }
         const data = await resp.json();
         const locations = data.locations || [];
         const validPts = [];
@@ -2063,7 +2076,16 @@ Rate: {{total_rate_usd}}
           }
         });
         if (validPts.length === 0) {
-          tabBtn.style.display = 'none';
+          legend.textContent = 'No stops could be geocoded';
+          const container = document.getElementById('extract-route-map');
+          if (!extractRouteMap) {
+            extractRouteMap = L.map(container, { scrollWheelZoom: true }).setView([39.5, -98.35], 4);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              attribution: '&copy; OpenStreetMap contributors',
+              maxZoom: 18,
+            }).addTo(extractRouteMap);
+          }
+          setTimeout(() => { if (extractRouteMap) extractRouteMap.invalidateSize(); }, 200);
           return;
         }
 
@@ -2130,7 +2152,8 @@ Rate: {{total_rate_usd}}
 
         setTimeout(() => { if (extractRouteMap) extractRouteMap.invalidateSize(); }, 200);
       } catch (e) {
-        tabBtn.style.display = 'none';
+        console.error('showRouteMap error:', e);
+        legend.textContent = 'Geocoding error — check console for details';
       }
     }
 

@@ -1867,6 +1867,35 @@ async def extract_ratecon(file: UploadFile = File(...)):
         os.unlink(tmp_path)
 
 
+class GeocodeStopsBody(BaseModel):
+    stops: list[dict]
+
+
+@app.post("/api/geocode-stops")
+async def api_geocode_stops(body: GeocodeStopsBody):
+    results = []
+    gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    for stop in body.stops:
+        addr = stop.get("address", {})
+        parts = [
+            addr.get("address_line_2", ""),
+            addr.get("city", ""),
+            addr.get("state", ""),
+            addr.get("zip", ""),
+            addr.get("country", "USA"),
+        ]
+        address_str = ", ".join(p for p in parts if p)
+        if not address_str.strip():
+            results.append(None)
+            continue
+        try:
+            geo = routing.geocode(address_str, gmaps_key)
+            results.append(geo)
+        except Exception:
+            results.append(None)
+    return {"locations": results}
+
+
 # ── Company Info API ──────────────────────────────────────────────────────────
 
 class CompanyInfoBody(BaseModel):

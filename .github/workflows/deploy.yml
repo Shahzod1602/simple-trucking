@@ -15,17 +15,19 @@ jobs:
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: DEPLOY_SSH_KEY
+          password: ${{ secrets.SERVER_PASSWORD }}
+          envs: GH_PAT
           script_stop: true
           script: |
             set -e
             mkdir -p ~/.ssh
             ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-            printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
-            chmod 600 ~/.ssh/id_ed25519
             cd /opt/simple-trucking
-            git remote set-url origin git@github.com:Shahzod1602/simple-trucking.git
+            if [ -n "$GH_PAT" ]; then
+              git remote set-url origin "https://x-access-token:${GH_PAT}@github.com/Shahzod1602/simple-trucking.git"
+            else
+              git remote set-url origin git@github.com:Shahzod1602/simple-trucking.git
+            fi
             git pull origin main
             ATTEMPT=1
             MAX_ATTEMPTS=3

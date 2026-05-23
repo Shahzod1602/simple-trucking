@@ -1756,6 +1756,30 @@
     </div>
   </div>
 
+  <!-- Load Route Modal -->
+  <div class="overlay" id="load-route-modal">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:0;width:100%;max-width:900px;box-shadow:0 24px 64px rgba(0,0,0,0.5);overflow:hidden;display:flex;flex-direction:column;max-height:85vh;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);flex-shrink:0;">
+        <div>
+          <div style="font-size:1rem;font-weight:700;" id="load-route-modal-title">Route</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);" id="load-route-modal-sub"></div>
+        </div>
+        <button onclick="closeLoadRouteModal()" style="background:none;border:none;color:var(--text-muted);font-size:1.2rem;cursor:pointer;line-height:1;padding:4px;"><i class="ph-bold ph-x"></i></button>
+      </div>
+      <div style="display:flex;flex:1;min-height:0;">
+        <div style="flex:1;min-width:0;position:relative;">
+          <div id="load-route-map" style="width:100%;height:100%;min-height:400px;"></div>
+          <div class="map-overlay-spinner" id="load-route-spinner" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);color:#fff;font-weight:600;z-index:1000;">Loading route…</div>
+        </div>
+        <div style="width:240px;border-left:1px solid var(--border);padding:16px;overflow-y:auto;flex-shrink:0;background:var(--bg-secondary);">
+          <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">Stops</div>
+          <div id="load-route-stops" style="font-size:0.85rem;"></div>
+          <div id="load-route-summary" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:0.85rem;display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toasts"></div>
 
   <!-- Files Modal (Ratecon + BOL/POD + Invoice) -->
@@ -2292,7 +2316,14 @@ Rate: {{total_rate_usd}}
           extractRouteMarkers.push(marker);
         });
 
-        if (validPts.length >= 2) {
+        if (data.route_geometry && data.route_geometry.length > 0) {
+          const routeLatLngs = data.route_geometry.map(p => [p[0], p[1]]);
+          extractRouteLine = L.polyline(routeLatLngs, {
+            color: '#4585ff',
+            weight: 4,
+            opacity: 0.85,
+          }).addTo(extractRouteMap);
+        } else if (validPts.length >= 2) {
           extractRouteLine = L.polyline(latlngs, {
             color: '#4585ff',
             weight: 3,
@@ -4294,6 +4325,9 @@ Rate: {{total_rate_usd}}
           <td>${fmtDelay(delay)}</td>
           <td>${fmtLastEta(l)}</td>
           <td style="white-space:nowrap;">
+            <button class="btn-eta-refresh" title="View route on map" onclick="openLoadRouteModal(${l.id})">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 21 18 21 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+            </button>
             <button class="btn-eta-refresh" title="Refresh ETA" onclick="refreshEta(${l.id}, this)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
@@ -4557,6 +4591,165 @@ Rate: {{total_rate_usd}}
       if (r.ok) { toast('Load deleted'); loadLoadsPage(); }
       else toast('Failed to delete', 'error');
     }
+
+    // ── Load Route Modal ────────────────────────────────────────────────────
+    let loadRouteMap = null;
+    let loadRouteMarkers = [];
+    let loadRouteLine = null;
+
+    async function openLoadRouteModal(loadId) {
+      const modal = document.getElementById('load-route-modal');
+      const title = document.getElementById('load-route-modal-title');
+      const sub = document.getElementById('load-route-modal-sub');
+      const spinner = document.getElementById('load-route-spinner');
+      const stopsEl = document.getElementById('load-route-stops');
+      const summaryEl = document.getElementById('load-route-summary');
+      modal.classList.add('open');
+      spinner.style.display = 'flex';
+      stopsEl.innerHTML = '';
+      summaryEl.style.display = 'none';
+
+      try {
+        const r = await fetch('/api/loads', { headers: authH() });
+        if (!r.ok) { toast('Failed to load loads', 'error'); return; }
+        const data = await r.json();
+        const load = (data.loads || []).find(l => l.id === loadId);
+        if (!load) { toast('Load not found', 'error'); return; }
+
+        title.textContent = `Route — Load #${esc(load.load_number || load.id)}`;
+        sub.textContent = `${esc(load.origin_state || '?')} → ${esc(load.destination_state || '?')}`;
+
+        // Build stops from stops_json or fallback to pickup/delivery
+        let stops = [];
+        if (load.stops_json) {
+          try { stops = JSON.parse(load.stops_json); } catch { stops = []; }
+        }
+        if (!stops.length && (load.pickup_address || load.delivery_address)) {
+          if (load.pickup_address) stops.push({ type: 'pickup', address: { address_line_1: load.pickup_address }, date: load.pickup_date || '' });
+          if (load.delivery_address) stops.push({ type: 'delivery', address: { address_line_1: load.delivery_address }, date: load.delivery_date || '' });
+        }
+        if (!stops.length) {
+          stopsEl.innerHTML = '<div style="color:var(--text-muted);">No address data</div>';
+          spinner.style.display = 'none';
+          return;
+        }
+
+        // Render stops list
+        stopsEl.innerHTML = stops.map((s, i) => {
+          const addr = s.address || {};
+          const addrStr = [addr.address_line_1, addr.city, addr.state, addr.zip].filter(Boolean).join(', ') || (s.address && typeof s.address === 'string' ? s.address : '');
+          const typeLabel = s.type === 'pickup' ? 'Pickup' : (s.type === 'delivery' ? 'Delivery' : 'Stop');
+          const color = s.type === 'pickup' ? '#22c55e' : (s.type === 'delivery' ? '#ef4444' : '#4585ff');
+          return `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+            <div style="font-weight:700;color:${color};font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;">${typeLabel} ${i + 1}</div>
+            <div style="margin-top:2px;">${esc(addrStr)}</div>
+            <div style="color:var(--text-muted);font-size:0.78rem;margin-top:2px;">${esc(s.date || 'N/A')}</div>
+          </div>`;
+        }).join('');
+
+        // Geocode and show route
+        const geoResp = await fetch('/api/geocode-stops', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stops }),
+        });
+        spinner.style.display = 'none';
+        if (!geoResp.ok) {
+          stopsEl.innerHTML += '<div style="color:var(--danger);margin-top:8px;">Geocoding failed</div>';
+          return;
+        }
+        const geoData = await geoResp.json();
+        const locations = geoData.locations || [];
+        const validPts = [];
+        stops.forEach((stop, i) => {
+          const loc = locations[i];
+          if (loc && loc.lat != null && loc.lon != null) {
+            validPts.push({ lat: loc.lat, lon: loc.lon, stop, index: i });
+          }
+        });
+        if (validPts.length === 0) {
+          stopsEl.innerHTML += '<div style="color:var(--danger);margin-top:8px;">No stops geocoded</div>';
+          return;
+        }
+
+        const container = document.getElementById('load-route-map');
+        if (!loadRouteMap) {
+          loadRouteMap = L.map(container, { scrollWheelZoom: true }).setView([39.5, -98.35], 4);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 18,
+          }).addTo(loadRouteMap);
+        }
+
+        loadRouteMarkers.forEach(m => m.remove());
+        loadRouteMarkers = [];
+        if (loadRouteLine) { loadRouteLine.remove(); loadRouteLine = null; }
+
+        const pickupColor = '#22c55e';
+        const deliveryColor = '#ef4444';
+        const stopColor = '#4585ff';
+
+        validPts.forEach((pt, idx) => {
+          const isPickup = pt.stop.type === 'pickup';
+          const isDelivery = pt.stop.type === 'delivery';
+          const color = isPickup ? pickupColor : (isDelivery ? deliveryColor : stopColor);
+          const stopNum = pt.index + 1;
+          const icon = L.divIcon({
+            className: '',
+            html: `<div style="background:${color};color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:0.82rem;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);border:2px solid #fff;">${stopNum}</div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+          });
+          const addr = pt.stop.address || {};
+          const addrStr = [addr.address_line_1, addr.address_line_2, addr.city, addr.state, addr.zip].filter(Boolean).join(', ');
+          const typeLabel = isPickup ? 'Pickup' : (isDelivery ? 'Delivery' : 'Stop');
+          const marker = L.marker([pt.lat, pt.lon], { icon }).addTo(loadRouteMap);
+          marker.bindPopup(`<strong>${typeLabel} ${stopNum}</strong><br>${esc(addrStr)}<br><span style="color:#888;font-size:0.85em;">APPT: ${esc(pt.stop.date || 'N/A')}</span>`);
+          loadRouteMarkers.push(marker);
+        });
+
+        if (geoData.route_geometry && geoData.route_geometry.length > 0) {
+          const routeLatLngs = geoData.route_geometry.map(p => [p[0], p[1]]);
+          loadRouteLine = L.polyline(routeLatLngs, {
+            color: '#4585ff',
+            weight: 4,
+            opacity: 0.85,
+          }).addTo(loadRouteMap);
+        } else if (validPts.length >= 2) {
+          const latlngs = validPts.map(p => [p.lat, p.lon]);
+          loadRouteLine = L.polyline(latlngs, {
+            color: '#4585ff',
+            weight: 3,
+            opacity: 0.7,
+            dashArray: '6 8',
+          }).addTo(loadRouteMap);
+        }
+
+        if (validPts.length === 1) {
+          loadRouteMap.setView([validPts[0].lat, validPts[0].lon], 10);
+        } else {
+          loadRouteMap.fitBounds(L.latLngBounds(validPts.map(p => [p.lat, p.lon])).pad(0.15));
+        }
+
+        if (geoData.route_summary && summaryEl) {
+          const rs = geoData.route_summary;
+          summaryEl.innerHTML = `<span><i class="ph-bold ph-road-horizon" style="font-size:0.85rem;"></i> <strong>${rs.total_miles}</strong> mi</span><span style="margin-left:8px;"><i class="ph-bold ph-clock" style="font-size:0.85rem;"></i> <strong>${rs.duration_text}</strong></span>`;
+          summaryEl.style.display = 'flex';
+        }
+
+        setTimeout(() => { if (loadRouteMap) loadRouteMap.invalidateSize(); }, 200);
+      } catch (e) {
+        spinner.style.display = 'none';
+        console.error('openLoadRouteModal error:', e);
+        toast('Failed to show route', 'error');
+      }
+    }
+
+    function closeLoadRouteModal() {
+      document.getElementById('load-route-modal').classList.remove('open');
+    }
+
+    document.getElementById('load-route-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeLoadRouteModal(); });
 
     // ── Save Load ──────────────────────────────────────────────────────────
     let slSelectedGid = null;

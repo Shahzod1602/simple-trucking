@@ -131,6 +131,77 @@ def _get_route_google(origin: dict, destination: dict, api_key: str) -> dict | N
         return None
 
 
+def decode_polyline(encoded: str) -> list[tuple[float, float]]:
+    """Decode a Google Maps encoded polyline string into [(lat, lon), ...]."""
+    index = 0
+    lat = 0
+    lon = 0
+    coordinates = []
+    while index < len(encoded):
+        for unit in ["latitude", "longitude"]:
+            shift = 0
+            result = 0
+            while True:
+                byte = ord(encoded[index]) - 63
+                index += 1
+                result |= (byte & 0x1F) << shift
+                shift += 5
+                if not (byte & 0x20):
+                    break
+            if result & 1:
+                change = ~(result >> 1)
+            else:
+                change = result >> 1
+            if unit == "latitude":
+                lat += change
+            else:
+                lon += change
+        coordinates.append((lat / 1e5, lon / 1e5))
+    return coordinates
+
+
+def get_route_geometry(
+    origin: dict, destination: dict, api_key: str | None = None
+) -> list[tuple[float, float]] | None:
+    """
+    Return the actual driving route geometry between two {lat, lon} points
+    as a list of (lat, lon) tuples. Uses Google Directions if a key is
+    available, otherwise OSRM.
+    """
+    key = _get_gmaps_key(api_key)
+    if key:
+        resp = httpx.get(
+            "https://maps.googleapis.com/maps/api/directions/json",
+            params={
+                "origin": f"{origin['lat']},{origin['lon']}",
+                "destination": f"{destination['lat']},{destination['lon']}",
+                "mode": "driving",
+                "key": key,
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("status") == "OK" and data.get("routes"):
+            encoded = data["routes"][0]["overview_polyline"]["points"]
+            return decode_polyline(encoded)
+
+    # OSRM fallback
+    coords = f"{origin['lon']},{origin['lat']};{destination['lon']},{destination['lat']}"
+    resp = httpx.get(
+        f"{OSRM}/{coords}",
+        params={"overview": "full", "geometries": "polyline"},
+        headers=HEADERS,
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("code") != "Ok" or not data.get("routes"):
+        return None
+    encoded = data["routes"][0]["geometry"]
+    return decode_polyline(encoded)
+
+
 def get_route(origin: dict, destination: dict, api_key: str | None = None) -> dict:
     """
     Calculate route between two {lat, lon} points.

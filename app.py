@@ -1897,6 +1897,7 @@ async def api_geocode_stops(body: GeocodeStopsBody):
 
     # Calculate total route distance and duration across valid consecutive stops
     route_summary = None
+    route_geometry = []
     valid_points = [r for r in results if r and r.get("lat") is not None and r.get("lon") is not None]
     if len(valid_points) >= 2:
         total_miles = 0.0
@@ -1906,6 +1907,12 @@ async def api_geocode_stops(body: GeocodeStopsBody):
                 route = routing.get_route(valid_points[i], valid_points[i + 1], gmaps_key)
                 total_miles += route["distance_meters"] / 1609.34
                 total_duration_min += route["duration_seconds"] / 60
+            except Exception:
+                pass
+            try:
+                seg = routing.get_route_geometry(valid_points[i], valid_points[i + 1], gmaps_key)
+                if seg:
+                    route_geometry.extend(seg)
             except Exception:
                 pass
         if total_miles > 0:
@@ -1918,7 +1925,7 @@ async def api_geocode_stops(body: GeocodeStopsBody):
                 "duration_text": f"{hours}h {mins}m" if hours > 0 else f"{mins}m",
             }
 
-    return {"locations": results, "route_summary": route_summary}
+    return {"locations": results, "route_summary": route_summary, "route_geometry": route_geometry}
 
 
 # ── Company Info API ──────────────────────────────────────────────────────────

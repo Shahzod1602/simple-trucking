@@ -2139,7 +2139,9 @@ Rate: {{total_rate_usd}}
       if (!file) { iframe.src = ''; img.src = ''; return; }
       const url = URL.createObjectURL(file);
       if (file.type === 'application/pdf') {
-        iframe.src = url;
+        // #view=FitH → fit the page to the column width so it fills the panel
+        // instead of rendering as a tiny strip with big grey margins
+        iframe.src = url + '#view=FitH&toolbar=0&navpanes=0';
         iframe.style.display = 'block';
         ph.style.display = 'none';
         iframe.onload = () => URL.revokeObjectURL(url);

@@ -314,6 +314,28 @@
       border-radius: 50%; animation: spin 0.75s linear infinite;
     }
     .extract-layout { }
+
+    /* ── Full-screen results mode (desktop) ── */
+    @media (min-width: 769px) {
+      body.extract-fs .content { padding: 0; max-width: none; height: 100vh; overflow: hidden; }
+      body.extract-fs #page-extract { display: flex; flex-direction: column; height: 100vh; min-height: 0; }
+      body.extract-fs #page-extract > .page-header,
+      body.extract-fs #page-extract > #upload-card,
+      body.extract-fs #page-extract > .sec-header,
+      body.extract-fs #page-extract > .tpl-wrap { display: none; }
+      body.extract-fs .result-section { flex: 1; min-height: 0; margin: 0; display: flex; flex-direction: column; }
+      body.extract-fs .result-header { margin: 0; padding: 11px 22px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; }
+      body.extract-fs .extract-3col { height: auto; flex: 1; min-height: 0; }
+      /* let the left column's editor grow to fill the full height */
+      body.extract-fs .extract-3col-left { display: flex; }
+      body.extract-fs .extract-3col-left > .card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+      body.extract-fs #tp-tpl.active { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+      body.extract-fs #result-ta { flex: 1; min-height: 0; resize: none; }
+      body.extract-fs #tp-json.active { flex: 1; min-height: 0; overflow: auto; }
+    }
+    .new-extract-btn { display: none; }
+    body.extract-fs .new-extract-btn { display: inline-flex; align-items: center; gap: 5px; }
+
     @media (max-width: 1100px) {
       .extract-3col { grid-template-columns: 1fr 1fr; min-height: auto; max-height: none; }
       .extract-3col-mid { grid-column: 1 / -1; border-right: none; border-bottom: 1px solid var(--border); }
@@ -842,11 +864,12 @@
         <!-- ── Result: 3-column layout ── -->
         <div class="result-section" id="result-section">
           <div class="result-header">
-            <div style="display:flex;align-items:center;gap:10px;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
               <span style="font-weight:700;">Result</span>
               <span class="badge" id="status-badge"></span>
+              <div class="result-meta" id="result-meta"></div>
             </div>
-            <div class="result-meta" id="result-meta"></div>
+            <button class="btn-outline new-extract-btn" id="new-extract-btn" title="Extract another file"><i class="ph-bold ph-arrow-up"></i> New file</button>
           </div>
           <div class="extract-3col">
             <div class="extract-3col-left">
@@ -1972,6 +1995,7 @@ Rate: {{total_rate_usd}}
     };
     const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract']);
     function goTo(page) {
+      if (page !== 'extract') document.body.classList.remove('extract-fs');
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
       const target = document.getElementById('page-' + page);
@@ -2063,12 +2087,30 @@ Rate: {{total_rate_usd}}
     fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
     document.getElementById('clear-file-btn').addEventListener('click', (e) => { e.stopPropagation(); clearFile(); });
 
+    function enterExtractFullscreen() {
+      document.body.classList.add('extract-fs');
+      // map/PDF containers just resized — let layout settle, then refresh the map
+      setTimeout(() => { if (extractRouteMap) extractRouteMap.invalidateSize(); }, 260);
+    }
+    function exitExtractFullscreen() {
+      document.body.classList.remove('extract-fs');
+      setTimeout(() => { if (extractRouteMap) extractRouteMap.invalidateSize(); }, 260);
+    }
+    // "New file" — leave full-screen review and pick another file
+    document.getElementById('new-extract-btn').addEventListener('click', () => {
+      exitExtractFullscreen();
+      clearFile();
+      window.scrollTo({ top: 0 });
+      fileInput.click();
+    });
+
     function clearFile() {
       selectedFile = null; fileInput.value = '';
       fileNameEl.textContent = '';
       selFileEl.classList.remove('visible');
       extractBtn.disabled = true;
       resultSec.classList.remove('visible');
+      exitExtractFullscreen();
       sendBtn.classList.remove('visible'); document.getElementById('save-load-btn').classList.remove('visible');
       dropZone.classList.remove('collapsed');
       showPdfPreview(null);
@@ -2124,6 +2166,7 @@ Rate: {{total_rate_usd}}
         resultSec.classList.add('visible');
         document.getElementById('err-body').innerHTML = '';
         if (data.status === 'ok') {
+          enterExtractFullscreen();
           document.getElementById('status-badge').className = 'badge ok';
           document.getElementById('status-badge').textContent = 'Success';
           lastExtractedData = data.data;
@@ -2147,6 +2190,7 @@ Rate: {{total_rate_usd}}
           showRouteMap(d.stops || []);
           toast('Data extracted successfully', 'success');
         } else {
+          exitExtractFullscreen();
           document.getElementById('status-badge').className = 'badge error';
           document.getElementById('status-badge').textContent = 'Error';
           document.getElementById('res-tabs').style.display = 'none';
@@ -2157,6 +2201,7 @@ Rate: {{total_rate_usd}}
           toast('Extraction failed', 'error');
         }
       } catch(e) {
+        exitExtractFullscreen();
         resultSec.classList.add('visible');
         document.getElementById('status-badge').className = 'badge error';
         document.getElementById('status-badge').textContent = 'Error';

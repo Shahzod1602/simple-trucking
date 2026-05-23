@@ -224,7 +224,7 @@
     .drop-zone.collapsed { padding: 12px 16px; }
     .drop-zone.collapsed .dz-icon,
     .drop-zone.collapsed .dz-hint,
-    .drop-zone.collapsed > p:not(.sel-file-inline) { display: none; }
+    .drop-zone.collapsed > p:first-of-type { display: none; }
     .drop-zone {
       border: 1.5px dashed var(--border); border-radius: var(--radius);
       padding: 40px 20px; text-align: center; cursor: pointer;
@@ -284,15 +284,22 @@
     /* ── Result ── */
     .result-section { margin-top: 22px; display: none; }
     .result-section.visible { display: block; }
-    .extract-layout { display: flex; gap: 16px; align-items: flex-start; }
-    .extract-left { flex: 1; min-width: 0; max-height: 70vh; overflow-y: auto; }
-    .extract-right { width: 46%; flex-shrink: 0; }
+    .extract-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: flex-start; }
+    .extract-3col-left { min-width: 0; max-height: 75vh; overflow-y: auto; }
+    .extract-3col-mid { min-width: 0; }
+    .extract-3col-right { min-width: 0; }
+    .extract-preview-sticky { position: sticky; top: 24px; }
+    .extract-preview-label { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.82rem; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:8px; }
+    .extract-pdf-wrap { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); height:500px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
     .extract-map-sticky { position: sticky; top: 24px; }
     .extract-map-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    @media (max-width: 900px) {
-      .extract-layout { flex-direction: column; }
-      .extract-right { width: 100%; }
-      .extract-left { max-height: none; }
+    @media (max-width: 1100px) {
+      .extract-3col { grid-template-columns: 1fr 1fr; }
+      .extract-3col-mid { grid-column: 1 / -1; }
+    }
+    @media (max-width: 768px) {
+      .extract-3col { grid-template-columns: 1fr; }
+      .extract-3col-left { max-height: none; }
     }
     .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     .badge {
@@ -788,7 +795,7 @@
           </div>
         </div>
 
-        <!-- ── Result: side-by-side layout ── -->
+        <!-- ── Result: 3-column layout ── -->
         <div class="result-section" id="result-section">
           <div class="result-header">
             <div style="display:flex;align-items:center;gap:10px;">
@@ -796,8 +803,8 @@
               <span class="badge" id="status-badge"></span>
             </div>
           </div>
-          <div class="extract-layout">
-            <div class="extract-left">
+          <div class="extract-3col">
+            <div class="extract-3col-left">
               <div class="card" style="margin-bottom:0;">
                 <div class="tabs" id="res-tabs">
                   <button class="tab active" data-tab="tpl">Template</button>
@@ -814,13 +821,26 @@
                 <div class="tab-pane" id="tp-json"><pre id="json-out"></pre></div>
               </div>
             </div>
-            <div class="extract-right">
+            <div class="extract-3col-mid">
+              <div class="extract-preview-sticky">
+                <div class="extract-preview-label">Original Document</div>
+                <div class="extract-pdf-wrap" id="pdf-preview-wrap">
+                  <iframe id="pdf-preview-iframe" style="width:100%;height:100%;border:none;border-radius:var(--radius);display:none;"></iframe>
+                  <img id="pdf-preview-img" style="width:100%;border-radius:var(--radius);display:none;" />
+                  <div id="pdf-preview-placeholder" style="height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-muted);">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span style="font-size:0.82rem;">Upload to preview</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="extract-3col-right">
               <div class="extract-map-sticky">
                 <div class="extract-map-header">
                   <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.82rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Route Map</span>
                   <span id="route-map-legend" style="font-size:0.75rem;color:var(--text-muted);"></span>
                 </div>
-                <div id="extract-route-map" style="height:460px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);"></div>
+                <div id="extract-route-map" style="height:460px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);display:none;"></div>
                 <div id="route-map-placeholder" style="height:460px;border-radius:var(--radius);border:1px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-muted);">
                   <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
                   <span style="font-size:0.85rem;">Extract a ratecon to see the route</span>
@@ -1962,6 +1982,28 @@ Rate: {{total_rate_usd}}
       if (placeholder) placeholder.style.display = 'flex';
       if (mapEl) mapEl.style.display = 'none';
       dropZone.classList.add('collapsed');
+      showPdfPreview(f);
+    }
+
+    function showPdfPreview(file) {
+      const iframe = document.getElementById('pdf-preview-iframe');
+      const img = document.getElementById('pdf-preview-img');
+      const ph = document.getElementById('pdf-preview-placeholder');
+      iframe.style.display = 'none'; img.style.display = 'none'; ph.style.display = 'flex';
+      const url = URL.createObjectURL(file);
+      if (file.type === 'application/pdf') {
+        iframe.src = url;
+        iframe.style.display = 'block';
+        ph.style.display = 'none';
+        iframe.onload = () => URL.revokeObjectURL(url);
+      } else if (file.type.startsWith('image/')) {
+        img.src = url;
+        img.style.display = 'block';
+        ph.style.display = 'none';
+        img.onload = () => URL.revokeObjectURL(url);
+      } else {
+        URL.revokeObjectURL(url);
+      }
     }
 
     extractBtn.addEventListener('click', async () => {

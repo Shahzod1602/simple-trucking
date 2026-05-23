@@ -329,9 +329,8 @@
       /* let the left column's editor grow to fill the full height */
       body.extract-fs .extract-3col-left { display: flex; }
       body.extract-fs .extract-3col-left > .card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-      body.extract-fs #tp-tpl.active { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+      body.extract-fs #tp-tpl { flex: 1; display: flex; flex-direction: column; min-height: 0; }
       body.extract-fs #result-ta { flex: 1; min-height: 0; resize: none; }
-      body.extract-fs #tp-json.active { flex: 1; min-height: 0; overflow: auto; }
     }
     .new-extract-btn { display: none; }
     body.extract-fs .new-extract-btn { display: inline-flex; align-items: center; gap: 5px; }
@@ -878,19 +877,14 @@
                   <span>Extracted Data</span>
                   <span id="extract-col-meta" style="font-size:0.75rem;color:var(--text-muted);"></span>
                 </div>
-                <div class="tabs" id="res-tabs">
-                  <button class="tab active" data-tab="tpl">Output</button>
-                  <button class="tab" data-tab="json">JSON</button>
-                </div>
-                <div class="tab-pane active" id="tp-tpl">
-                  <textarea class="mono-input" id="result-ta" style="min-height:280px;"></textarea>
+                <div id="tp-tpl">
+                  <textarea class="mono-input" id="result-ta" style="min-height:280px;margin-top:10px;"></textarea>
                   <div class="action-row">
                     <button class="btn-blue" id="copy-btn">Copy</button>
                     <button class="btn-green" id="send-btn" title="Send extracted data to Telegram group"><i class="ph-bold ph-paper-plane-tilt" style="vertical-align:-2px;margin-right:5px;"></i>Send</button>
                     <button class="btn-save-load" id="save-load-btn" title="Save extracted data as a new load"><i class="ph-bold ph-floppy-disk" style="vertical-align:-2px;margin-right:5px;"></i>Save Load</button>
                   </div>
                 </div>
-                <div class="tab-pane" id="tp-json"><pre id="json-out"></pre></div>
                 <div id="err-body"></div>
               </div>
             </div>
@@ -2036,19 +2030,6 @@ Rate: {{total_rate_usd}}
     document.getElementById('create-load-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeCreateLoadModal(); });
 
     // ── Template engine ───────────────────────────────────────────────────
-    function syntaxHighlightJson(obj) {
-      const json = JSON.stringify(obj, null, 2);
-      return json.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
-        .replace(/"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?/g, (match, isKey) => {
-          let cls = 'json-string';
-          if (/:$/.test(match)) { cls = 'json-key'; match = match.slice(0, -1) + '</span>:'; return `<span class="${cls}">${match}`; }
-          return `<span class="${cls}">${match}</span>`;
-        })
-        .replace(/\b(true|false)\b/g, '<span class="json-boolean">$1</span>')
-        .replace(/\b(null)\b/g, '<span class="json-null">$1</span>')
-        .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="json-number">$1</span>');
-    }
-
     function fillTpl(tpl, data) {
       let r = tpl;
       r = r.replace(/{{#stops}}([\s\S]*?){{\/stops}}/g, (_, block) =>
@@ -2172,13 +2153,8 @@ Rate: {{total_rate_usd}}
           document.getElementById('status-badge').className = 'badge ok';
           document.getElementById('status-badge').textContent = 'Success';
           lastExtractedData = data.data;
+          document.getElementById('tp-tpl').style.display = '';
           resultTa.value = fillTpl(currentTpl, data.data);
-          document.getElementById('json-out').innerHTML = syntaxHighlightJson(data.data);
-          document.getElementById('res-tabs').style.display = 'flex';
-          const resTabs = document.querySelectorAll('#res-tabs .tab');
-          const resPanes = document.querySelectorAll('#result-section .tab-pane');
-          resTabs.forEach((t,i) => t.classList.toggle('active', i===0));
-          resPanes.forEach((p,i) => p.classList.toggle('active', i===0));
           if (token) { sendBtn.classList.add('visible'); document.getElementById('save-load-btn').classList.add('visible'); }
           // Populate result meta
           const d = data.data;
@@ -2195,7 +2171,7 @@ Rate: {{total_rate_usd}}
           exitExtractFullscreen();
           document.getElementById('status-badge').className = 'badge error';
           document.getElementById('status-badge').textContent = 'Error';
-          document.getElementById('res-tabs').style.display = 'none';
+          document.getElementById('tp-tpl').style.display = 'none';
           document.getElementById('result-meta').innerHTML = '';
           document.getElementById('extract-col-meta').textContent = '';
           const msg = data.detail || (data.errors||[]).join('\n') || JSON.stringify(data);
@@ -2207,7 +2183,7 @@ Rate: {{total_rate_usd}}
         resultSec.classList.add('visible');
         document.getElementById('status-badge').className = 'badge error';
         document.getElementById('status-badge').textContent = 'Error';
-        document.getElementById('res-tabs').style.display = 'none';
+        document.getElementById('tp-tpl').style.display = 'none';
         document.getElementById('result-meta').innerHTML = '';
         document.getElementById('extract-col-meta').textContent = '';
         document.getElementById('err-body').innerHTML = `<div class="error-box" style="margin-top:10px;">Connection error. Please try again.</div>`;
@@ -2258,19 +2234,6 @@ Rate: {{total_rate_usd}}
       });
     });
 
-    // ── Result tabs ───────────────────────────────────────────────────────
-    document.querySelectorAll('#res-tabs .tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('#res-tabs .tab').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('#result-section .tab-pane').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        const pane = document.getElementById('tp-' + btn.dataset.tab);
-        if (pane) pane.classList.add('active');
-        if (btn.dataset.tab === 'routemap' && extractRouteMap) {
-          setTimeout(() => extractRouteMap.invalidateSize(), 50);
-        }
-      });
-    });
     document.getElementById('copy-btn').addEventListener('click', () => {
       navigator.clipboard.writeText(resultTa.value); toast('Copied to clipboard', 'success');
     });

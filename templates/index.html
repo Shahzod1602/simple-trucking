@@ -2395,15 +2395,16 @@ Rate: {{total_rate_usd}}
         if (otherCount > 0) legendParts.push(`<span style="color:${stopColor};font-weight:700;">Stop</span>`);
         legend.innerHTML = `${validPts.length} of ${stops.length} stops &middot; ${legendParts.join(' &middot; ')}`;
 
-        // Show route summary (+ an ETA slot that fetchExtractEta() fills when a driver is selected)
+        // Show route summary. When a driver is selected we also show the
+        // deadhead (driver → pickup) and ETA — fetchExtractEta() fills those slots.
         if (data.route_summary && summaryEl) {
           const rs = data.route_summary;
-          const fromDriver = dOrigin ? `<span style="color:#7aa7ff;"><i class="ph-bold ph-truck" style="font-size:0.85rem;"></i> from driver</span>` : '';
+          const totalLabel = dOrigin ? ' total' : '';
           summaryEl.innerHTML =
-            fromDriver +
-            `<span><i class="ph-bold ph-road-horizon" style="font-size:0.85rem;"></i> <strong>${rs.total_miles}</strong> mi</span>` +
+            (dOrigin ? `<span class="route-deadhead" id="route-deadhead" style="flex-basis:100%;color:#7aa7ff;"><i class="ph-bold ph-truck" style="font-size:0.85rem;"></i> Deadhead…</span>` : '') +
+            `<span><i class="ph-bold ph-road-horizon" style="font-size:0.85rem;"></i> <strong>${rs.total_miles}</strong> mi${totalLabel}</span>` +
             `<span><i class="ph-bold ph-clock" style="font-size:0.85rem;"></i> <strong>${rs.duration_text}</strong></span>` +
-            `<span class="route-eta" id="route-eta"></span>`;
+            (dOrigin ? `<span class="route-eta" id="route-eta" style="flex-basis:100%;"></span>` : '');
           summaryEl.style.display = 'flex';
         }
 
@@ -2459,6 +2460,7 @@ Rate: {{total_rate_usd}}
       const stops = lastExtractedData?.stops || [];
       if (!gid) {
         extractDriverOrigin = null;
+        setDeadheadInOutput(null);
         showRouteMap(stops, null);
         return;
       }
@@ -2473,8 +2475,10 @@ Rate: {{total_rate_usd}}
           await showRouteMap(stops, extractDriverOrigin);
           const addr = getPickupAddress();
           if (addr) fetchExtractEta(gid, addr);
+          else setDeadheadInOutput(null);
         } else {
           extractDriverOrigin = null;
+          setDeadheadInOutput(null);
           await showRouteMap(stops, null);
           const why = { no_driver: 'No driver assigned', no_eld: 'ELD not configured', no_location: 'Driver location unavailable' }[d.reason] || 'Driver location unavailable';
           toast(why, 'error');
@@ -2482,25 +2486,49 @@ Rate: {{total_rate_usd}}
       } catch (e) {
         console.error('driver-location', e);
         extractDriverOrigin = null;
+        setDeadheadInOutput(null);
         await showRouteMap(stops, null);
         toast('Could not get driver location', 'error');
       }
     });
 
+    // Add/replace the "🚚 Deadhead:" line in the extracted output text so it
+    // travels with Send/Save. Pass miles=null to strip it.
+    function setDeadheadInOutput(miles, durText) {
+      const base = resultTa.value
+        .split('\n')
+        .filter(l => !l.trim().startsWith('🚚 Deadhead:'))
+        .join('\n')
+        .replace(/\n+$/, '');
+      resultTa.value = (miles != null)
+        ? `${base}\n🚚 Deadhead: ${miles} mi · ${durText}`
+        : base;
+    }
+
     async function fetchExtractEta(groupId, address) {
-      const slot = document.getElementById('route-eta');
-      if (slot) slot.innerHTML = '<i class="ph-bold ph-flag-checkered" style="font-size:0.85rem;"></i> ETA…';
+      const dh = document.getElementById('route-deadhead');
+      if (dh) dh.innerHTML = '<i class="ph-bold ph-truck" style="font-size:0.85rem;"></i> Deadhead…';
       try {
         const params = new URLSearchParams({ group_id: groupId, address, buffer: 0 });
         const r = await fetch(`/api/eta?${params}`, { headers: authH() });
         const d = await r.json();
-        const el = document.getElementById('route-eta');
-        if (!el) return;
-        if (!r.ok) { el.innerHTML = ''; return; }
-        el.innerHTML = `<i class="ph-bold ph-flag-checkered" style="font-size:0.85rem;"></i> ETA pickup: <strong>${esc(d.eta_display)}</strong>`;
+        if (!r.ok) {
+          if (dh) dh.innerHTML = '';
+          const e = document.getElementById('route-eta'); if (e) e.innerHTML = '';
+          setDeadheadInOutput(null);
+          return;
+        }
+        const miles = d.distance_miles;
+        const mins = d.duration_minutes;
+        const durText = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins}m`;
+        const dhEl = document.getElementById('route-deadhead');
+        if (dhEl) dhEl.innerHTML = `<i class="ph-bold ph-truck" style="font-size:0.85rem;"></i> Deadhead: <strong>${miles}</strong> mi · <strong>${durText}</strong>`;
+        const etaEl = document.getElementById('route-eta');
+        if (etaEl) etaEl.innerHTML = `<i class="ph-bold ph-flag-checkered" style="font-size:0.85rem;"></i> ETA pickup: <strong>${esc(d.eta_display)}</strong>`;
+        setDeadheadInOutput(miles, durText);
       } catch (e) {
-        const el = document.getElementById('route-eta');
-        if (el) el.innerHTML = '';
+        const dhEl = document.getElementById('route-deadhead'); if (dhEl) dhEl.innerHTML = '';
+        const etaEl = document.getElementById('route-eta'); if (etaEl) etaEl.innerHTML = '';
       }
     }
 

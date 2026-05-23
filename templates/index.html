@@ -284,7 +284,7 @@
     /* ── Result ── */
     .result-section { margin-top: 22px; display: none; }
     .result-section.visible { display: block; }
-    .extract-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; align-items: stretch; min-height: 500px; max-height: 75vh; }
+    .extract-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; align-items: stretch; min-height: 600px; height: calc(100vh - 140px); }
     .extract-3col-left { min-width: 0; overflow-y: auto; border-right: 1px solid var(--border); }
     .extract-3col-left > .card { border-radius: 0; box-shadow: none; }
     .extract-3col-mid { min-width: 0; border-right: 1px solid var(--border); }
@@ -1970,7 +1970,7 @@ Rate: {{total_rate_usd}}
       analytics:'Analytics', bills:'Bills', transactions:'Transactions',
       telegram:'Telegram', settings:'Settings', kpi:'KPI Board', users:'Users', admin:'Admin'
     };
-    const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions']);
+    const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract']);
     function goTo(page) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));

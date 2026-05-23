@@ -284,30 +284,50 @@
     /* ── Result ── */
     .result-section { margin-top: 22px; display: none; }
     .result-section.visible { display: block; }
-    .extract-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; align-items: stretch; height: 70vh; }
+    .extract-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; align-items: stretch; min-height: 500px; max-height: 75vh; }
     .extract-3col-left { min-width: 0; overflow-y: auto; border-right: 1px solid var(--border); }
     .extract-3col-left > .card { border-radius: 0; box-shadow: none; }
     .extract-3col-mid { min-width: 0; border-right: 1px solid var(--border); }
     .extract-3col-right { min-width: 0; }
+    .extract-col-header {
+      font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.72rem;
+      text-transform:uppercase; letter-spacing:1.5px; color:var(--text-muted);
+      padding: 12px 14px 8px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
     .extract-preview-sticky { position: relative; height: 100%; display: flex; flex-direction: column; }
     .extract-preview-label { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.72rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--text-muted); padding:12px 14px 8px; border-bottom:1px solid var(--border); }
     .extract-pdf-wrap { flex:1; background:var(--card-inner); overflow:hidden; display:flex; align-items:flex-start; justify-content:center; }
     .extract-map-sticky { position: relative; height: 100%; display: flex; flex-direction: column; }
     .extract-map-header { display: flex; justify-content: space-between; align-items: center; padding:12px 14px 8px; border-bottom:1px solid var(--border); }
     .extract-map-header span:first-child { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.72rem; text-transform:uppercase; letter-spacing:1.5px; color:var(--text-muted); }
+    .map-overlay-spinner {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(3,6,16,0.85); backdrop-filter: blur(2px);
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; z-index: 500; color: var(--text-muted); font-size: 0.85rem;
+    }
+    .map-overlay-spinner.visible { display: flex; }
+    .map-overlay-spinner::before {
+      content: ""; display: inline-block; width: 22px; height: 22px;
+      border: 2px solid var(--border); border-top-color: var(--primary);
+      border-radius: 50%; animation: spin 0.75s linear infinite;
+    }
     .extract-layout { }
     @media (max-width: 1100px) {
-      .extract-3col { grid-template-columns: 1fr 1fr; height: auto; }
+      .extract-3col { grid-template-columns: 1fr 1fr; min-height: auto; max-height: none; }
       .extract-3col-mid { grid-column: 1 / -1; border-right: none; border-bottom: 1px solid var(--border); }
       .extract-3col-left { border-right: none; }
     }
     @media (max-width: 768px) {
-      .extract-3col { grid-template-columns: 1fr; height: auto; }
+      .extract-3col { grid-template-columns: 1fr; min-height: auto; max-height: none; }
       .extract-3col-left { max-height: none; overflow-y: visible; border-right: none; border-bottom: 1px solid var(--border); }
       .extract-3col-mid { border-bottom: 1px solid var(--border); }
       .extract-3col-right { }
     }
-    .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+    .result-meta { font-size: 0.82rem; color: var(--text-muted); display: flex; gap: 12px; align-items: center; }
+    .result-meta span { display: flex; align-items: center; gap: 4px; }
     .badge {
       padding: 3px 9px; border-radius: 4px;
       font-family: 'Barlow Condensed', sans-serif;
@@ -323,7 +343,25 @@
     .tab-pane.active { display: block; }
     .action-row { display: flex; gap: 8px; margin-top: 10px; }
     pre { background: #030610; color: #8bb8ff; padding: 14px; border-radius: var(--radius); border: 1px solid var(--border); overflow-x: auto; font-family: 'IBM Plex Mono', monospace; font-size: 0.76rem; line-height: 1.65; white-space: pre-wrap; }
+    .json-key { color: #9cdcfe; }
+    .json-string { color: #ce9178; }
+    .json-number { color: #b5cea8; }
+    .json-boolean { color: #569cd6; }
+    .json-null { color: #569cd6; }
     .error-box { background: var(--error-light); border-radius: var(--radius); padding: 14px; color: var(--error); font-size: 0.88rem; line-height: 1.6; }
+    .clear-btn {
+      width: 20px; height: 20px; border-radius: 50%; border: none;
+      background: var(--border); color: var(--text-muted); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; margin-left: auto; transition: all 0.15s;
+    }
+    .clear-btn:hover { background: var(--error); color: #fff; }
+    .route-summary {
+      font-size: 0.8rem; color: var(--text-muted);
+      display: flex; gap: 12px; align-items: center; padding: 8px 14px;
+      border-top: 1px solid var(--border); background: var(--card-inner);
+    }
+    .route-summary strong { color: var(--text); font-weight: 600; }
 
     /* ── Groups page ── */
     .groups-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
@@ -768,7 +806,7 @@
             <p class="dz-hint">PDF, JPG, PNG, TIFF — max 20MB</p>
           </div>
           <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.webp" />
-          <div class="selected-file" id="sel-file"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span><span id="file-name"></span></div>
+          <div class="selected-file" id="sel-file"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span><span id="file-name"></span><button class="clear-btn" id="clear-file-btn" title="Remove file">✕</button></div>
           <button class="btn-primary" id="extract-btn" disabled>Extract</button>
           <div class="spinner" id="spinner">Analyzing...</div>
         </div>
@@ -808,23 +846,29 @@
               <span style="font-weight:700;">Result</span>
               <span class="badge" id="status-badge"></span>
             </div>
+            <div class="result-meta" id="result-meta"></div>
           </div>
           <div class="extract-3col">
             <div class="extract-3col-left">
               <div class="card" style="margin-bottom:0;">
+                <div class="extract-col-header">
+                  <span>Extracted Data</span>
+                  <span id="extract-col-meta" style="font-size:0.75rem;color:var(--text-muted);"></span>
+                </div>
                 <div class="tabs" id="res-tabs">
-                  <button class="tab active" data-tab="tpl">Template</button>
+                  <button class="tab active" data-tab="tpl">Output</button>
                   <button class="tab" data-tab="json">JSON</button>
                 </div>
                 <div class="tab-pane active" id="tp-tpl">
                   <textarea class="mono-input" id="result-ta" style="min-height:280px;"></textarea>
                   <div class="action-row">
                     <button class="btn-blue" id="copy-btn">Copy</button>
-                    <button class="btn-green" id="send-btn"><i class="ph-bold ph-paper-plane-tilt" style="vertical-align:-2px;margin-right:5px;"></i>Send</button>
-                    <button class="btn-save-load" id="save-load-btn"><i class="ph-bold ph-floppy-disk" style="vertical-align:-2px;margin-right:5px;"></i>Save Load</button>
+                    <button class="btn-green" id="send-btn" title="Send extracted data to Telegram group"><i class="ph-bold ph-paper-plane-tilt" style="vertical-align:-2px;margin-right:5px;"></i>Send</button>
+                    <button class="btn-save-load" id="save-load-btn" title="Save extracted data as a new load"><i class="ph-bold ph-floppy-disk" style="vertical-align:-2px;margin-right:5px;"></i>Save Load</button>
                   </div>
                 </div>
                 <div class="tab-pane" id="tp-json"><pre id="json-out"></pre></div>
+                <div id="err-body"></div>
               </div>
             </div>
             <div class="extract-3col-mid">
@@ -846,15 +890,17 @@
                   <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.82rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Route Map</span>
                   <span id="route-map-legend" style="font-size:0.75rem;color:var(--text-muted);"></span>
                 </div>
-                <div id="extract-route-map" style="flex:1;width:100%;border-radius:0;overflow:hidden;"></div>
+                <div id="extract-route-map" style="flex:1;width:100%;border-radius:0;overflow:hidden;position:relative;">
+                  <div class="map-overlay-spinner" id="map-spinner">Geocoding stops...</div>
+                </div>
                 <div id="route-map-placeholder" style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-muted);border-top:none;">
                   <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
                   <span style="font-size:0.85rem;">Extract a ratecon to see the route</span>
                 </div>
+                <div class="route-summary" id="route-summary" style="display:none;"></div>
               </div>
             </div>
           </div>
-          <div id="err-body"></div>
         </div>
       </div>
 
@@ -1942,6 +1988,19 @@ Rate: {{total_rate_usd}}
     document.getElementById('create-load-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeCreateLoadModal(); });
 
     // ── Template engine ───────────────────────────────────────────────────
+    function syntaxHighlightJson(obj) {
+      const json = JSON.stringify(obj, null, 2);
+      return json.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
+        .replace(/"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?/g, (match, isKey) => {
+          let cls = 'json-string';
+          if (/:$/.test(match)) { cls = 'json-key'; match = match.slice(0, -1) + '</span>:'; return `<span class="${cls}">${match}`; }
+          return `<span class="${cls}">${match}</span>`;
+        })
+        .replace(/\b(true|false)\b/g, '<span class="json-boolean">$1</span>')
+        .replace(/\b(null)\b/g, '<span class="json-null">$1</span>')
+        .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="json-number">$1</span>');
+    }
+
     function fillTpl(tpl, data) {
       let r = tpl;
       r = r.replace(/{{#stops}}([\s\S]*?){{\/stops}}/g, (_, block) =>
@@ -1978,6 +2037,21 @@ Rate: {{total_rate_usd}}
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
     dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
     fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+    document.getElementById('clear-file-btn').addEventListener('click', (e) => { e.stopPropagation(); clearFile(); });
+
+    function clearFile() {
+      selectedFile = null; fileInput.value = '';
+      fileNameEl.textContent = '';
+      selFileEl.classList.remove('visible');
+      extractBtn.disabled = true;
+      resultSec.classList.remove('visible');
+      sendBtn.classList.remove('visible'); document.getElementById('save-load-btn').classList.remove('visible');
+      dropZone.classList.remove('collapsed');
+      showPdfPreview(null);
+      document.getElementById('err-body').innerHTML = '';
+      document.getElementById('result-meta').innerHTML = '';
+      document.getElementById('extract-col-meta').textContent = '';
+    }
 
     function setFile(f) {
       selectedFile = f; fileNameEl.textContent = f.name;
@@ -1996,6 +2070,7 @@ Rate: {{total_rate_usd}}
       const img = document.getElementById('pdf-preview-img');
       const ph = document.getElementById('pdf-preview-placeholder');
       iframe.style.display = 'none'; img.style.display = 'none'; ph.style.display = 'flex';
+      if (!file) { iframe.src = ''; img.src = ''; return; }
       const url = URL.createObjectURL(file);
       if (file.type === 'application/pdf') {
         iframe.src = url;
@@ -2023,24 +2098,36 @@ Rate: {{total_rate_usd}}
         const resp = await fetch('/extract', { method:'POST', body:fd });
         const data = await resp.json();
         resultSec.classList.add('visible');
+        document.getElementById('err-body').innerHTML = '';
         if (data.status === 'ok') {
           document.getElementById('status-badge').className = 'badge ok';
           document.getElementById('status-badge').textContent = 'Success';
           lastExtractedData = data.data;
           resultTa.value = fillTpl(currentTpl, data.data);
-          document.getElementById('json-out').textContent = JSON.stringify(data.data, null, 2);
+          document.getElementById('json-out').innerHTML = syntaxHighlightJson(data.data);
           document.getElementById('res-tabs').style.display = 'flex';
           const resTabs = document.querySelectorAll('#res-tabs .tab');
           const resPanes = document.querySelectorAll('#result-section .tab-pane');
           resTabs.forEach((t,i) => t.classList.toggle('active', i===0));
           resPanes.forEach((p,i) => p.classList.toggle('active', i===0));
           if (token) { sendBtn.classList.add('visible'); document.getElementById('save-load-btn').classList.add('visible'); }
-          showRouteMap(data.data.stops || []);
+          // Populate result meta
+          const d = data.data;
+          const metaParts = [];
+          if (d.load_number) metaParts.push(`<span><i class="ph-bold ph-hash" style="font-size:0.75rem;"></i> ${esc(d.load_number)}</span>`);
+          if (d.broker) metaParts.push(`<span><i class="ph-bold ph-buildings" style="font-size:0.75rem;"></i> ${esc(d.broker)}</span>`);
+          if (d.total_rate_usd) metaParts.push(`<span><i class="ph-bold ph-currency-dollar" style="font-size:0.75rem;"></i> ${esc(d.total_rate_usd)}</span>`);
+          if (d.stops && d.stops.length) metaParts.push(`<span><i class="ph-bold ph-map-pin" style="font-size:0.75rem;"></i> ${d.stops.length} stops</span>`);
+          document.getElementById('result-meta').innerHTML = metaParts.join('');
+          document.getElementById('extract-col-meta').textContent = d.load_number ? `Load #${d.load_number}` : '';
+          showRouteMap(d.stops || []);
           toast('Data extracted successfully', 'success');
         } else {
           document.getElementById('status-badge').className = 'badge error';
           document.getElementById('status-badge').textContent = 'Error';
           document.getElementById('res-tabs').style.display = 'none';
+          document.getElementById('result-meta').innerHTML = '';
+          document.getElementById('extract-col-meta').textContent = '';
           const msg = data.detail || (data.errors||[]).join('\n') || JSON.stringify(data);
           document.getElementById('err-body').innerHTML = `<div class="error-box" style="margin-top:10px;">${esc(msg)}</div>`;
           toast('Extraction failed', 'error');
@@ -2050,6 +2137,8 @@ Rate: {{total_rate_usd}}
         document.getElementById('status-badge').className = 'badge error';
         document.getElementById('status-badge').textContent = 'Error';
         document.getElementById('res-tabs').style.display = 'none';
+        document.getElementById('result-meta').innerHTML = '';
+        document.getElementById('extract-col-meta').textContent = '';
         document.getElementById('err-body').innerHTML = `<div class="error-box" style="margin-top:10px;">Connection error. Please try again.</div>`;
         toast('Connection error', 'error');
       } finally { extractBtn.disabled = false; spinner.classList.remove('visible'); }
@@ -2124,23 +2213,30 @@ Rate: {{total_rate_usd}}
       const legend = document.getElementById('route-map-legend');
       const placeholder = document.getElementById('route-map-placeholder');
       const mapEl = document.getElementById('extract-route-map');
+      const spinner = document.getElementById('map-spinner');
+      const summaryEl = document.getElementById('route-summary');
       if (!stops || stops.length === 0) {
         if (placeholder) placeholder.style.display = 'flex';
         if (mapEl) mapEl.style.display = 'none';
+        if (spinner) spinner.classList.remove('visible');
+        if (summaryEl) summaryEl.style.display = 'none';
         return;
       }
       if (placeholder) placeholder.style.display = 'none';
       if (mapEl) mapEl.style.display = 'block';
-      legend.textContent = 'Geocoding stops...';
+      if (spinner) spinner.classList.add('visible');
+      if (summaryEl) summaryEl.style.display = 'none';
+      legend.textContent = '';
       try {
         const resp = await fetch('/api/geocode-stops', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stops }),
         });
+        if (spinner) spinner.classList.remove('visible');
         if (!resp.ok) {
           console.error('geocode-stops error:', resp.status, await resp.text());
-          legend.textContent = 'Geocoding failed — could not map stops';
+          legend.textContent = 'Geocoding failed';
           initEmptyMap();
           return;
         }
@@ -2154,7 +2250,7 @@ Rate: {{total_rate_usd}}
           }
         });
         if (validPts.length === 0) {
-          legend.textContent = 'No stops could be geocoded';
+          legend.textContent = 'No stops geocoded';
           initEmptyMap();
           return;
         }
@@ -2220,10 +2316,18 @@ Rate: {{total_rate_usd}}
         if (otherCount > 0) legendParts.push(`<span style="color:${stopColor};font-weight:700;">Stop</span>`);
         legend.innerHTML = `${validPts.length} of ${stops.length} stops &middot; ${legendParts.join(' &middot; ')}`;
 
+        // Show route summary
+        if (data.route_summary && summaryEl) {
+          const rs = data.route_summary;
+          summaryEl.innerHTML = `<span><i class="ph-bold ph-road-horizon" style="font-size:0.85rem;"></i> <strong>${rs.total_miles}</strong> mi</span><span><i class="ph-bold ph-clock" style="font-size:0.85rem;"></i> <strong>${rs.duration_text}</strong></span>`;
+          summaryEl.style.display = 'flex';
+        }
+
         setTimeout(() => { if (extractRouteMap) extractRouteMap.invalidateSize(); }, 200);
       } catch (e) {
+        if (spinner) spinner.classList.remove('visible');
         console.error('showRouteMap error:', e);
-        legend.textContent = 'Geocoding error — check console for details';
+        legend.textContent = 'Geocoding error';
       }
     }
 

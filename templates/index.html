@@ -379,10 +379,22 @@
     .clear-btn:hover { background: var(--error); color: #fff; }
     .route-summary {
       font-size: 0.8rem; color: var(--text-muted);
-      display: flex; gap: 12px; align-items: center; padding: 8px 14px;
+      display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 8px 14px;
       border-top: 1px solid var(--border); background: var(--card-inner);
     }
     .route-summary strong { color: var(--text); font-weight: 600; }
+    .route-summary .route-eta { color: var(--success); flex-basis: 100%; }
+
+    /* ── Extract: driver-group select ── */
+    .extract-group-sel {
+      height: 32px; max-width: 170px; padding: 0 26px 0 10px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--card-inner) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 9px center;
+      color: var(--text); font-family: 'IBM Plex Sans', sans-serif; font-size: 0.8rem;
+      cursor: pointer; outline: none; appearance: none; display: none;
+    }
+    .extract-group-sel.visible { display: inline-block; }
+    .extract-group-sel:focus { border-color: var(--primary); }
 
     /* ── Groups page ── */
     .groups-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
@@ -881,6 +893,7 @@
                   <textarea class="mono-input" id="result-ta" style="min-height:280px;margin-top:10px;"></textarea>
                   <div class="action-row">
                     <button class="btn-blue" id="copy-btn">Copy</button>
+                    <select id="extract-group-select" class="extract-group-sel" title="Pick a driver group — the route is drawn from the driver's live location and ETA is calculated"></select>
                     <button class="btn-green" id="send-btn" title="Send extracted data to Telegram group"><i class="ph-bold ph-paper-plane-tilt" style="vertical-align:-2px;margin-right:5px;"></i>Send</button>
                     <button class="btn-save-load" id="save-load-btn" title="Save extracted data as a new load"><i class="ph-bold ph-floppy-disk" style="vertical-align:-2px;margin-right:5px;"></i>Save Load</button>
                   </div>
@@ -1852,6 +1865,9 @@
     const NAME_KEY  = 'st_name';
 
     let lastExtractedData = null;
+    let extractDriverOrigin = null;   // {lat, lon} of selected group's driver, or null
+    let extractChosenGroupId = null;  // group_id chosen in the extract column (pre-selects the Send modal)
+    const extractGroupMap = {};       // group_id -> { eld_driver_id, eld_driver_name, name }
 
     const DEFAULT_TPL = `🚛 NEW TRIP {{load_number}}
 {{carrier}}
@@ -2098,6 +2114,10 @@ Rate: {{total_rate_usd}}
       document.getElementById('err-body').innerHTML = '';
       document.getElementById('result-meta').innerHTML = '';
       document.getElementById('extract-col-meta').textContent = '';
+      // reset driver-group selection
+      extractDriverOrigin = null; extractChosenGroupId = null;
+      const gsel = document.getElementById('extract-group-select');
+      if (gsel) { gsel.value = ''; gsel.classList.remove('visible'); }
     }
 
     function setFile(f) {
@@ -2166,6 +2186,7 @@ Rate: {{total_rate_usd}}
           document.getElementById('result-meta').innerHTML = metaParts.join('');
           document.getElementById('extract-col-meta').textContent = d.load_number ? `Load #${d.load_number}` : '';
           showRouteMap(d.stops || []);
+          populateExtractGroups();
           toast('Data extracted successfully', 'success');
         } else {
           exitExtractFullscreen();
@@ -2243,7 +2264,7 @@ Rate: {{total_rate_usd}}
     let extractRouteMarkers = [];
     let extractRouteLine = null;
 
-    async function showRouteMap(stops) {
+    async function showRouteMap(stops, driverOrigin = null) {
       const legend = document.getElementById('route-map-legend');
       const placeholder = document.getElementById('route-map-placeholder');
       const mapEl = document.getElementById('extract-route-map');
@@ -2265,7 +2286,7 @@ Rate: {{total_rate_usd}}
         const resp = await fetch('/api/geocode-stops', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stops }),
+          body: JSON.stringify({ stops, driver_origin: driverOrigin || null }),
         });
         if (spinner) spinner.classList.remove('visible');
         if (!resp.ok) {
@@ -2326,6 +2347,22 @@ Rate: {{total_rate_usd}}
           extractRouteMarkers.push(marker);
         });
 
+        // Driver marker — where the truck is right now (route starts here)
+        const dOrigin = data.driver_origin;
+        const boundsPts = latlngs.slice();
+        if (dOrigin && dOrigin.lat != null && dOrigin.lon != null) {
+          const driverIcon = L.divIcon({
+            className: '',
+            html: `<div style="background:#0b1220;color:#fff;border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.5);border:2px solid #4585ff;">🚚</div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+          });
+          const dm = L.marker([dOrigin.lat, dOrigin.lon], { icon: driverIcon, zIndexOffset: 1000 }).addTo(extractRouteMap);
+          dm.bindPopup('<strong>🚚 Driver (current location)</strong>');
+          extractRouteMarkers.push(dm);
+          boundsPts.unshift([dOrigin.lat, dOrigin.lon]);
+        }
+
         if (data.route_geometry && data.route_geometry.length > 0) {
           const routeLatLngs = data.route_geometry.map(p => [p[0], p[1]]);
           extractRouteLine = L.polyline(routeLatLngs, {
@@ -2333,8 +2370,8 @@ Rate: {{total_rate_usd}}
             weight: 4,
             opacity: 0.85,
           }).addTo(extractRouteMap);
-        } else if (validPts.length >= 2) {
-          extractRouteLine = L.polyline(latlngs, {
+        } else if (boundsPts.length >= 2) {
+          extractRouteLine = L.polyline(boundsPts, {
             color: '#4585ff',
             weight: 3,
             opacity: 0.7,
@@ -2342,25 +2379,31 @@ Rate: {{total_rate_usd}}
           }).addTo(extractRouteMap);
         }
 
-        if (validPts.length === 1) {
-          extractRouteMap.setView(latlngs[0], 10);
+        if (boundsPts.length === 1) {
+          extractRouteMap.setView(boundsPts[0], 10);
         } else {
-          extractRouteMap.fitBounds(L.latLngBounds(latlngs).pad(0.15));
+          extractRouteMap.fitBounds(L.latLngBounds(boundsPts).pad(0.15));
         }
 
         const pickupCount = stops.filter(s => s.type === 'pickup').length;
         const deliveryCount = stops.filter(s => s.type === 'delivery').length;
         const otherCount = stops.length - pickupCount - deliveryCount;
         const legendParts = [];
+        if (dOrigin) legendParts.push(`<span style="color:#7aa7ff;font-weight:700;">🚚 Driver</span>`);
         if (pickupCount > 0) legendParts.push(`<span style="color:${pickupColor};font-weight:700;">Pickup</span>`);
         if (deliveryCount > 0) legendParts.push(`<span style="color:${deliveryColor};font-weight:700;">Delivery</span>`);
         if (otherCount > 0) legendParts.push(`<span style="color:${stopColor};font-weight:700;">Stop</span>`);
         legend.innerHTML = `${validPts.length} of ${stops.length} stops &middot; ${legendParts.join(' &middot; ')}`;
 
-        // Show route summary
+        // Show route summary (+ an ETA slot that fetchExtractEta() fills when a driver is selected)
         if (data.route_summary && summaryEl) {
           const rs = data.route_summary;
-          summaryEl.innerHTML = `<span><i class="ph-bold ph-road-horizon" style="font-size:0.85rem;"></i> <strong>${rs.total_miles}</strong> mi</span><span><i class="ph-bold ph-clock" style="font-size:0.85rem;"></i> <strong>${rs.duration_text}</strong></span>`;
+          const fromDriver = dOrigin ? `<span style="color:#7aa7ff;"><i class="ph-bold ph-truck" style="font-size:0.85rem;"></i> from driver</span>` : '';
+          summaryEl.innerHTML =
+            fromDriver +
+            `<span><i class="ph-bold ph-road-horizon" style="font-size:0.85rem;"></i> <strong>${rs.total_miles}</strong> mi</span>` +
+            `<span><i class="ph-bold ph-clock" style="font-size:0.85rem;"></i> <strong>${rs.duration_text}</strong></span>` +
+            `<span class="route-eta" id="route-eta"></span>`;
           summaryEl.style.display = 'flex';
         }
 
@@ -2382,6 +2425,83 @@ Rate: {{total_rate_usd}}
         }).addTo(extractRouteMap);
       }
       setTimeout(() => { if (extractRouteMap) extractRouteMap.invalidateSize(); }, 200);
+    }
+
+    // ── Extract: driver-group select → ETA + route from driver location ──────
+    const extractGroupSel = document.getElementById('extract-group-select');
+
+    async function populateExtractGroups() {
+      // Reset selection state on every fresh extraction
+      extractDriverOrigin = null; extractChosenGroupId = null;
+      for (const k in extractGroupMap) delete extractGroupMap[k];
+      extractGroupSel.classList.remove('visible');
+      extractGroupSel.innerHTML = '<option value="">No group</option>';
+      if (!token) return;
+      try {
+        const groups = await fetch('/api/groups', { headers: authH() }).then(r => r.json());
+        // Only groups that have a driver assigned — ETA needs the driver's location
+        const driverGroups = (groups || []).filter(g => g.eld_driver_id);
+        if (!driverGroups.length) return;
+        driverGroups.forEach(g => {
+          extractGroupMap[g.id] = { eld_driver_id: g.eld_driver_id, eld_driver_name: g.eld_driver_name, name: g.name };
+          const opt = document.createElement('option');
+          opt.value = g.id;
+          opt.textContent = `${g.name}${g.eld_driver_name ? ' · ' + g.eld_driver_name : ''}`;
+          extractGroupSel.appendChild(opt);
+        });
+        extractGroupSel.classList.add('visible');
+      } catch (e) { console.error('populateExtractGroups', e); }
+    }
+
+    extractGroupSel.addEventListener('change', async () => {
+      const gid = extractGroupSel.value;
+      extractChosenGroupId = gid || null;
+      const stops = lastExtractedData?.stops || [];
+      if (!gid) {
+        extractDriverOrigin = null;
+        showRouteMap(stops, null);
+        return;
+      }
+      // Fetch the driver's live location, then redraw the route from there + ETA
+      const legend = document.getElementById('route-map-legend');
+      if (legend) legend.textContent = 'Locating driver…';
+      try {
+        const r = await fetch(`/api/groups/${gid}/driver-location`, { headers: authH() });
+        const d = await r.json();
+        if (r.ok && d.location) {
+          extractDriverOrigin = d.location;
+          await showRouteMap(stops, extractDriverOrigin);
+          const addr = getPickupAddress();
+          if (addr) fetchExtractEta(gid, addr);
+        } else {
+          extractDriverOrigin = null;
+          await showRouteMap(stops, null);
+          const why = { no_driver: 'No driver assigned', no_eld: 'ELD not configured', no_location: 'Driver location unavailable' }[d.reason] || 'Driver location unavailable';
+          toast(why, 'error');
+        }
+      } catch (e) {
+        console.error('driver-location', e);
+        extractDriverOrigin = null;
+        await showRouteMap(stops, null);
+        toast('Could not get driver location', 'error');
+      }
+    });
+
+    async function fetchExtractEta(groupId, address) {
+      const slot = document.getElementById('route-eta');
+      if (slot) slot.innerHTML = '<i class="ph-bold ph-flag-checkered" style="font-size:0.85rem;"></i> ETA…';
+      try {
+        const params = new URLSearchParams({ group_id: groupId, address, buffer: 0 });
+        const r = await fetch(`/api/eta?${params}`, { headers: authH() });
+        const d = await r.json();
+        const el = document.getElementById('route-eta');
+        if (!el) return;
+        if (!r.ok) { el.innerHTML = ''; return; }
+        el.innerHTML = `<i class="ph-bold ph-flag-checkered" style="font-size:0.85rem;"></i> ETA pickup: <strong>${esc(d.eta_display)}</strong>`;
+      } catch (e) {
+        const el = document.getElementById('route-eta');
+        if (el) el.innerHTML = '';
+      }
     }
 
     // ── Groups page ───────────────────────────────────────────────────────
@@ -4126,6 +4246,11 @@ Rate: {{total_rate_usd}}
           });
           modalGroups.appendChild(item);
         });
+        // Pre-select the group chosen in the extract column (if any)
+        if (extractChosenGroupId) {
+          const pre = document.getElementById('mg' + extractChosenGroupId);
+          if (pre) pre.closest('.mgroup').click();
+        }
       } catch { modalGroups.innerHTML='<div class="modal-empty">Failed to load</div>'; }
     });
 

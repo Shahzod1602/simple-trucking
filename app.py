@@ -1487,6 +1487,40 @@ def api_eta(
         raise HTTPException(status_code=502, detail=str(e))
 
 
+@app.get("/api/groups/{group_id}/driver-location")
+def api_group_driver_location(
+    group_id: int,
+    authorization: str | None = Header(default=None),
+):
+    """Current live location of the driver assigned to a group.
+
+    Used by the extract route map to redraw the route from where the driver
+    is right now. Returns {location: {lat, lon} | null, driver_name, reason}.
+    Soft-fails (location=null + reason) rather than erroring so the UI can
+    fall back to the plain stop-to-stop route.
+    """
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    group = database.get_group(group_id, company_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    if not group.get("eld_driver_id"):
+        return {"location": None, "reason": "no_driver"}
+    if not database.get_eld_configs(dispatcher["id"]):
+        return {"location": None, "reason": "no_eld"}
+    try:
+        loc = _get_driver_location(group["eld_driver_id"], dispatcher["id"])
+    except Exception as exc:
+        logger.warning("driver-location failed for group=%s: %s", group_id, exc)
+        loc = None
+    if not loc or loc.get("lat") is None or loc.get("lon") is None:
+        return {"location": None, "reason": "no_location"}
+    return {
+        "location": {"lat": loc["lat"], "lon": loc["lon"]},
+        "driver_name": group.get("eld_driver_name"),
+    }
+
+
 # ── Loads API ─────────────────────────────────────────────────────────────────
 
 class CreateLoadBody(BaseModel):
@@ -1869,6 +1903,7 @@ async def extract_ratecon(file: UploadFile = File(...)):
 
 class GeocodeStopsBody(BaseModel):
     stops: list[dict]
+    driver_origin: dict | None = None  # {lat, lon} — route starts from the driver's live location
 
 
 @app.post("/api/geocode-stops")
@@ -1895,22 +1930,29 @@ async def api_geocode_stops(body: GeocodeStopsBody):
         except Exception:
             results.append(None)
 
-    # Calculate total route distance and duration across valid consecutive stops
+    # Calculate total route distance and duration across valid consecutive stops.
+    # If a driver origin is supplied, the route starts from the driver's current
+    # location (driver → stop1 → stop2 …) so the map and totals reflect the trip
+    # ahead of the driver.
     route_summary = None
     route_geometry = []
     valid_points = [r for r in results if r and r.get("lat") is not None and r.get("lon") is not None]
-    if len(valid_points) >= 2:
+    driver_pt = None
+    if body.driver_origin and body.driver_origin.get("lat") is not None and body.driver_origin.get("lon") is not None:
+        driver_pt = {"lat": float(body.driver_origin["lat"]), "lon": float(body.driver_origin["lon"])}
+    route_points = ([driver_pt] if driver_pt else []) + valid_points
+    if len(route_points) >= 2:
         total_miles = 0.0
         total_duration_min = 0
-        for i in range(len(valid_points) - 1):
+        for i in range(len(route_points) - 1):
             try:
-                route = routing.get_route(valid_points[i], valid_points[i + 1], gmaps_key)
+                route = routing.get_route(route_points[i], route_points[i + 1], gmaps_key)
                 total_miles += route["distance_meters"] / 1609.34
                 total_duration_min += route["duration_seconds"] / 60
             except Exception:
                 pass
             try:
-                seg = routing.get_route_geometry(valid_points[i], valid_points[i + 1], gmaps_key)
+                seg = routing.get_route_geometry(route_points[i], route_points[i + 1], gmaps_key)
                 if seg:
                     route_geometry.extend(seg)
             except Exception:
@@ -1925,7 +1967,12 @@ async def api_geocode_stops(body: GeocodeStopsBody):
                 "duration_text": f"{hours}h {mins}m" if hours > 0 else f"{mins}m",
             }
 
-    return {"locations": results, "route_summary": route_summary, "route_geometry": route_geometry}
+    return {
+        "locations": results,
+        "route_summary": route_summary,
+        "route_geometry": route_geometry,
+        "driver_origin": driver_pt,
+    }
 
 
 # ── Company Info API ──────────────────────────────────────────────────────────

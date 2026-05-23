@@ -553,9 +553,12 @@ def get_all_dispatchers() -> list[dict]:
 
 
 def get_dispatcher_in_company(dispatcher_id: int, company_id: int) -> dict | None:
+    # The platform superadmin is never a manageable member of a company, even
+    # if its account happens to carry a company_id — exclude it so company/admin
+    # actors can't view, edit, reset or assign it.
     with get_conn() as conn:
         conn.execute(
-            "SELECT * FROM dispatchers WHERE id = %s AND company_id = %s",
+            "SELECT * FROM dispatchers WHERE id = %s AND company_id = %s AND role <> 'superadmin'",
             (dispatcher_id, company_id),
         )
         row = conn.fetchone()
@@ -571,7 +574,7 @@ def get_company_dispatchers(company_id: int) -> list[dict]:
                FROM dispatchers d
                LEFT JOIN driver_groups dg ON dg.dispatcher_id = d.id
                LEFT JOIN loads l ON l.dispatcher_id = d.id
-               WHERE d.company_id = %s
+               WHERE d.company_id = %s AND d.role <> 'superadmin'
                GROUP BY d.id, d.name, d.email, d.role, d.is_active, d.created_at
                ORDER BY d.role DESC, d.created_at""",
             (company_id,),

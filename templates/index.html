@@ -2041,7 +2041,6 @@ Rate: {{total_rate_usd}}
           document.getElementById('status-badge').className = 'badge error';
           document.getElementById('status-badge').textContent = 'Error';
           document.getElementById('res-tabs').style.display = 'none';
-          document.getElementById('routemap-tab-btn').style.display = 'none';
           const msg = data.detail || (data.errors||[]).join('\n') || JSON.stringify(data);
           document.getElementById('err-body').innerHTML = `<div class="error-box" style="margin-top:10px;">${esc(msg)}</div>`;
           toast('Extraction failed', 'error');
@@ -2051,7 +2050,6 @@ Rate: {{total_rate_usd}}
         document.getElementById('status-badge').className = 'badge error';
         document.getElementById('status-badge').textContent = 'Error';
         document.getElementById('res-tabs').style.display = 'none';
-        document.getElementById('routemap-tab-btn').style.display = 'none';
         document.getElementById('err-body').innerHTML = `<div class="error-box" style="margin-top:10px;">Connection error. Please try again.</div>`;
         toast('Connection error', 'error');
       } finally { extractBtn.disabled = false; spinner.classList.remove('visible'); }

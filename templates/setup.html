@@ -50,6 +50,8 @@
       justify-content: center; flex-shrink: 0;
     }
     .logo-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    /* logo asset is white (for dark surfaces); darken it on the light theme */
+    [data-theme="light"] .logo-icon img { filter: brightness(0.22); }
     .logo-text {
       font-family: 'Barlow Condensed', sans-serif;
       font-size: 1.15rem; font-weight: 700; color: var(--text);

@@ -3,770 +3,617 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SimpleTrucking — AI Tools for Trucking Dispatchers</title>
+  <title>SimpleTrucking — AI-Powered TMS for Modern Dispatch</title>
+  <meta name="description" content="The intelligent transportation management platform. Extract rate confirmations, track loads in real-time, and dispatch smarter with AI." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg:           #07090e;
-      --bg2:          #0c1018;
-      --bg3:          #111621;
-      --card:         #0f1420;
-      --card-hover:   #141926;
-      --border:       rgba(255,255,255,0.07);
-      --border-lit:   rgba(245,158,11,0.28);
-      --text:         #dde2ed;
-      --muted:        #5e6a7d;
-      --muted2:       #8894a3;
-      --primary:      #f59e0b;
-      --primary-dark: #d97706;
-      --primary-glow: rgba(245,158,11,0.14);
-      --accent:       #ff6a00;
-      --success:      #00d97e;
-      --blue:         #4f8ef7;
-      --purple:       #a78bfa;
+      --bg:           #06060a;
+      --bg-elevated:  #0c0c12;
+      --bg-surface:   #111118;
+      --bg-card:      #16161f;
+      --border:       rgba(255,255,255,0.055);
+      --border-lit:   rgba(212,168,83,0.35);
+      --text:         #f0f0f5;
+      --text-dim:     #9a9aa5;
+      --text-muted:   #6a6a78;
+      --accent:       #d4a853;
+      --accent-bright:#e8c87a;
+      --accent-glow:  rgba(212,168,83,0.12);
+      --accent-2:     #5b8def;
+      --accent-2-glow:rgba(91,141,239,0.10);
+      --success:      #3ccf91;
+      --danger:       #ef6b6b;
+      --grid-color:   rgba(255,255,255,0.025);
     }
 
-    html.light {
-      --bg:           #fafaf8;
-      --bg2:          #f3f2ee;
-      --bg3:          #eceae4;
-      --card:         #ffffff;
-      --card-hover:   #f8f7f4;
-      --border:       rgba(0,0,0,0.08);
-      --border-lit:   rgba(245,158,11,0.4);
-      --text:         #1a1714;
-      --muted:        #8a8278;
-      --muted2:       #6b6258;
-      --primary:      #d97706;
-      --primary-dark: #b45309;
-      --primary-glow: rgba(217,119,6,0.12);
-      --accent:       #ea580c;
-      --success:      #059669;
-      --blue:         #2563eb;
-      --purple:       #7c3aed;
-    }
-
-    html.light body::after {
-      background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px);
-    }
-
-    html.light nav {
-      background: rgba(250,250,248,0.9);
-      border-bottom-color: rgba(0,0,0,0.08);
-    }
-
-    html.light .hero-card {
-      box-shadow: 0 0 0 1px rgba(217,119,6,0.08), 0 24px 80px rgba(0,0,0,0.12);
-    }
-
-    html.light .float-badge {
-      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-    }
-
-    html.light .bento-card:hover {
-      box-shadow: 0 0 40px rgba(217,119,6,0.1), 0 16px 48px rgba(0,0,0,0.1);
-    }
-
-    html.light .price-card.featured {
-      box-shadow: 0 0 60px rgba(217,119,6,0.12);
-    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html { scroll-behavior: smooth; }
 
-    /* ── GRAIN TEXTURE ── */
     body {
-      font-family: 'IBM Plex Sans', sans-serif;
+      font-family: 'Plus Jakarta Sans', sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
       overflow-x: hidden;
-      position: relative;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-    body::before {
-      content: '';
+
+    /* ── ATMOSPHERIC BACKGROUNDS ── */
+    .noise-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      pointer-events: none; opacity: 0.018;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+    .grid-overlay {
       position: fixed; inset: 0; z-index: 0;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
-      opacity: 0.022;
       pointer-events: none;
+      background-image:
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: radial-gradient(ellipse at 50% 0%, black 0%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse at 50% 0%, black 0%, transparent 70%);
     }
 
-    /* dot grid background */
-    body::after {
-      content: '';
-      position: fixed; inset: 0; z-index: 0;
-      background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
-      background-size: 28px 28px;
-      pointer-events: none;
+    /* ── UTILITY ── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .reveal {
+      opacity: 0; transform: translateY(32px);
+      transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
     }
+    .reveal.visible { opacity: 1; transform: none; }
+    .delay-1 { transition-delay: 0.08s; }
+    .delay-2 { transition-delay: 0.16s; }
+    .delay-3 { transition-delay: 0.24s; }
+    .delay-4 { transition-delay: 0.32s; }
+    .delay-5 { transition-delay: 0.40s; }
 
-    /* make all sections sit above overlays */
-    nav, section, .stats-bar, .trust-strip, footer, .hero,
-    .how-section, .cta-section { position: relative; z-index: 1; }
-
-    /* ── NAV ── */
+    /* ── NAVIGATION ── */
     nav {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 10010;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      height: 72px;
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 6%; height: 66px;
-      background: rgba(7,9,14,0.85);
-      backdrop-filter: blur(20px);
+      padding: 0 5vw;
+      background: rgba(6,6,10,0.75);
+      backdrop-filter: blur(24px) saturate(1.2);
+      -webkit-backdrop-filter: blur(24px) saturate(1.2);
       border-bottom: 1px solid var(--border);
     }
-    .nav-logo {
-      display: flex; align-items: center; gap: 10px;
-      font-family: 'IBM Plex Sans', sans-serif;
-      font-size: 1.15rem; font-weight: 800;
-      color: var(--text); text-decoration: none;
-      letter-spacing: -0.01em;
+    .nav-brand {
+      display: flex; align-items: center; gap: 12px;
+      text-decoration: none;
     }
-    .nav-logo .logo-icon {
-      width: 46px; height: 34px;
-      background: transparent;
+    .nav-brand-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #b8933f);
       display: flex; align-items: center; justify-content: center;
-      font-size: 16px;
+      box-shadow: 0 0 20px rgba(212,168,83,0.25);
     }
-    .logo-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .nav-brand-icon svg { width: 20px; height: 20px; }
+    .nav-brand-text {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 1.15rem;
+      color: var(--text); letter-spacing: -0.02em;
+    }
     .nav-links {
-      display: flex; align-items: center; gap: 34px; list-style: none;
+      display: flex; align-items: center; gap: 36px;
+      list-style: none;
     }
     .nav-links a {
-      color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 500;
-      transition: color 0.2s; letter-spacing: 0.01em;
+      font-size: 0.82rem; font-weight: 600; color: var(--text-dim);
+      text-decoration: none; letter-spacing: 0.01em;
+      transition: color 0.2s;
+      position: relative;
+    }
+    .nav-links a::after {
+      content: ''; position: absolute; bottom: -4px; left: 0;
+      width: 0; height: 2px; background: var(--accent);
+      border-radius: 2px; transition: width 0.25s ease;
     }
     .nav-links a:hover { color: var(--text); }
-    .nav-cta { display: flex; align-items: center; gap: 10px; }
+    .nav-links a:hover::after { width: 100%; }
+    .nav-cta { display: flex; align-items: center; gap: 12px; }
 
-    /* ── THEME TOGGLE ── */
-    .theme-toggle {
-      width: 36px; height: 36px; border-radius: 8px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; transition: all 0.2s;
-      color: var(--muted2); font-size: 16px;
-      flex-shrink: 0;
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 0.85rem; font-weight: 700;
+      padding: 10px 22px; border-radius: 8px;
+      cursor: pointer; text-decoration: none; border: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      white-space: nowrap;
     }
-    .theme-toggle:hover {
-      background: rgba(255,255,255,0.1);
-      border-color: rgba(255,255,255,0.15);
-      color: var(--text);
-    }
-    html.light .theme-toggle {
-      background: rgba(0,0,0,0.04);
-      border-color: rgba(0,0,0,0.1);
-    }
-    html.light .theme-toggle:hover {
-      background: rgba(0,0,0,0.08);
-    }
-
     .btn-ghost {
       background: transparent;
       border: 1px solid var(--border);
-      color: var(--muted2);
-      padding: 8px 20px; border-radius: 8px;
-      font-size: 0.85rem; font-weight: 500; font-family: 'IBM Plex Sans', sans-serif;
-      cursor: pointer; text-decoration: none;
-      transition: all 0.2s;
+      color: var(--text-dim);
     }
-    .btn-ghost:hover { border-color: rgba(255,255,255,0.18); color: var(--text); }
-
+    .btn-ghost:hover {
+      border-color: rgba(255,255,255,0.15);
+      color: var(--text);
+      background: rgba(255,255,255,0.03);
+    }
     .btn-primary {
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      color: #fff; border: none;
-      padding: 9px 22px; border-radius: 8px;
-      font-size: 0.85rem; font-weight: 700; font-family: 'IBM Plex Sans', sans-serif;
-      cursor: pointer; text-decoration: none;
-      box-shadow: 0 0 20px rgba(245,158,11,0.25);
-      transition: all 0.2s;
+      background: linear-gradient(135deg, var(--accent), #c99a3f);
+      color: #0a0a0f;
+      box-shadow: 0 4px 24px rgba(212,168,83,0.25);
     }
     .btn-primary:hover {
-      box-shadow: 0 0 30px rgba(245,158,11,0.4);
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(212,168,83,0.4);
     }
+    .btn-large { padding: 14px 32px; font-size: 0.95rem; border-radius: 10px; }
 
     /* ── HERO ── */
     .hero {
+      position: relative;
       min-height: 100vh;
-      display: grid; grid-template-columns: 1fr 1fr;
-      align-items: center; gap: 60px;
-      padding: 120px 8% 90px;
-      position: relative; overflow: hidden;
+      display: flex; align-items: center;
+      padding: 140px 5vw 100px;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0; z-index: 0;
+      background: radial-gradient(ellipse 80% 60% at 70% 40%, rgba(212,168,83,0.08) 0%, transparent 60%),
+                  radial-gradient(ellipse 60% 50% at 20% 80%, rgba(91,141,239,0.05) 0%, transparent 50%);
     }
 
-    /* amber orb glow */
-    .hero-glow {
-      position: absolute; right: 0; top: 50%; transform: translateY(-50%);
-      width: 700px; height: 700px; border-radius: 50%;
-      background: radial-gradient(circle, rgba(245,158,11,0.1) 0%, rgba(255,106,0,0.06) 35%, transparent 70%);
-      pointer-events: none;
-    }
-    /* second glow, left */
-    .hero-glow-2 {
-      position: absolute; left: -200px; bottom: -200px;
-      width: 500px; height: 500px; border-radius: 50%;
-      background: radial-gradient(circle, rgba(79,142,247,0.05) 0%, transparent 70%);
-      pointer-events: none;
-    }
-
-    /* Road stripe decoration */
-    .hero-road {
-      position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
-      background: repeating-linear-gradient(
-        90deg,
-        var(--primary) 0px, var(--primary) 40px,
-        transparent 40px, transparent 72px
-      );
-      opacity: 0.18;
-    }
-
-    .hero-left {
-      display: flex; flex-direction: column; align-items: flex-start;
+    .hero-content {
+      position: relative; z-index: 2;
+      max-width: 1200px; margin: 0 auto;
+      display: grid; grid-template-columns: 1.1fr 1fr; gap: 80px;
+      align-items: center; width: 100%;
     }
 
     .hero-badge {
       display: inline-flex; align-items: center; gap: 8px;
-      background: rgba(245,158,11,0.07);
-      border: 1px solid rgba(245,158,11,0.2);
+      background: rgba(212,168,83,0.08);
+      border: 1px solid rgba(212,168,83,0.18);
       padding: 6px 14px; border-radius: 100px;
-      font-size: 0.78rem; font-weight: 600; color: #f59e0b;
-      margin-bottom: 28px; font-family: 'IBM Plex Mono', monospace;
-      letter-spacing: 0.03em;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.72rem; font-weight: 500;
+      color: var(--accent); letter-spacing: 0.04em;
+      margin-bottom: 28px; width: fit-content;
     }
-    .badge-dot {
+    .hero-badge-dot {
       width: 6px; height: 6px; border-radius: 50%;
-      background: var(--primary);
-      animation: pulse-dot 2s ease-in-out infinite;
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(212,168,83,0.6);
+      animation: pulse-glow 2.5s ease-in-out infinite;
     }
-    @keyframes pulse-dot {
-      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(245,158,11,0.5); }
-      50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(245,158,11,0); }
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
     }
 
-    .hero-left h1 {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: clamp(3.8rem, 7vw, 6.4rem);
-      line-height: 0.95;
-      letter-spacing: 0.02em;
+    .hero h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(3rem, 5.5vw, 5.2rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
       color: var(--text);
       margin-bottom: 24px;
     }
-    .hero-left h1 .gradient {
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
+    .hero h1 .accent-word {
+      color: var(--accent);
+      position: relative;
     }
-    .hero-left p {
-      font-size: 1rem; color: var(--muted2);
-      margin-bottom: 40px; line-height: 1.75;
-      max-width: 480px;
+    .hero h1 .accent-word::after {
+      content: ''; position: absolute; bottom: 0.05em; left: -2%; right: -2%;
+      height: 0.12em; background: rgba(212,168,83,0.25); border-radius: 2px; z-index: -1;
     }
-    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .hero-desc {
+      font-size: 1.05rem; color: var(--text-dim); line-height: 1.75;
+      max-width: 480px; margin-bottom: 40px;
+    }
+    .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; }
 
-    .btn-hero {
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      color: #fff; border: none;
-      padding: 14px 32px; border-radius: 10px;
-      font-size: 0.95rem; font-weight: 700; font-family: 'IBM Plex Sans', sans-serif;
-      cursor: pointer; text-decoration: none;
-      box-shadow: 0 4px 32px rgba(245,158,11,0.3);
-      transition: all 0.25s;
-      display: inline-flex; align-items: center; gap: 6px;
-    }
-    .btn-hero:hover {
-      box-shadow: 0 6px 40px rgba(245,158,11,0.5);
-      transform: translateY(-2px);
-    }
-    .btn-hero-ghost {
-      background: transparent;
-      border: 1px solid rgba(255,255,255,0.12);
-      color: var(--muted2);
-      padding: 14px 28px; border-radius: 10px;
-      font-size: 0.95rem; font-weight: 500; font-family: 'IBM Plex Sans', sans-serif;
-      cursor: pointer; text-decoration: none;
-      transition: all 0.2s;
-    }
-    .btn-hero-ghost:hover {
-      border-color: rgba(255,255,255,0.25);
-      color: var(--text);
-    }
-
-    /* ── HERO VISUAL (right side) ── */
+    /* ── HERO VISUAL ── */
     .hero-visual {
       position: relative;
       display: flex; align-items: center; justify-content: center;
     }
-
-    .hero-card {
-      background: var(--card);
+    .hero-dashboard {
+      width: 100%; max-width: 520px;
+      background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 24px;
-      box-shadow: 0 0 0 1px rgba(245,158,11,0.06), 0 24px 80px rgba(0,0,0,0.5);
-      width: 100%;
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow:
+        0 0 0 1px rgba(212,168,83,0.05),
+        0 40px 80px rgba(0,0,0,0.5),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+      position: relative;
     }
-    .hero-card-header {
+    .dash-header {
       display: flex; align-items: center; gap: 10px;
-      margin-bottom: 20px;
-      padding-bottom: 16px;
+      margin-bottom: 20px; padding-bottom: 16px;
       border-bottom: 1px solid var(--border);
     }
-    .hc-icon {
-      width: 36px; height: 36px; border-radius: 8px;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
+    .dash-icon {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #c99a3f);
       display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 0 12px rgba(245,158,11,0.3);
+      box-shadow: 0 0 16px rgba(212,168,83,0.3);
     }
-    .hc-title { font-weight: 600; font-size: 0.9rem; color: var(--text); }
-    .hc-sub { font-size: 0.72rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
-    .hc-status {
+    .dash-title { font-weight: 700; font-size: 0.9rem; color: var(--text); }
+    .dash-sub { font-size: 0.72rem; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; }
+    .dash-status {
       margin-left: auto;
-      background: rgba(0,217,126,0.1);
-      border: 1px solid rgba(0,217,126,0.2);
-      color: var(--success);
-      font-size: 0.7rem; font-weight: 700;
-      padding: 3px 10px; border-radius: 100px;
+      display: flex; align-items: center; gap: 6px;
       font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.68rem; font-weight: 500;
+      color: var(--success);
+      background: rgba(60,207,145,0.08);
+      border: 1px solid rgba(60,207,145,0.15);
+      padding: 3px 10px; border-radius: 100px;
+    }
+    .dash-status-dot {
+      width: 5px; height: 5px; border-radius: 50%; background: var(--success);
+      box-shadow: 0 0 6px rgba(60,207,145,0.5);
+      animation: pulse-glow 2s ease-in-out infinite;
     }
 
-    .hc-fields {
-      display: grid; grid-template-columns: 1fr 1fr;
-      gap: 10px; margin-bottom: 16px;
+    .dash-fields {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px;
     }
-    .hc-field-label {
-      font-size: 0.65rem; color: var(--muted); font-weight: 500;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      margin-bottom: 4px;
+    .dash-field-label {
+      font-size: 0.62rem; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 5px;
     }
-    .hc-field-val {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 7px 10px;
-      font-size: 0.82rem; font-weight: 600; color: var(--text);
-      font-family: 'IBM Plex Mono', monospace;
-    }
-    .hc-field-val.hl {
-      border-color: rgba(245,158,11,0.25);
-      color: var(--primary);
-      background: rgba(245,158,11,0.06);
-    }
-    .hc-route {
+    .dash-field-val {
       background: rgba(255,255,255,0.03);
       border: 1px solid var(--border);
-      border-radius: 10px; padding: 14px;
-    }
-    .hc-route-row { display: flex; align-items: center; gap: 10px; }
-    .hc-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-    .hc-dot-from { background: var(--primary); box-shadow: 0 0 6px rgba(245,158,11,0.5); }
-    .hc-dot-to   { background: var(--success); box-shadow: 0 0 6px rgba(0,217,126,0.5); }
-    .hc-line {
-      width: 1px; height: 20px;
-      background: linear-gradient(to bottom, var(--primary), var(--success));
-      margin-left: 4.5px; opacity: 0.4;
-    }
-    .hc-city { font-size: 0.82rem; font-weight: 700; color: var(--text); font-family: 'IBM Plex Mono', monospace; }
-    .hc-date { font-size: 0.7rem; color: var(--muted); }
-
-    /* floating badges */
-    .float-badge {
-      position: absolute;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 10px; padding: 9px 14px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-      display: flex; align-items: center; gap: 8px;
-      font-size: 0.75rem; font-weight: 600; color: var(--text);
+      border-radius: 8px;
+      padding: 8px 12px;
       font-family: 'IBM Plex Mono', monospace;
-      animation: floatY 3s ease-in-out infinite;
+      font-size: 0.84rem; font-weight: 500; color: var(--text);
     }
-    .float-badge-1 { top: -20px; right: -16px; animation-delay: 0s; }
-    .float-badge-2 { bottom: 10px; left: -24px; animation-delay: 1.5s; }
-    @keyframes floatY {
-      0%, 100% { transform: translateY(0); }
-      50%       { transform: translateY(-6px); }
+    .dash-field-val.hl {
+      border-color: rgba(212,168,83,0.2);
+      background: rgba(212,168,83,0.05);
+      color: var(--accent-bright);
     }
-    .float-icon { font-size: 1rem; }
 
-    /* ── STATS BAR ── */
-    .stats-bar {
-      background: var(--bg2);
+    .dash-route {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px;
+    }
+    .dash-route-row { display: flex; align-items: center; gap: 12px; }
+    .dash-route-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot-from { background: var(--accent); box-shadow: 0 0 8px rgba(212,168,83,0.5); }
+    .dot-to { background: var(--success); box-shadow: 0 0 8px rgba(60,207,145,0.5); }
+    .dash-route-line {
+      width: 2px; height: 24px; margin-left: 4px;
+      background: linear-gradient(to bottom, var(--accent), var(--success));
+      opacity: 0.4; border-radius: 2px;
+    }
+    .dash-city { font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; font-weight: 600; color: var(--text); }
+    .dash-date { font-size: 0.72rem; color: var(--text-muted); }
+
+    /* floating labels */
+    .float-pill {
+      position: absolute;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 16px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.75rem; font-weight: 500; color: var(--text);
+      animation: float-anim 4s ease-in-out infinite;
+      z-index: 3;
+    }
+    .float-pill-1 { top: -18px; right: -20px; animation-delay: 0s; }
+    .float-pill-2 { bottom: 20px; left: -24px; animation-delay: 2s; }
+    @keyframes float-anim {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .float-pill-icon {
+      width: 28px; height: 28px; border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem;
+    }
+    .fp-amber { background: rgba(212,168,83,0.12); }
+    .fp-blue  { background: rgba(91,141,239,0.12); }
+
+    /* ── ROUTE CANVAS (decorative) ── */
+    .route-canvas {
+      position: absolute; top: 0; right: 0; width: 55%; height: 100%;
+      pointer-events: none; z-index: 1; opacity: 0.35;
+    }
+
+    /* ── STATS STRIP ── */
+    .stats-strip {
+      position: relative; z-index: 2;
+      background: var(--bg-elevated);
       border-top: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
-      padding: 42px 6%;
+      padding: 56px 5vw;
     }
-    .stats-inner {
-      max-width: 960px; margin: 0 auto;
-      display: flex; align-items: center; justify-content: space-around; gap: 20px;
-      flex-wrap: wrap;
+    .stats-grid {
+      max-width: 1100px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px;
     }
-    .stat-item { text-align: center; }
+    .stat-block { text-align: center; }
     .stat-num {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 3.2rem; line-height: 1;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-      letter-spacing: 0.04em;
+      font-family: 'Syne', sans-serif;
+      font-size: 3.2rem; font-weight: 800; line-height: 1;
+      color: var(--accent);
+      letter-spacing: -0.02em;
     }
     .stat-label {
-      font-size: 0.82rem; color: var(--muted); margin-top: 6px;
-      text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;
+      font-size: 0.8rem; color: var(--text-muted); margin-top: 10px;
+      text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;
     }
-    .stat-divider { width: 1px; height: 52px; background: var(--border); }
 
-    /* ── TRUST STRIP ── */
+    /* ── TRUST MARQUEE ── */
     .trust-strip {
-      background: var(--bg);
+      padding: 36px 0;
       border-bottom: 1px solid var(--border);
-      padding: 24px 6%;
       overflow: hidden;
     }
-    .trust-marquee-wrap {
-      display: flex; align-items: center; gap: 16px;
-      max-width: 960px; margin: 0 auto; flex-wrap: wrap; justify-content: center;
+    .trust-track {
+      display: flex; gap: 48px;
+      animation: marquee 30s linear infinite;
+      width: max-content;
     }
-    .trust-label {
-      font-size: 0.75rem; color: var(--muted); font-weight: 500;
-      white-space: nowrap; margin-right: 12px;
-      text-transform: uppercase; letter-spacing: 0.08em;
+    .trust-strip:hover .trust-track { animation-play-state: paused; }
+    @keyframes marquee {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
     }
-    .trust-logo {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      padding: 7px 18px;
-      font-size: 0.78rem; font-weight: 700;
-      color: var(--muted2); letter-spacing: 0.02em;
-      transition: border-color 0.2s;
+    .trust-item {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 0.85rem; font-weight: 700; color: var(--text-muted);
+      white-space: nowrap; opacity: 0.6;
+      transition: opacity 0.2s;
     }
-    .trust-logo:hover { border-color: var(--border-lit); color: var(--text); }
+    .trust-item:hover { opacity: 1; }
+    .trust-item::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); opacity: 0.5;
+    }
 
     /* ── SECTIONS ── */
-    section { padding: 110px 6%; }
+    section { position: relative; z-index: 2; padding: 120px 5vw; }
+    .section-header { text-align: center; margin-bottom: 72px; }
     .section-label {
       display: inline-block;
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.72rem; font-weight: 500; letter-spacing: 0.12em;
-      text-transform: uppercase; color: var(--primary);
+      font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--accent);
       margin-bottom: 18px;
     }
     .section-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: clamp(2.8rem, 5vw, 4.2rem);
-      line-height: 1.0;
-      letter-spacing: 0.03em; color: var(--text);
-      max-width: 640px; margin-bottom: 18px;
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2.4rem, 4.5vw, 3.6rem);
+      font-weight: 800; line-height: 1.1;
+      letter-spacing: -0.02em; color: var(--text);
+      max-width: 600px; margin: 0 auto 18px;
     }
     .section-sub {
-      font-size: 1rem; color: var(--muted2);
-      max-width: 520px; line-height: 1.75;
+      font-size: 1.05rem; color: var(--text-dim);
+      max-width: 520px; margin: 0 auto; line-height: 1.7;
     }
-    .centered { text-align: center; align-items: center; }
-    .centered .section-title, .centered .section-sub { margin-left: auto; margin-right: auto; }
 
     /* ── BENTO GRID ── */
-    .bento-grid {
-      max-width: 1100px; margin: 68px auto 0;
+    .bento {
+      max-width: 1100px; margin: 0 auto;
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: auto auto;
-      gap: 16px;
+      grid-auto-rows: minmax(200px, auto);
+      gap: 18px;
     }
     .bento-card {
-      background: var(--card);
+      background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 20px; padding: 30px;
-      transition: all 0.3s;
-      overflow: hidden; position: relative;
+      border-radius: 18px;
+      padding: 32px;
+      position: relative; overflow: hidden;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex; flex-direction: column;
     }
     .bento-card::before {
-      content: '';
-      position: absolute; inset: 0;
-      background: linear-gradient(135deg, rgba(245,158,11,0.04) 0%, transparent 60%);
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(212,168,83,0.06), transparent 40%);
       opacity: 0; transition: opacity 0.3s;
-      border-radius: 20px;
+      pointer-events: none;
     }
-    .bento-card:hover {
-      border-color: var(--border-lit);
-      box-shadow: 0 0 40px rgba(245,158,11,0.08), 0 16px 48px rgba(0,0,0,0.4);
-      transform: translateY(-3px);
-    }
+    .bento-card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-4px); }
     .bento-card:hover::before { opacity: 1; }
-    .bento-card.big { grid-column: span 2; }
+    .bento-card.wide { grid-column: span 2; }
     .bento-card.tall { grid-row: span 2; }
 
     .bento-tag {
-      display: inline-block;
+      display: inline-flex; align-items: center; gap: 6px;
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.68rem; font-weight: 500;
-      text-transform: uppercase; letter-spacing: 0.1em;
-      padding: 3px 10px; border-radius: 100px; margin-bottom: 14px;
+      font-size: 0.65rem; font-weight: 500; text-transform: uppercase;
+      letter-spacing: 0.08em; padding: 4px 12px; border-radius: 100px;
+      margin-bottom: 16px; width: fit-content;
     }
-    .tag-amber  { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); }
-    .tag-green  { background: rgba(0,217,126,0.1);  color: var(--success); border: 1px solid rgba(0,217,126,0.2); }
-    .tag-blue   { background: rgba(79,142,247,0.1); color: var(--blue); border: 1px solid rgba(79,142,247,0.2); }
-    .tag-purple { background: rgba(167,139,250,0.1);color: var(--purple); border: 1px solid rgba(167,139,250,0.2); }
+    .tag-amber { background: rgba(212,168,83,0.08); color: var(--accent); border: 1px solid rgba(212,168,83,0.15); }
+    .tag-blue  { background: rgba(91,141,239,0.08); color: var(--accent-2); border: 1px solid rgba(91,141,239,0.15); }
+    .tag-green { background: rgba(60,207,145,0.08); color: var(--success); border: 1px solid rgba(60,207,145,0.15); }
+    .tag-red   { background: rgba(239,107,107,0.08); color: var(--danger); border: 1px solid rgba(239,107,107,0.15); }
 
     .bento-card h3 {
-      font-size: 1.1rem; font-weight: 700; color: var(--text);
-      margin-bottom: 10px; line-height: 1.4;
+      font-family: 'Syne', sans-serif;
+      font-size: 1.15rem; font-weight: 700; color: var(--text);
+      margin-bottom: 10px; line-height: 1.35;
     }
-    .bento-card > p { font-size: 0.875rem; color: var(--muted2); line-height: 1.7; }
+    .bento-card > p { font-size: 0.9rem; color: var(--text-dim); line-height: 1.7; }
 
     /* bento illustrations */
-    .bento-illus { margin-top: 24px; }
+    .illus-doc-flow { margin-top: auto; padding-top: 24px; }
     .doc-flow { display: flex; align-items: center; gap: 12px; }
     .doc-box {
-      background: var(--bg3);
-      border: 1px solid var(--border); border-radius: 10px;
-      padding: 12px 14px; flex: 1; min-width: 0;
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px; flex: 1; min-width: 0;
     }
-    .doc-box-title {
+    .doc-title {
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.65rem; font-weight: 500; color: var(--muted);
-      margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em;
+      font-size: 0.62rem; font-weight: 500; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 10px;
     }
     .doc-line {
       height: 5px; border-radius: 3px;
-      background: rgba(255,255,255,0.07); margin-bottom: 5px;
+      background: rgba(255,255,255,0.06); margin-bottom: 5px;
     }
-    .doc-line.short  { width: 55%; }
-    .doc-line.medium { width: 78%; }
-    .doc-line.hl     { background: rgba(245,158,11,0.25); }
-
+    .doc-line.w-55 { width: 55%; }
+    .doc-line.w-70 { width: 70%; }
+    .doc-line.w-85 { width: 85%; }
+    .doc-line.hl { background: rgba(212,168,83,0.2); }
     .flow-arrow {
-      width: 38px; height: 38px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #c99a3f);
       display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; box-shadow: 0 0 20px rgba(245,158,11,0.3);
+      flex-shrink: 0; box-shadow: 0 0 20px rgba(212,168,83,0.25);
     }
-    .extracted-fields { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+    .extracted-grid { display: flex; flex-direction: column; gap: 5px; flex: 1; }
     .ext-row {
       display: flex; align-items: center; justify-content: space-between;
-      background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
-      padding: 6px 10px;
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 10px;
     }
-    .ext-key { font-size: 0.66rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
-    .ext-val { font-size: 0.72rem; font-weight: 700; color: var(--primary); font-family: 'IBM Plex Mono', monospace; }
+    .ext-key { font-size: 0.65rem; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; }
+    .ext-val { font-size: 0.72rem; font-weight: 700; color: var(--accent); font-family: 'IBM Plex Mono', monospace; }
 
-    .status-list { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+    .status-list { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 20px; }
     .status-row {
       display: flex; align-items: center; gap: 10px;
-      background: var(--bg3); border: 1px solid var(--border);
+      background: var(--bg-surface); border: 1px solid var(--border);
       border-radius: 8px; padding: 10px 13px;
     }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .s-green  { background: var(--success); box-shadow: 0 0 6px rgba(0,217,126,0.6); }
-    .s-amber  { background: var(--primary); box-shadow: 0 0 6px rgba(245,158,11,0.6); animation: blink 2s ease-in-out infinite; }
-    .s-blue   { background: var(--blue); box-shadow: 0 0 6px rgba(79,142,247,0.6); }
-    @keyframes blink {
-      0%,100% { opacity: 1; } 50% { opacity: 0.5; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .s-green { background: var(--success); box-shadow: 0 0 6px rgba(60,207,145,0.5); }
+    .s-amber { background: var(--accent); box-shadow: 0 0 6px rgba(212,168,83,0.5); }
+    .s-blue  { background: var(--accent-2); box-shadow: 0 0 6px rgba(91,141,239,0.5); }
+    .status-text { font-size: 0.78rem; font-weight: 600; color: var(--text); flex: 1; font-family: 'IBM Plex Mono', monospace; }
+    .status-time { font-size: 0.68rem; color: var(--text-muted); }
+    .status-badge {
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; font-weight: 700;
+      padding: 3px 10px; border-radius: 100px;
     }
-    .status-text { font-size: 0.8rem; font-weight: 600; color: var(--text); flex: 1; font-family: 'IBM Plex Mono', monospace; }
-    .status-time { font-size: 0.68rem; color: var(--muted); }
-    .status-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; font-weight: 700; padding: 2px 9px; border-radius: 100px; }
-    .sb-delivered { background: rgba(0,217,126,0.1); color: var(--success); border: 1px solid rgba(0,217,126,0.2); }
-    .sb-transit   { background: rgba(245,158,11,0.1); color: var(--primary); border: 1px solid rgba(245,158,11,0.2); }
-    .sb-pickup    { background: rgba(79,142,247,0.1); color: var(--blue); border: 1px solid rgba(79,142,247,0.2); }
+    .sb-green { background: rgba(60,207,145,0.08); color: var(--success); border: 1px solid rgba(60,207,145,0.15); }
+    .sb-amber { background: rgba(212,168,83,0.08); color: var(--accent); border: 1px solid rgba(212,168,83,0.15); }
+    .sb-blue  { background: rgba(91,141,239,0.08); color: var(--accent-2); border: 1px solid rgba(91,141,239,0.15); }
 
-    .chat-list { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+    .chat-list { display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-top: 20px; }
     .chat-bubble {
-      max-width: 85%; padding: 10px 14px; border-radius: 12px;
-      font-size: 0.8rem; line-height: 1.55;
+      max-width: 88%; padding: 12px 16px; border-radius: 14px;
+      font-size: 0.85rem; line-height: 1.55;
     }
     .chat-in {
-      background: var(--bg3); color: var(--text);
+      background: var(--bg-surface); color: var(--text);
       border: 1px solid var(--border);
-      border-radius: 12px 12px 12px 4px; align-self: flex-start;
+      border-radius: 14px 14px 14px 4px; align-self: flex-start;
     }
     .chat-out {
-      background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(255,106,0,0.15));
-      border: 1px solid rgba(245,158,11,0.2);
+      background: linear-gradient(135deg, rgba(212,168,83,0.10), rgba(212,168,83,0.04));
+      border: 1px solid rgba(212,168,83,0.12);
       color: var(--text);
-      border-radius: 12px 12px 4px 12px; align-self: flex-end;
+      border-radius: 14px 14px 4px 14px; align-self: flex-end;
     }
-    .chat-label { font-size: 0.63rem; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; font-family: 'IBM Plex Mono', monospace; }
+    .chat-label { font-size: 0.62rem; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.08em; font-family: 'IBM Plex Mono', monospace; }
 
-    .small-stat { text-align: center; padding: 8px 0; }
-    .small-stat .num {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 4.5rem; line-height: 1;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    .stat-card { text-align: center; margin-top: auto; padding-top: 20px; }
+    .stat-card .num {
+      font-family: 'Syne', sans-serif; font-size: 4.5rem; font-weight: 800; line-height: 1;
+      color: var(--accent); letter-spacing: -0.03em;
     }
-    .small-stat .lbl { font-size: 0.85rem; color: var(--muted2); margin-top: 6px; }
-
-    .tg-demo {
-      background: var(--bg3); border: 1px solid var(--border);
-      border-radius: 12px; padding: 15px; margin-top: 20px;
-      display: flex; flex-direction: column; gap: 8px;
-    }
-    .tg-header {
-      display: flex; align-items: center; gap: 8px;
-      padding-bottom: 10px; border-bottom: 1px solid var(--border);
-    }
-    .tg-avatar {
-      width: 30px; height: 30px; border-radius: 50%;
-      background: linear-gradient(135deg, #0088cc, #00aced);
-      display: flex; align-items: center; justify-content: center;
-      color: #fff; font-size: 13px;
-    }
-    .tg-name { font-size: 0.82rem; font-weight: 700; color: var(--text); }
-    .tg-status { font-size: 0.68rem; color: var(--success); }
-    .tg-msg { font-size: 0.76rem; color: var(--muted2); }
-    .tg-result {
-      background: rgba(245,158,11,0.05);
-      border: 1px solid rgba(245,158,11,0.15);
-      border-radius: 8px; padding: 9px;
-    }
-    .tg-result-row {
-      display: flex; justify-content: space-between;
-      font-size: 0.73rem; padding: 3px 0;
-      font-family: 'IBM Plex Mono', monospace;
-    }
-    .tg-result-key { color: var(--muted); }
-    .tg-result-val { font-weight: 700; color: var(--text); }
+    .stat-card .lbl { font-size: 0.85rem; color: var(--text-dim); margin-top: 8px; }
 
     /* ── HOW IT WORKS ── */
     .how-section {
-      background: var(--bg2);
+      background: var(--bg-elevated);
       border-top: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
     }
-    .steps {
-      max-width: 1000px; margin: 68px auto 0;
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px;
+    .steps-grid {
+      max-width: 1000px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px;
       position: relative;
     }
-    .steps::before {
-      content: '';
-      position: absolute; top: 28px;
-      left: calc(16.66% + 20px); right: calc(16.66% + 20px);
+    .steps-grid::before {
+      content: ''; position: absolute; top: 32px;
+      left: calc(16.66% + 24px); right: calc(16.66% + 24px);
       height: 1px;
-      background: linear-gradient(90deg, var(--primary), var(--accent));
-      opacity: 0.25;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      opacity: 0.2;
     }
-    .step { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .step { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 18px; }
     .step-num {
-      width: 56px; height: 56px; border-radius: 50%;
-      background: rgba(245,158,11,0.08);
-      border: 1px solid rgba(245,158,11,0.2);
+      width: 64px; height: 64px; border-radius: 50%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
       display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 0 20px rgba(245,158,11,0.1);
+      box-shadow: 0 0 30px rgba(212,168,83,0.08);
+      position: relative; z-index: 2;
+      font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 700; color: var(--accent);
     }
-    .step h3 { font-size: 1rem; font-weight: 700; color: var(--text); }
-    .step p { font-size: 0.875rem; color: var(--muted2); line-height: 1.7; }
+    .step h3 { font-family: 'Syne', sans-serif; font-size: 1.05rem; font-weight: 700; color: var(--text); }
+    .step p { font-size: 0.9rem; color: var(--text-dim); line-height: 1.7; }
 
-    /* integrations */
-    .integrations-orbit {
-      max-width: 860px;
-      margin: 56px auto 0;
-      height: 540px;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    /* ── INTEGRATIONS ── */
+    .integrations-wrap {
+      max-width: 700px; margin: 64px auto 0;
+      position: relative; height: 480px;
+      display: flex; align-items: center; justify-content: center;
     }
     .orbit-ring {
-      position: absolute;
-      border: 1px dashed var(--border);
-      border-radius: 50%;
+      position: absolute; border: 1px dashed var(--border); border-radius: 50%;
     }
-    .ring-1 { width: 320px; height: 320px; }
-    .ring-2 { width: 450px; height: 450px; }
-    .ring-3 { width: 580px; height: 580px; opacity: 0.8; }
+    .orbit-ring.r1 { width: 280px; height: 280px; }
+    .orbit-ring.r2 { width: 400px; height: 400px; }
+    .orbit-ring.r3 { width: 520px; height: 520px; opacity: 0.6; }
 
-    .orbit-center {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: 220px;
-      height: 220px;
-      border-radius: 50%;
+    .orbit-hub {
+      position: relative; z-index: 3;
+      width: 180px; height: 180px; border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(212,168,83,0.1), transparent 60%), var(--bg-card);
       border: 1px solid var(--border);
-      background: radial-gradient(circle at 30% 30%, rgba(245,158,11,0.12), rgba(255,106,0,0.03) 48%, rgba(0,0,0,0) 70%), var(--card);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      box-shadow: 0 0 36px rgba(245,158,11,0.12);
-      padding: 20px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      box-shadow: 0 0 40px rgba(212,168,83,0.08);
     }
-    .orbit-center-logo {
-      width: 52px;
-      height: 52px;
-      border-radius: 14px;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 2rem;
-      line-height: 1;
-      margin-bottom: 10px;
-      box-shadow: 0 0 20px rgba(245,158,11,0.35);
+    .hub-logo {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), #c99a3f);
+      display: flex; align-items: center; justify-content: center;
+      color: #0a0a0f; font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 800;
+      margin-bottom: 10px; box-shadow: 0 0 24px rgba(212,168,83,0.3);
     }
-    .orbit-center-title {
-      font-size: 1.6rem;
-      line-height: 1;
-      font-family: 'Bebas Neue', sans-serif;
-      letter-spacing: 0.03em;
-      color: var(--text);
-    }
-    .orbit-center-sub {
-      margin-top: 6px;
-      font-size: 0.74rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      font-family: 'IBM Plex Mono', monospace;
-    }
+    .hub-title { font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 700; color: var(--text); }
+    .hub-sub { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.12em; font-family: 'IBM Plex Mono', monospace; margin-top: 4px; }
 
-    .integration-node {
+    .orbit-node {
       position: absolute;
-      left: var(--x);
-      top: var(--y);
+      left: var(--x); top: var(--y);
       transform: translate(-50%, -50%);
-      background: var(--card);
+      background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 8px 13px 8px 10px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      color: var(--muted2);
+      border-radius: 10px;
+      padding: 8px 14px 8px 10px;
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 0.78rem; font-weight: 700; color: var(--text-dim);
       white-space: nowrap;
       transition: all 0.2s ease;
-      box-shadow: 0 10px 24px rgba(0,0,0,0.2);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      z-index: 4;
     }
-    .integration-node:hover {
-      border-color: var(--border-lit);
-      color: var(--text);
-      transform: translate(-50%, -50%) translateY(-2px);
-    }
-    .integration-mark {
-      width: 24px;
-      height: 24px;
-      border-radius: 7px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.68rem;
-      font-weight: 800;
-      color: #fff;
-      letter-spacing: 0.02em;
-      font-family: 'IBM Plex Mono', monospace;
-    }
+    .orbit-node:hover { border-color: rgba(255,255,255,0.12); color: var(--text); transform: translate(-50%, -50%) translateY(-2px); }
+    .node-mark { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 800; color: #fff; font-family: 'IBM Plex Mono', monospace; }
     .mk-sam { background: #165dff; }
     .mk-mot { background: #111827; }
     .mk-zip { background: #f97316; }
@@ -782,569 +629,244 @@
 
     /* ── PRICING ── */
     .pricing-grid {
-      max-width: 960px; margin: 68px auto 0;
+      max-width: 1000px; margin: 0 auto;
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
     }
     .price-card {
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: 18px; padding: 32px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 18px; padding: 36px;
       display: flex; flex-direction: column;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
+    .price-card:hover { border-color: rgba(255,255,255,0.08); transform: translateY(-4px); }
     .price-card.featured {
-      border-color: rgba(245,158,11,0.35);
-      background: linear-gradient(180deg, rgba(245,158,11,0.06) 0%, var(--card) 100%);
-      box-shadow: 0 0 60px rgba(245,158,11,0.1);
+      border-color: rgba(212,168,83,0.3);
+      background: linear-gradient(180deg, rgba(212,168,83,0.04) 0%, var(--bg-card) 100%);
+      box-shadow: 0 0 60px rgba(212,168,83,0.06);
       position: relative;
     }
-    .featured-badge {
-      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      color: #fff; font-size: 0.68rem; font-weight: 700;
-      padding: 4px 16px; border-radius: 100px; white-space: nowrap;
+    .featured-ribbon {
+      position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(135deg, var(--accent), #c99a3f);
+      color: #0a0a0f; font-size: 0.65rem; font-weight: 800;
+      padding: 4px 18px; border-radius: 100px;
       font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.06em;
     }
     .price-plan {
       font-family: 'IBM Plex Mono', monospace;
       font-size: 0.72rem; font-weight: 500;
       text-transform: uppercase; letter-spacing: 0.1em;
-      color: var(--muted); margin-bottom: 14px;
+      color: var(--text-muted); margin-bottom: 16px;
     }
-    .price-amount { display: flex; align-items: flex-end; gap: 4px; margin-bottom: 8px; }
-    .price-amount .amount {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 3.6rem; color: var(--text); line-height: 1;
-      letter-spacing: 0.04em;
+    .price-value { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 10px; }
+    .price-value .amount {
+      font-family: 'Syne', sans-serif; font-size: 3.4rem; font-weight: 800;
+      color: var(--text); line-height: 1; letter-spacing: -0.02em;
     }
-    .price-amount .period { font-size: 0.875rem; color: var(--muted); margin-bottom: 8px; }
-    .price-desc { font-size: 0.84rem; color: var(--muted2); margin-bottom: 24px; line-height: 1.55; }
-    .price-divider { height: 1px; background: var(--border); margin-bottom: 24px; }
-    .price-features {
-      list-style: none; display: flex; flex-direction: column;
-      gap: 11px; flex: 1; margin-bottom: 28px;
-    }
+    .price-value .period { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 8px; }
+    .price-desc { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 28px; line-height: 1.6; min-height: 42px; }
+    .price-sep { height: 1px; background: var(--border); margin-bottom: 28px; }
+    .price-features { list-style: none; display: flex; flex-direction: column; gap: 12px; flex: 1; margin-bottom: 32px; }
     .price-features li {
       display: flex; align-items: flex-start; gap: 10px;
-      font-size: 0.875rem; color: var(--text);
+      font-size: 0.88rem; color: var(--text-dim);
     }
     .price-features li::before {
-      content: '✓'; color: var(--success);
-      font-weight: 700; flex-shrink: 0;
-      font-family: 'IBM Plex Mono', monospace;
+      content: ''; width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 24 24'%3E%3Cpath d='M20 6L9 17l-5-5' stroke='%233ccf91' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     }
-    .btn-plan {
-      width: 100%; padding: 12px; border-radius: 10px;
-      font-size: 0.9rem; font-weight: 700; cursor: pointer;
-      text-decoration: none; text-align: center; transition: all 0.2s;
-      font-family: 'IBM Plex Sans', sans-serif;
-    }
-    .btn-plan-ghost {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid var(--border); color: var(--muted2);
-    }
-    .btn-plan-ghost:hover { border-color: rgba(255,255,255,0.15); color: var(--text); }
-    .btn-plan-primary {
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      border: none; color: #fff;
-      box-shadow: 0 4px 24px rgba(245,158,11,0.3);
-    }
-    .btn-plan-primary:hover {
-      box-shadow: 0 6px 36px rgba(245,158,11,0.5);
-      transform: translateY(-1px);
-    }
+    .btn-plan { width: 100%; padding: 12px; border-radius: 10px; font-size: 0.9rem; font-weight: 700; cursor: pointer; text-decoration: none; text-align: center; transition: all 0.2s; font-family: 'Plus Jakarta Sans', sans-serif; border: none; }
+    .btn-plan-ghost { background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: var(--text-dim); }
+    .btn-plan-ghost:hover { border-color: rgba(255,255,255,0.12); color: var(--text); background: rgba(255,255,255,0.05); }
+    .btn-plan-primary { background: linear-gradient(135deg, var(--accent), #c99a3f); color: #0a0a0f; box-shadow: 0 4px 24px rgba(212,168,83,0.2); }
+    .btn-plan-primary:hover { box-shadow: 0 6px 32px rgba(212,168,83,0.35); transform: translateY(-1px); }
 
     /* ── TESTIMONIALS ── */
     .testimonials-section {
-      background: var(--bg2);
+      background: var(--bg-elevated);
       border-top: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
     }
     .testimonials-grid {
-      max-width: 1000px; margin: 68px auto 0;
+      max-width: 1100px; margin: 0 auto;
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
     }
     .testimonial-card {
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: 16px; padding: 28px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px;
       transition: all 0.3s;
     }
-    .testimonial-card:hover {
-      border-color: var(--border-lit);
-      transform: translateY(-2px);
-    }
-    .stars { color: var(--primary); font-size: 0.9rem; margin-bottom: 14px; letter-spacing: 3px; }
-    .testimonial-text {
-      font-size: 0.9rem; color: var(--muted2); line-height: 1.75;
-      margin-bottom: 22px; font-style: italic;
-    }
+    .testimonial-card:hover { border-color: rgba(255,255,255,0.08); }
+    .stars { color: var(--accent); font-size: 0.9rem; margin-bottom: 16px; letter-spacing: 2px; }
+    .testimonial-text { font-size: 0.92rem; color: var(--text-dim); line-height: 1.8; margin-bottom: 24px; font-style: italic; }
     .testimonial-author { display: flex; align-items: center; gap: 12px; }
     .author-avatar {
-      width: 38px; height: 38px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #c99a3f);
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 0.8rem; color: #fff;
+      font-weight: 800; font-size: 0.8rem; color: #0a0a0f;
       flex-shrink: 0;
     }
-    .author-name { font-size: 0.875rem; font-weight: 700; color: var(--text); }
-    .author-role { font-size: 0.75rem; color: var(--muted); }
+    .author-name { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+    .author-role { font-size: 0.78rem; color: var(--text-muted); }
 
-    /* ── CTA SECTION ── */
+    /* ── CTA ── */
     .cta-section {
-      text-align: center; padding: 140px 6%;
+      text-align: center; padding: 140px 5vw;
       position: relative; overflow: hidden;
     }
     .cta-section::before {
-      content: '';
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 900px; height: 500px; border-radius: 50%;
-      background: radial-gradient(ellipse, rgba(245,158,11,0.08) 0%, rgba(255,106,0,0.05) 40%, transparent 70%);
-      pointer-events: none;
-    }
-    /* highway road lines in CTA */
-    .cta-section::after {
-      content: '';
-      position: absolute; top: 50%; left: 0; right: 0; height: 1px;
-      background: repeating-linear-gradient(
-        90deg,
-        transparent 0px, transparent 20px,
-        rgba(245,158,11,0.15) 20px, rgba(245,158,11,0.15) 60px
-      );
+      content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 800px; height: 400px; border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(212,168,83,0.07) 0%, transparent 65%);
       pointer-events: none;
     }
     .cta-section h2 {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: clamp(3rem, 6vw, 5.5rem);
-      line-height: 1.0;
-      letter-spacing: 0.03em;
-      color: var(--text); max-width: 780px; margin: 0 auto 20px;
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2.8rem, 5.5vw, 4.5rem);
+      font-weight: 800; line-height: 1.05;
+      letter-spacing: -0.03em; color: var(--text);
+      max-width: 700px; margin: 0 auto 20px;
     }
-    .cta-section h2 .gradient {
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
-    .cta-section p { font-size: 1rem; color: var(--muted2); margin-bottom: 44px; }
-    .cta-actions {
-      display: flex; align-items: center; justify-content: center;
-      gap: 14px; flex-wrap: wrap; position: relative; z-index: 1;
-    }
+    .cta-section p { font-size: 1.05rem; color: var(--text-dim); margin-bottom: 40px; }
+    .cta-actions { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; position: relative; z-index: 1; }
 
     /* ── FOOTER ── */
     footer {
-      background: var(--bg2);
+      background: var(--bg-elevated);
       border-top: 1px solid var(--border);
-      padding: 60px 6% 32px;
+      padding: 64px 5vw 36px;
     }
-    .footer-top {
-      display: flex; justify-content: space-between; gap: 40px;
-      margin-bottom: 48px; flex-wrap: wrap;
+    .footer-grid {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px; margin-bottom: 56px;
     }
-    .footer-brand { max-width: 280px; }
+    .footer-brand { max-width: 300px; }
     .footer-logo {
       display: flex; align-items: center; gap: 10px;
-      font-family: 'IBM Plex Sans', sans-serif;
-      font-size: 1.05rem; font-weight: 800; color: var(--text);
-      text-decoration: none; margin-bottom: 14px;
+      text-decoration: none; margin-bottom: 16px;
     }
-    .footer-logo .logo-icon {
-      width: 38px; height: 28px;
-      background: transparent;
+    .footer-logo-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #c99a3f);
       display: flex; align-items: center; justify-content: center;
-      font-size: 13px;
     }
-    .footer-brand p { font-size: 0.84rem; color: var(--muted); line-height: 1.65; }
+    .footer-logo-text { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.05rem; color: var(--text); }
+    .footer-brand p { font-size: 0.85rem; color: var(--text-muted); line-height: 1.7; }
     .footer-col h4 {
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.72rem; font-weight: 500;
-      text-transform: uppercase; letter-spacing: 0.1em;
-      color: var(--muted); margin-bottom: 16px;
+      font-size: 0.7rem; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--text-muted); margin-bottom: 18px;
     }
     .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
     .footer-col ul a {
-      font-size: 0.875rem; color: var(--muted); text-decoration: none; transition: color 0.2s;
+      font-size: 0.85rem; color: var(--text-muted); text-decoration: none; transition: color 0.2s;
     }
     .footer-col ul a:hover { color: var(--text); }
     .footer-bottom {
       border-top: 1px solid var(--border); padding-top: 28px;
       display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.75rem; color: var(--muted);
+      font-size: 0.72rem; color: var(--text-muted);
     }
 
-    /* ── ANIMATIONS ── */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(24px); }
-      to   { opacity: 1; transform: translateY(0); }
+    /* ── PARTNER ── */
+    .partner-card {
+      max-width: 560px; margin: 0 auto;
+      display: flex; align-items: center; gap: 24px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 28px 36px;
+      text-decoration: none; transition: all 0.25s;
     }
-    .fade-up { animation: fadeUp 0.7s cubic-bezier(0.22,1,0.36,1) both; }
-    .delay-1 { animation-delay: 0.1s; }
-    .delay-2 { animation-delay: 0.22s; }
-    .delay-3 { animation-delay: 0.34s; }
-    .delay-4 { animation-delay: 0.46s; }
+    .partner-card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-2px); }
+    .partner-logo-wrap {
+      width: 72px; height: 72px; border-radius: 14px;
+      background: #fff; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; overflow: hidden;
+    }
+    .partner-logo-wrap img { width: 100%; height: 100%; object-fit: contain; }
+    .partner-name { color: var(--text); font-weight: 700; font-size: 1.1rem; margin-bottom: 4px; }
+    .partner-tag { color: var(--accent); font-size: 0.72rem; font-weight: 700; font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+    .partner-desc { color: var(--text-dim); font-size: 0.88rem; line-height: 1.55; }
+    .partner-arrow { color: var(--text-muted); font-size: 1.3rem; flex-shrink: 0; transition: transform 0.2s; }
+    .partner-card:hover .partner-arrow { transform: translateX(4px); color: var(--text); }
 
-    /* scroll reveal */
-    .reveal {
-      opacity: 0; transform: translateY(20px);
-      transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22,1,0.36,1);
+    /* ── TEAM ── */
+    .team-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;
     }
-    .reveal.visible { opacity: 1; transform: none; }
+    .team-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px; transition: all 0.25s;
+    }
+    .team-card:hover { border-color: rgba(255,255,255,0.08); }
+    .team-avatar {
+      width: 64px; height: 64px; border-radius: 50%; overflow: hidden; margin-bottom: 18px;
+    }
+    .team-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .team-name { color: var(--text); font-weight: 700; font-size: 1.05rem; margin-bottom: 4px; }
+    .team-role { color: var(--accent); font-size: 0.8rem; font-weight: 600; margin-bottom: 12px; font-family: 'IBM Plex Mono', monospace; }
+    .team-bio { color: var(--text-dim); font-size: 0.85rem; line-height: 1.65; }
+
+    /* ── KEYFRAMES ── */
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: none; }
+    }
+    .anim-fade-up { animation: fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .anim-d1 { animation-delay: 0.1s; }
+    .anim-d2 { animation-delay: 0.2s; }
+    .anim-d3 { animation-delay: 0.3s; }
+    .anim-d4 { animation-delay: 0.4s; }
 
     /* ── RESPONSIVE ── */
-    @media (max-width: 1000px) {
-      nav { padding: 0 5%; }
-      .nav-links { display: none; }
-    }
-    @media (max-width: 900px) {
-      .hero { grid-template-columns: 1fr; padding: 110px 5% 70px; gap: 40px; }
+    @media (max-width: 1024px) {
+      .hero-content { grid-template-columns: 1fr; text-align: center; gap: 60px; }
+      .hero-desc { margin-left: auto; margin-right: auto; }
+      .hero-actions { justify-content: center; }
       .hero-visual { display: none; }
-      .bento-grid { grid-template-columns: 1fr; }
-      .bento-card.big { grid-column: span 1; }
-      .steps { grid-template-columns: 1fr; }
-      .steps::before { display: none; }
+      .route-canvas { display: none; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 32px; }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
       .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
       .testimonials-grid { grid-template-columns: 1fr; max-width: 480px; }
-      .stat-divider { display: none; }
-      .footer-top { flex-direction: column; }
-      .integrations-orbit {
-        height: auto;
-        margin-top: 44px;
-        display: grid;
-        grid-template-columns: repeat(2, minmax(140px, 1fr));
-        gap: 12px;
-      }
+      .bento { grid-template-columns: 1fr; }
+      .bento-card.wide { grid-column: span 1; }
+      .bento-card.tall { grid-row: span 1; }
+      .steps-grid { grid-template-columns: 1fr; }
+      .steps-grid::before { display: none; }
+      .integrations-wrap { height: auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 44px; }
       .orbit-ring { display: none; }
-      .orbit-center {
-        position: relative;
-        left: auto;
-        top: auto;
-        transform: none;
-        width: 100%;
-        height: auto;
-        border-radius: 14px;
-        grid-column: 1 / -1;
-        padding: 18px 12px;
-      }
-      .orbit-center-logo { width: 42px; height: 42px; font-size: 1.6rem; border-radius: 12px; }
-      .integration-node {
-        position: relative;
-        left: auto;
-        top: auto;
-        transform: none;
-        width: 100%;
-        justify-content: flex-start;
-      }
-      .integration-node:hover { transform: translateY(-2px); }
+      .orbit-hub { position: relative; width: auto; height: auto; border-radius: 14px; grid-column: 1 / -1; padding: 20px; }
+      .orbit-node { position: relative; left: auto !important; top: auto !important; transform: none !important; width: 100%; justify-content: flex-start; }
     }
-    @media (max-width: 600px) {
-      section { padding: 80px 5%; }
-      .hero-left h1 { font-size: 3.6rem; }
-      .section-title { font-size: 2.6rem; }
-      .doc-flow { flex-direction: column; }
-    }
-    /* ── TERMINAL-INSPIRED OVERRIDES ── */
-    html:not(.light), html.light {
-      --bg: #f1f0eb;
-      --bg2: #eceae3;
-      --bg3: #e4e2da;
-      --card: #faf9f5;
-      --card-hover: #f3f1ea;
-      --border: rgba(13, 13, 13, 0.12);
-      --border-lit: rgba(241, 140, 17, 0.5);
-      --text: #121212;
-      --muted: #6a6962;
-      --muted2: #3b3a36;
-      --primary: #f18c11;
-      --accent: #f97316;
-      --success: #0f9f63;
-      --blue: #135dce;
-      --purple: #5f43d8;
-    }
-    body {
-      font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
-    body::before { opacity: 0; }
-    body::after {
-      background-image:
-        linear-gradient(rgba(13,13,13,0.055) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(13,13,13,0.055) 1px, transparent 1px);
-      background-size: 42px 42px;
-      opacity: 0.4;
-    }
-    nav {
-      background: rgba(241, 240, 235, 0.86);
-      border-bottom: 1px solid var(--border);
-      backdrop-filter: blur(12px);
-    }
-    .theme-toggle { display: none; }
-    .nav-logo {
-      font-family: 'IBM Plex Sans', sans-serif;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-    }
-    .nav-logo .logo-icon {
-      background: transparent;
-      box-shadow: none;
-    }
-    /* nav bar is light → darken the white logo so it's visible */
-    .nav-logo .logo-icon img { filter: brightness(0.2); }
-    .nav-links a {
-      font-size: 0.8rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-    .btn-primary,
-    .btn-hero,
-    .btn-plan-primary {
-      background: #121212;
-      border-radius: 4px;
-      box-shadow: none;
-    }
-    .btn-ghost,
-    .btn-hero-ghost,
-    .btn-plan-ghost {
-      border-radius: 4px;
-      border-color: var(--border);
-      color: var(--muted2);
-      background: transparent;
-    }
-    .hero {
-      min-height: 94vh;
-      gap: 48px;
-      padding: 120px 8% 70px;
-    }
-    .hero-glow, .hero-glow-2 { display: none; }
-    .hero-road { opacity: 0.4; }
-    .hero-left h1 {
-      font-family: 'IBM Plex Sans', sans-serif;
-      font-size: clamp(3rem, 6vw, 5.2rem);
-      line-height: 0.94;
-      letter-spacing: -0.02em;
-      text-transform: uppercase;
-    }
-    .hero-left h1 .gradient {
-      color: var(--primary);
-      background: none;
-      -webkit-text-fill-color: var(--primary);
-    }
-    .hero-card,
-    .bento-card,
-    .price-card,
-    .testimonial-card,
-    .orbit-center,
-    .integration-node {
-      border-radius: 8px;
-      border-color: var(--border);
-      box-shadow: 0 10px 24px rgba(18,18,18,0.08);
-    }
-    .section-title,
-    .cta-section h2 {
-      font-family: 'IBM Plex Sans', sans-serif;
-      text-transform: uppercase;
-      line-height: 0.98;
-      letter-spacing: -0.02em;
-    }
-    .section-label,
-    .hero-badge,
-    .price-plan,
-    .footer-col h4 {
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      font-weight: 600;
-    }
-    .stats-bar,
-    .how-section,
-    .testimonials-section,
-    footer {
-      background: var(--bg2);
-      border-color: var(--border);
-    }
-    .trust-strip { background: var(--bg); border-color: var(--border); }
-    .trust-logo {
-      border-radius: 4px;
-      font-weight: 700;
-      background: rgba(18,18,18,0.02);
-    }
-    @media (max-width: 900px) {
-      .hero { padding: 110px 5% 70px; }
-      .hero-left h1 { font-size: 3.2rem; }
-    }
-
-    /* Intro cinematic */
-    :root { --intro-reveal: 0; }
-    .intro-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      overflow: hidden;
-      background: #1f1a18;
-      transition: opacity 0.28s linear, visibility 0.28s linear;
-      pointer-events: none;
-      will-change: opacity, transform;
-    }
-    .intro-overlay.hidden {
-      opacity: 0;
-      visibility: hidden;
-    }
-    body.has-intro .hero {
-      opacity: var(--intro-reveal);
-      transition: opacity 0.22s linear;
-    }
-    .intro-gate {
-      height: clamp(620px, 120vh, 1200px);
-      position: relative;
-      z-index: 0;
-    }
-    .intro-video {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      animation: introVideoPan 4.2s ease forwards;
-      transform-origin: center center;
-      will-change: transform;
-    }
-    .intro-video-tint {
-      position: absolute;
-      inset: 0;
-      background:
-        linear-gradient(180deg, rgba(36, 27, 21, 0.16) 0%, rgba(18, 12, 10, 0.55) 72%, rgba(9, 7, 6, 0.76) 100%),
-        radial-gradient(1200px 700px at 20% 10%, rgba(255, 160, 118, 0.25), transparent 55%);
-    }
-    .intro-copy {
-      position: absolute;
-      left: 50%;
-      bottom: 16%;
-      transform: translateX(-50%);
-      width: min(900px, 90%);
-      color: rgba(255,255,255,0.93);
-      font-size: clamp(2.4rem, 6vw, 4.8rem);
-      font-family: 'IBM Plex Sans', sans-serif;
-      font-weight: 500;
-      letter-spacing: -0.03em;
-      text-align: center;
-      text-transform: none;
-      animation: introCopy 5.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-      display: flex;
-      align-items: baseline;
-      justify-content: center;
-      gap: clamp(14px, 2vw, 26px);
-    }
-    .intro-copy-main { display: inline-block; }
-    .intro-copy-float {
-      display: inline-block;
-      font-size: 0.92em;
-      opacity: 0;
-      transform: translateX(36px);
-      animation: introFloatE 5.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-    }
-    .intro-scroll-cue {
-      position: fixed;
-      left: 50vw;
-      top: 88vh;
-      transform: translate(14px, 14px);
-      display: inline-flex;
-      align-items: center;
-      gap: 12px;
-      color: rgba(21, 51, 77, 0.92);
-      font-size: 0.8rem;
-      font-weight: 700;
-      letter-spacing: 0.36em;
-      text-transform: uppercase;
-      white-space: nowrap;
-      pointer-events: none;
-      animation: introCueIn 0.7s ease both;
-      animation-delay: 0.35s;
-      z-index: 10001;
-    }
-    .intro-mouse {
-      width: 18px;
-      height: 30px;
-      border: 2px solid rgba(21, 51, 77, 0.78);
-      border-radius: 12px;
-      position: relative;
-      flex-shrink: 0;
-    }
-    .intro-mouse::before {
-      content: '';
-      position: absolute;
-      left: 50%;
-      top: 5px;
-      width: 3px;
-      height: 7px;
-      border-radius: 2px;
-      background: rgba(21, 51, 77, 0.78);
-      transform: translateX(-50%);
-      animation: introWheel 1.4s ease-in-out infinite;
-    }
-    @keyframes introVideoPan {
-      0%   { transform: scale(1.09) translate3d(-1.4%, -0.3%, 0); }
-      100% { transform: scale(1.02) translate3d(1.1%, 0, 0); }
-    }
-    @keyframes introBarIn {
-      from { opacity: 0; transform: translateX(-50%) translateY(-14px); }
-      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
-    }
-    @keyframes introCopy {
-      0%   { opacity: 0; transform: translateX(-50%) translateY(20px); }
-      22%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-      86%  { opacity: 1; }
-      100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
-    }
-    @keyframes introFloatE {
-      0%   { opacity: 0; transform: translateX(36px); }
-      42%  { opacity: 0; transform: translateX(36px); }
-      54%  { opacity: 1; transform: translateX(0); }
-      86%  { opacity: 1; transform: translateX(0); }
-      100% { opacity: 0; transform: translateX(-10px); }
-    }
-    @keyframes introCueIn {
-      from { opacity: 0; transform: translate(14px, 22px); }
-      to   { opacity: 1; transform: translate(14px, 14px); }
-    }
-    @keyframes introWheel {
-      0%, 100% { opacity: 0.9; transform: translateX(-50%) translateY(0); }
-      60%      { opacity: 0.3; transform: translateX(-50%) translateY(6px); }
-    }
-    @media (max-width: 900px) {
-      .intro-copy { bottom: 12%; font-size: clamp(1.8rem, 10vw, 3rem); }
-      .intro-copy-float { display: none; }
-      .intro-gate { height: 110vh; }
-      .intro-scroll-cue {
-        left: 50vw;
-        top: 90vh;
-        font-size: 0.68rem;
-        letter-spacing: 0.24em;
-        gap: 9px;
-      }
-      .intro-mouse {
-        width: 16px;
-        height: 26px;
-      }
+    @media (max-width: 640px) {
+      nav { padding: 0 4%; height: 64px; }
+      .nav-links { display: none; }
+      .hero { padding: 120px 4% 80px; min-height: auto; }
+      .hero h1 { font-size: 2.8rem; }
+      section { padding: 80px 4%; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .stat-num { font-size: 2.4rem; }
+      .footer-grid { grid-template-columns: 1fr; }
+      .partner-card { flex-direction: column; text-align: center; padding: 24px; }
+      .partner-logo-wrap { width: 60px; height: 60px; }
     }
   </style>
 </head>
 <body>
 
-  <!-- INTRO OVERLAY -->
-  <div id="introOverlay" class="intro-overlay" aria-hidden="true">
-    <video class="intro-video" autoplay muted playsinline preload="auto"></video>
-    <div class="intro-video-tint"></div>
-    <div class="intro-copy">
-      <span class="intro-copy-main">Logistics Made Simple</span>
-    </div>
-    <div class="intro-scroll-cue" aria-hidden="true">
-      <span class="intro-mouse"></span>
-      <span>Scroll to explore</span>
-    </div>
-  </div>
-  <div id="introGate" class="intro-gate" aria-hidden="true"></div>
+  <div class="noise-overlay"></div>
+  <div class="grid-overlay"></div>
+
   <!-- NAV -->
   <nav>
-    <a href="#" class="nav-logo">
-      <div class="logo-icon"><img src="/static/logo.png" alt="SimpleTrucking logo" /></div>
-      SimpleTrucking
+    <a href="#" class="nav-brand">
+      <div class="nav-brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <span class="nav-brand-text">SimpleTrucking</span>
     </a>
     <ul class="nav-links">
       <li><a href="#features">Features</a></li>
@@ -1353,163 +875,194 @@
       <li><a href="#about">About</a></li>
     </ul>
     <div class="nav-cta">
-      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-        <svg id="iconMoon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <svg id="iconSun"  width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-      </button>
-      <a href="/login" class="btn-ghost">Log in</a>
-      <a href="mailto:ceo@simpletrucking.online?subject=Demo Request" class="btn-primary">Get started free</a>
+      <a href="/login" class="btn btn-ghost">Log in</a>
+      <a href="mailto:ceo@simpletrucking.online?subject=Demo Request" class="btn btn-primary">Get started free</a>
     </div>
   </nav>
 
   <!-- HERO -->
   <section class="hero">
-    <div class="hero-glow"></div>
-    <div class="hero-glow-2"></div>
-    <div class="hero-road"></div>
-
-    <div class="hero-left">
-      <div class="hero-badge fade-up">
-        <span class="badge-dot"></span> AI-Powered Dispatch Tools
-      </div>
-      <h1 class="fade-up delay-1">
-        SMARTER<br>
-        DISPATCHING<br>
-        <span class="gradient">POWERED BY AI</span>
-      </h1>
-      <p class="fade-up delay-2">
-        Extract rate confirmations in seconds, get AI-powered load updates automatically,
-        and let your AI Dispatcher handle routine work — so you focus on moving freight.
-      </p>
-      <div class="hero-actions fade-up delay-3">
-        <a href="mailto:ceo@simpletrucking.online?subject=Get Started" class="btn-hero">Start for free →</a>
-        <a href="#how-it-works" class="btn-hero-ghost">See how it works</a>
-      </div>
+    <div class="route-canvas">
+      <svg width="100%" height="100%" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="routeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#d4a853;stop-opacity:0.6" />
+            <stop offset="50%" style="stop-color:#5b8def;stop-opacity:0.4" />
+            <stop offset="100%" style="stop-color:#d4a853;stop-opacity:0.1" />
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+            <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <path d="M 50 500 Q 150 450 200 350 T 350 200 T 600 150 T 750 50" fill="none" stroke="url(#routeGrad)" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.5">
+          <animate attributeName="stroke-dashoffset" from="100" to="0" dur="3s" repeatCount="indefinite"/>
+        </path>
+        <path d="M 100 550 Q 250 400 300 250 T 500 180 T 700 100" fill="none" stroke="url(#routeGrad)" stroke-width="1" stroke-dasharray="4,8" opacity="0.3">
+          <animate attributeName="stroke-dashoffset" from="80" to="0" dur="4s" repeatCount="indefinite"/>
+        </path>
+        <circle cx="200" cy="350" r="3" fill="#d4a853" filter="url(#glow)">
+          <animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.8;0.3;0.8" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="600" cy="150" r="4" fill="#5b8def" filter="url(#glow)">
+          <animate attributeName="r" values="4;6;4" dur="2.5s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.6;0.2;0.6" dur="2.5s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
     </div>
 
-    <!-- Hero Visual -->
-    <div class="hero-visual fade-up delay-2">
-      <div class="hero-card">
-        <div class="hero-card-header">
-          <div class="hc-icon">
-            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <div>
-            <div class="hc-title">ratecon_load_2847.pdf</div>
-            <div class="hc-sub">Extracted in 2.1s</div>
-          </div>
-          <div class="hc-status">✓ Done</div>
+    <div class="hero-content">
+      <div class="hero-left">
+        <div class="hero-badge anim-fade-up">
+          <span class="hero-badge-dot"></span>
+          AI-Powered Dispatch Platform
         </div>
-        <div class="hc-fields">
-          <div>
-            <div class="hc-field-label">Load #</div>
-            <div class="hc-field-val hl">#2847</div>
-          </div>
-          <div>
-            <div class="hc-field-label">Total Rate</div>
-            <div class="hc-field-val hl">$3,450.00</div>
-          </div>
-          <div>
-            <div class="hc-field-label">Broker</div>
-            <div class="hc-field-val">Echo Global</div>
-          </div>
-          <div>
-            <div class="hc-field-label">Commodity</div>
-            <div class="hc-field-val">General Freight</div>
-          </div>
-        </div>
-        <div class="hc-route">
-          <div class="hc-route-row">
-            <div class="hc-dot hc-dot-from"></div>
-            <div>
-              <div class="hc-city">Chicago, IL 60601</div>
-              <div class="hc-date">Pickup · Jan 18, 08:00</div>
-            </div>
-          </div>
-          <div class="hc-line"></div>
-          <div class="hc-route-row">
-            <div class="hc-dot hc-dot-to"></div>
-            <div>
-              <div class="hc-city">Dallas, TX 75201</div>
-              <div class="hc-date">Delivery · Jan 20, 17:00</div>
-            </div>
-          </div>
+        <h1 class="anim-fade-up anim-d1">
+          Dispatch<br>
+          at the speed<br>
+          of <span class="accent-word">intelligence</span>
+        </h1>
+        <p class="hero-desc anim-fade-up anim-d2">
+          Extract rate confirmations in seconds, track every load in real-time,
+          and let AI handle the routine — so your team moves freight, not paper.
+        </p>
+        <div class="hero-actions anim-fade-up anim-d3">
+          <a href="mailto:ceo@simpletrucking.online?subject=Get Started" class="btn btn-primary btn-large">Start for free →</a>
+          <a href="#how-it-works" class="btn btn-ghost btn-large">See how it works</a>
         </div>
       </div>
-      <div class="float-badge float-badge-1">
-        <span class="float-icon">⚡</span> AI extracted in 2.1s
-      </div>
-      <div class="float-badge float-badge-2">
-        <span class="float-icon">🤖</span> AI Dispatcher online
+
+      <div class="hero-visual anim-fade-up anim-d2">
+        <div class="hero-dashboard">
+          <div class="dash-header">
+            <div class="dash-icon">
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="#0a0a0f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="#0a0a0f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div>
+              <div class="dash-title">ratecon_load_2847.pdf</div>
+              <div class="dash-sub">Extracted in 2.1s</div>
+            </div>
+            <div class="dash-status"><span class="dash-status-dot"></span>Done</div>
+          </div>
+          <div class="dash-fields">
+            <div>
+              <div class="dash-field-label">Load #</div>
+              <div class="dash-field-val hl">#2847</div>
+            </div>
+            <div>
+              <div class="dash-field-label">Total Rate</div>
+              <div class="dash-field-val hl">$3,450.00</div>
+            </div>
+            <div>
+              <div class="dash-field-label">Broker</div>
+              <div class="dash-field-val">Echo Global</div>
+            </div>
+            <div>
+              <div class="dash-field-label">Commodity</div>
+              <div class="dash-field-val">General Freight</div>
+            </div>
+          </div>
+          <div class="dash-route">
+            <div class="dash-route-row">
+              <div class="dash-route-dot dot-from"></div>
+              <div>
+                <div class="dash-city">Chicago, IL 60601</div>
+                <div class="dash-date">Pickup · Jan 18, 08:00</div>
+              </div>
+            </div>
+            <div class="dash-route-line"></div>
+            <div class="dash-route-row">
+              <div class="dash-route-dot dot-to"></div>
+              <div>
+                <div class="dash-city">Dallas, TX 75201</div>
+                <div class="dash-date">Delivery · Jan 20, 17:00</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="float-pill float-pill-1">
+          <span class="float-pill-icon fp-amber">⚡</span>
+          <span>AI extracted in 2.1s</span>
+        </div>
+        <div class="float-pill float-pill-2">
+          <span class="float-pill-icon fp-blue">🤖</span>
+          <span>AI Dispatcher online</span>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- STATS -->
-  <div class="stats-bar">
-    <div class="stats-inner">
-      <div class="stat-item reveal">
-        <div class="stat-num" data-target="2.1" data-suffix="s">2.1s</div>
-        <div class="stat-label">RateCon extracted in</div>
+  <div class="stats-strip">
+    <div class="stats-grid">
+      <div class="stat-block reveal">
+        <div class="stat-num">2.1s</div>
+        <div class="stat-label">Avg extraction time</div>
       </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item reveal">
+      <div class="stat-block reveal delay-1">
         <div class="stat-num">99%</div>
         <div class="stat-label">Extraction accuracy</div>
       </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item reveal">
+      <div class="stat-block reveal delay-2">
         <div class="stat-num">3</div>
         <div class="stat-label">AI-powered tools</div>
       </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item reveal">
+      <div class="stat-block reveal delay-3">
         <div class="stat-num">10x</div>
-        <div class="stat-label">Faster than manual work</div>
+        <div class="stat-label">Faster than manual</div>
       </div>
     </div>
   </div>
 
-  <!-- TRUST STRIP -->
+  <!-- TRUST MARQUEE -->
   <div class="trust-strip">
-    <div class="trust-marquee-wrap">
-      <span class="trust-label">Trusted across the US</span>
-      <div class="trust-logo">MJ Dispatch</div>
-      <div class="trust-logo">FastLane Carriers</div>
-      <div class="trust-logo">K&amp;D Freight</div>
-      <div class="trust-logo">Apex Logistics</div>
-      <div class="trust-logo">ProLoad Inc.</div>
+    <div class="trust-track">
+      <span class="trust-item">MJ Dispatch</span>
+      <span class="trust-item">FastLane Carriers</span>
+      <span class="trust-item">K&D Freight</span>
+      <span class="trust-item">Apex Logistics</span>
+      <span class="trust-item">ProLoad Inc.</span>
+      <span class="trust-item">MJ Dispatch</span>
+      <span class="trust-item">FastLane Carriers</span>
+      <span class="trust-item">K&D Freight</span>
+      <span class="trust-item">Apex Logistics</span>
+      <span class="trust-item">ProLoad Inc.</span>
+      <span class="trust-item">MJ Dispatch</span>
+      <span class="trust-item">FastLane Carriers</span>
+      <span class="trust-item">K&D Freight</span>
+      <span class="trust-item">Apex Logistics</span>
+      <span class="trust-item">ProLoad Inc.</span>
     </div>
   </div>
 
-  <!-- FEATURES BENTO -->
+  <!-- FEATURES -->
   <section id="features">
-    <div style="text-align:center" class="reveal">
+    <div class="section-header reveal">
       <div class="section-label">Features</div>
-      <h2 class="section-title" style="margin:0 auto 16px">Three AI tools,<br>one platform</h2>
-      <p class="section-sub" style="margin:0 auto">Built for trucking dispatchers. Every feature saves real time every single day.</p>
+      <h2 class="section-title">Three AI tools,<br>one platform</h2>
+      <p class="section-sub">Built for trucking dispatchers. Every feature saves real time, every single day.</p>
     </div>
 
-    <div class="bento-grid">
-
-      <!-- RateCon Extractor — big card -->
-      <div class="bento-card big reveal">
+    <div class="bento">
+      <!-- RateCon Extractor -->
+      <div class="bento-card wide reveal">
         <div class="bento-tag tag-amber">RateCon Extractor</div>
         <h3>Upload any ratecon — get structured data instantly</h3>
         <p>PDF, scanned image, photo, even a blurry fax. AI reads it and returns load number, rate, origin, destination, broker, and dates. No typing ever.</p>
-        <div class="bento-illus">
+        <div class="illus-doc-flow">
           <div class="doc-flow">
             <div class="doc-box">
-              <div class="doc-box-title">ratecon.pdf</div>
-              <div class="doc-line medium"></div>
-              <div class="doc-line short"></div>
-              <div class="doc-line medium"></div>
-              <div class="doc-line hl short"></div>
+              <div class="doc-title">ratecon.pdf</div>
+              <div class="doc-line w-70"></div>
+              <div class="doc-line w-55"></div>
+              <div class="doc-line w-85"></div>
+              <div class="doc-line w-55 hl"></div>
             </div>
             <div class="flow-arrow">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" stroke="#0a0a0f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
-            <div class="extracted-fields">
+            <div class="extracted-grid">
               <div class="ext-row"><span class="ext-key">Load #</span><span class="ext-val">#2847</span></div>
               <div class="ext-row"><span class="ext-key">Rate</span><span class="ext-val">$3,450</span></div>
               <div class="ext-row"><span class="ext-key">Origin</span><span class="ext-val">Chicago, IL</span></div>
@@ -1521,29 +1074,29 @@
       </div>
 
       <!-- Telegram Bot -->
-      <div class="bento-card reveal">
+      <div class="bento-card reveal delay-1">
         <div class="bento-tag tag-blue">Telegram Bot</div>
         <h3>Forward ratecons from anywhere</h3>
         <p>Send a photo or PDF to your bot. Get back structured data in seconds. Works on phone, tablet, or desktop.</p>
-        <div class="tg-demo">
-          <div class="tg-header">
-            <div class="tg-avatar">✈</div>
+        <div style="margin-top:auto; padding-top:20px; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; align-items:center; gap:8px; padding-bottom:10px; border-bottom:1px solid var(--border);">
+            <div style="width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#0088cc,#00aced); display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px;">✈</div>
             <div>
-              <div class="tg-name">SimpleTrucking Bot</div>
-              <div class="tg-status">● online</div>
+              <div style="font-size:0.8rem; font-weight:700; color:var(--text);">SimpleTrucking Bot</div>
+              <div style="font-size:0.65rem; color:var(--success);">● online</div>
             </div>
           </div>
-          <div class="tg-msg">📎 ratecon_2847.pdf sent</div>
-          <div class="tg-result">
-            <div class="tg-result-row"><span class="tg-result-key">Load #</span><span class="tg-result-val">#2847</span></div>
-            <div class="tg-result-row"><span class="tg-result-key">Rate</span><span class="tg-result-val">$3,450.00</span></div>
-            <div class="tg-result-row"><span class="tg-result-key">Route</span><span class="tg-result-val">CHI → DAL</span></div>
+          <div style="font-size:0.75rem; color:var(--text-muted);">📎 ratecon_2847.pdf sent</div>
+          <div style="background:rgba(212,168,83,0.05); border:1px solid rgba(212,168,83,0.1); border-radius:8px; padding:10px;">
+            <div style="display:flex; justify-content:space-between; font-size:0.72rem; padding:2px 0; font-family:'IBM Plex Mono', monospace;"><span style="color:var(--text-muted);">Load #</span><span style="font-weight:700; color:var(--text);">#2847</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:0.72rem; padding:2px 0; font-family:'IBM Plex Mono', monospace;"><span style="color:var(--text-muted);">Rate</span><span style="font-weight:700; color:var(--text);">$3,450.00</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:0.72rem; padding:2px 0; font-family:'IBM Plex Mono', monospace;"><span style="color:var(--text-muted);">Route</span><span style="font-weight:700; color:var(--text);">CHI → DAL</span></div>
           </div>
         </div>
       </div>
 
-      <!-- AI Updater — tall card -->
-      <div class="bento-card tall reveal">
+      <!-- AI Updater -->
+      <div class="bento-card tall reveal delay-2">
         <div class="bento-tag tag-green">AI Updater</div>
         <h3>Load statuses update themselves</h3>
         <p>AI tracks every load and posts status updates automatically — picked up, in transit, delivered. Your TMS stays current without a single check call.</p>
@@ -1552,38 +1105,38 @@
             <div class="status-dot s-green"></div>
             <div class="status-text">Load #2847</div>
             <div class="status-time">2m ago</div>
-            <div class="status-badge sb-delivered">Delivered</div>
+            <div class="status-badge sb-green">Delivered</div>
           </div>
           <div class="status-row">
             <div class="status-dot s-amber"></div>
             <div class="status-text">Load #2846</div>
             <div class="status-time">1h ago</div>
-            <div class="status-badge sb-transit">In Transit</div>
+            <div class="status-badge sb-amber">In Transit</div>
           </div>
           <div class="status-row">
             <div class="status-dot s-blue"></div>
             <div class="status-text">Load #2845</div>
             <div class="status-time">3h ago</div>
-            <div class="status-badge sb-pickup">Picked Up</div>
+            <div class="status-badge sb-blue">Picked Up</div>
           </div>
           <div class="status-row">
             <div class="status-dot s-green"></div>
             <div class="status-text">Load #2844</div>
             <div class="status-time">6h ago</div>
-            <div class="status-badge sb-delivered">Delivered</div>
+            <div class="status-badge sb-green">Delivered</div>
           </div>
           <div class="status-row">
             <div class="status-dot s-amber"></div>
             <div class="status-text">Load #2843</div>
             <div class="status-time">8h ago</div>
-            <div class="status-badge sb-transit">In Transit</div>
+            <div class="status-badge sb-amber">In Transit</div>
           </div>
         </div>
       </div>
 
-      <!-- AI Dispatcher — big card -->
-      <div class="bento-card big reveal">
-        <div class="bento-tag tag-purple">AI Dispatcher</div>
+      <!-- AI Dispatcher -->
+      <div class="bento-card wide reveal">
+        <div class="bento-tag tag-red">AI Dispatcher</div>
         <h3>Your AI co-dispatcher — works 24/7, never takes a break</h3>
         <p>Handles check calls, finds available loads, drafts broker emails, answers driver questions. All automatically, around the clock.</p>
         <div class="chat-list">
@@ -1591,7 +1144,7 @@
             <div class="chat-label">Driver</div>
             <div class="chat-bubble chat-in">Hey, I just unloaded in Dallas. What's my next load?</div>
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end">
+          <div style="display:flex; flex-direction:column; align-items:flex-end">
             <div class="chat-label" style="text-align:right">AI Dispatcher</div>
             <div class="chat-bubble chat-out">Great! Load #2851 is ready — pickup in Fort Worth, TX at 14:00. Rate: $2,800. Broker: Coyote. Docs sent to your Telegram. 🚛</div>
           </div>
@@ -1602,122 +1155,89 @@
         </div>
       </div>
 
-      <!-- Stat card -->
-      <div class="bento-card reveal" style="display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+      <!-- Speed stat -->
+      <div class="bento-card reveal delay-1" style="display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
         <div class="bento-tag tag-amber">Speed</div>
-        <div class="small-stat">
+        <div class="stat-card">
           <div class="num">2.1s</div>
           <div class="lbl">Average extraction time</div>
         </div>
-        <div style="margin-top:16px;font-size:0.8rem;color:var(--muted);line-height:1.6">Even blurry scans and low-quality fax copies extracted correctly</div>
+        <div style="margin-top:16px; font-size:0.82rem; color:var(--text-muted); line-height:1.6;">Even blurry scans and low-quality fax copies extracted correctly</div>
       </div>
-
     </div>
   </section>
 
   <!-- HOW IT WORKS -->
   <section id="how-it-works" class="how-section">
-    <div style="text-align:center" class="reveal">
+    <div class="section-header reveal">
       <div class="section-label">How it works</div>
-      <h2 class="section-title" style="margin:0 auto 16px">Up and running<br>in 5 minutes</h2>
-      <p class="section-sub" style="margin:0 auto">No training. No complex setup. Connect your workflow and SimpleTrucking handles the rest.</p>
+      <h2 class="section-title">Up and running<br>in 5 minutes</h2>
+      <p class="section-sub">No training. No complex setup. Connect your workflow and SimpleTrucking handles the rest.</p>
     </div>
-    <div class="steps">
+    <div class="steps-grid">
       <div class="step reveal">
-        <div class="step-num">
-          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
+        <div class="step-num">1</div>
         <h3>Upload your ratecon</h3>
         <p>Drop a PDF or photo into the web app, or forward it to your Telegram bot. Any format brokers send — we handle it.</p>
       </div>
-      <div class="step reveal" style="transition-delay:0.15s">
-        <div class="step-num">
-          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke="#f59e0b" stroke-width="2"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/></svg>
-        </div>
-        <h3>AI reads &amp; extracts</h3>
+      <div class="step reveal delay-1">
+        <div class="step-num">2</div>
+        <h3>AI reads & extracts</h3>
         <p>Our AI reads the document in under 3 seconds — pulling load number, rate, route, dates, broker, and commodity.</p>
       </div>
-      <div class="step reveal" style="transition-delay:0.3s">
-        <div class="step-num">
-          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
+      <div class="step reveal delay-2">
+        <div class="step-num">3</div>
         <h3>Data flows to your TMS</h3>
         <p>Copy structured data, export JSON, or push directly to your TMS via REST API. AI Updater keeps statuses current automatically.</p>
       </div>
     </div>
 
-    <div style="text-align:center; margin-top:80px" class="reveal">
+    <!-- Integrations -->
+    <div class="section-header reveal" style="margin-top:100px; margin-bottom:0;">
       <div class="section-label">Works with</div>
-      <div class="integrations-orbit">
-        <div class="orbit-ring ring-1"></div>
-        <div class="orbit-ring ring-2"></div>
-        <div class="orbit-ring ring-3"></div>
+    </div>
+    <div class="integrations-wrap">
+      <div class="orbit-ring r1"></div>
+      <div class="orbit-ring r2"></div>
+      <div class="orbit-ring r3"></div>
 
-        <div class="orbit-center">
-          <div class="orbit-center-logo">S</div>
-          <div class="orbit-center-title">SimpleTrucking</div>
-          <div class="orbit-center-sub">Integration Hub</div>
-        </div>
-
-        <div class="integration-node" style="--x:50%;--y:6%;">
-          <span class="integration-mark mk-sam">SA</span>Samsara
-        </div>
-        <div class="integration-node" style="--x:74%;--y:14%;">
-          <span class="integration-mark mk-mot">MO</span>Motive
-        </div>
-        <div class="integration-node" style="--x:84%;--y:31%;">
-          <span class="integration-mark mk-tg">TG</span>Telegram Bot
-        </div>
-        <div class="integration-node" style="--x:89%;--y:51%;">
-          <span class="integration-mark mk-gm">GM</span>Google Maps ETA
-        </div>
-        <div class="integration-node" style="--x:81%;--y:72%;">
-          <span class="integration-mark mk-api">API</span>REST API
-        </div>
-        <div class="integration-node" style="--x:65%;--y:86%;">
-          <span class="integration-mark mk-tms">TMS</span>Any TMS
-        </div>
-        <div class="integration-node" style="--x:49%;--y:93%;">
-          <span class="integration-mark mk-bot">AI</span>AI Dispatcher
-        </div>
-        <div class="integration-node" style="--x:34%;--y:86%;">
-          <span class="integration-mark mk-inv">INV</span>Invoice PDF
-        </div>
-        <div class="integration-node" style="--x:19%;--y:72%;">
-          <span class="integration-mark mk-img">IMG</span>Image Uploads
-        </div>
-        <div class="integration-node" style="--x:11%;--y:51%;">
-          <span class="integration-mark mk-pdf">PDF</span>RateCon PDF
-        </div>
-        <div class="integration-node" style="--x:16%;--y:31%;">
-          <span class="integration-mark mk-evo">EVO</span>EVO ELD
-        </div>
-        <div class="integration-node" style="--x:26%;--y:14%;">
-          <span class="integration-mark mk-zip">ZE</span>ZippyELD
-        </div>
+      <div class="orbit-hub">
+        <div class="hub-logo">S</div>
+        <div class="hub-title">SimpleTrucking</div>
+        <div class="hub-sub">Integration Hub</div>
       </div>
+
+      <div class="orbit-node" style="--x:50%;--y:5%;"><span class="node-mark mk-sam">SA</span>Samsara</div>
+      <div class="orbit-node" style="--x:75%;--y:13%;"><span class="node-mark mk-mot">MO</span>Motive</div>
+      <div class="orbit-node" style="--x:86%;--y:30%;"><span class="node-mark mk-tg">TG</span>Telegram Bot</div>
+      <div class="orbit-node" style="--x:90%;--y:50%;"><span class="node-mark mk-gm">GM</span>Google Maps ETA</div>
+      <div class="orbit-node" style="--x:82%;--y:71%;"><span class="node-mark mk-api">API</span>REST API</div>
+      <div class="orbit-node" style="--x:66%;--y:87%;"><span class="node-mark mk-tms">TMS</span>Any TMS</div>
+      <div class="orbit-node" style="--x:50%;--y:94%;"><span class="node-mark mk-bot">AI</span>AI Dispatcher</div>
+      <div class="orbit-node" style="--x:34%;--y:87%;"><span class="node-mark mk-inv">INV</span>Invoice PDF</div>
+      <div class="orbit-node" style="--x:18%;--y:71%;"><span class="node-mark mk-img">IMG</span>Image Uploads</div>
+      <div class="orbit-node" style="--x:10%;--y:50%;"><span class="node-mark mk-pdf">PDF</span>RateCon PDF</div>
+      <div class="orbit-node" style="--x:14%;--y:30%;"><span class="node-mark mk-evo">EVO</span>EVO ELD</div>
+      <div class="orbit-node" style="--x:25%;--y:13%;"><span class="node-mark mk-zip">ZE</span>ZippyELD</div>
     </div>
   </section>
 
   <!-- PRICING -->
   <section id="pricing">
-    <div style="text-align:center" class="reveal">
+    <div class="section-header reveal">
       <div class="section-label">Pricing</div>
-      <h2 class="section-title" style="margin:0 auto 16px">Simple,<br>transparent pricing</h2>
-      <p class="section-sub" style="margin:0 auto">Start free. Scale as you grow. No hidden fees, no contracts.</p>
+      <h2 class="section-title">Simple,<br>transparent pricing</h2>
+      <p class="section-sub">Start free. Scale as you grow. No hidden fees, no contracts.</p>
     </div>
     <div class="pricing-grid">
       <div class="price-card reveal">
         <div class="price-plan">Starter</div>
-        <div class="price-amount">
-          <span class="amount">$0</span>
-          <span class="period">/mo</span>
-        </div>
+        <div class="price-value"><span class="amount">$0</span><span class="period">/mo</span></div>
         <div class="price-desc">Perfect for trying it out or small operations with low volume.</div>
-        <div class="price-divider"></div>
+        <div class="price-sep"></div>
         <ul class="price-features">
           <li>50 extractions / month</li>
-          <li>PDF &amp; image uploads</li>
+          <li>PDF & image uploads</li>
           <li>1 dispatcher account</li>
           <li>Telegram bot access</li>
           <li>JSON export</li>
@@ -1725,15 +1245,12 @@
         <a href="mailto:ceo@simpletrucking.online?subject=Get Started - Starter Plan" class="btn-plan btn-plan-ghost">Get started free</a>
       </div>
 
-      <div class="price-card featured reveal" style="transition-delay:0.12s">
-        <div class="featured-badge">Most popular</div>
+      <div class="price-card featured reveal delay-1">
+        <div class="featured-ribbon">Most Popular</div>
         <div class="price-plan">Professional</div>
-        <div class="price-amount">
-          <span class="amount">$99</span>
-          <span class="period">/mo</span>
-        </div>
+        <div class="price-value"><span class="amount">$99</span><span class="period">/mo</span></div>
         <div class="price-desc">For growing dispatch companies that need reliable, fast extraction daily.</div>
-        <div class="price-divider"></div>
+        <div class="price-sep"></div>
         <ul class="price-features">
           <li>1,000 extractions / month</li>
           <li>All file formats</li>
@@ -1746,13 +1263,11 @@
         <a href="mailto:ceo@simpletrucking.online?subject=Free Trial Request - Pro Plan" class="btn-plan btn-plan-primary">Start free trial</a>
       </div>
 
-      <div class="price-card reveal" style="transition-delay:0.24s">
+      <div class="price-card reveal delay-2">
         <div class="price-plan">Enterprise</div>
-        <div class="price-amount">
-          <span class="amount" style="font-size:2.6rem">Custom</span>
-        </div>
+        <div class="price-value"><span class="amount" style="font-size:2.4rem">Custom</span></div>
         <div class="price-desc">For large carriers and dispatch networks with high volume needs.</div>
-        <div class="price-divider"></div>
+        <div class="price-sep"></div>
         <ul class="price-features">
           <li>Unlimited extractions</li>
           <li>Unlimited dispatcher accounts</li>
@@ -1768,10 +1283,10 @@
 
   <!-- TESTIMONIALS -->
   <section class="testimonials-section">
-    <div style="text-align:center" class="reveal">
+    <div class="section-header reveal">
       <div class="section-label">Testimonials</div>
-      <h2 class="section-title" style="margin:0 auto 16px">Dispatchers love<br>SimpleTrucking</h2>
-      <p class="section-sub" style="margin:0 auto">Real feedback from trucking professionals using our AI tools every day.</p>
+      <h2 class="section-title">Dispatchers love<br>SimpleTrucking</h2>
+      <p class="section-sub">Real feedback from trucking professionals using our AI tools every day.</p>
     </div>
     <div class="testimonials-grid">
       <div class="testimonial-card reveal">
@@ -1785,7 +1300,7 @@
           </div>
         </div>
       </div>
-      <div class="testimonial-card reveal" style="transition-delay:0.12s">
+      <div class="testimonial-card reveal delay-1">
         <div class="stars">★★★★★</div>
         <p class="testimonial-text">"AI Updater eliminated our manual status calls completely. Our TMS updates itself. I don't know how we managed without it before."</p>
         <div class="testimonial-author">
@@ -1796,14 +1311,14 @@
           </div>
         </div>
       </div>
-      <div class="testimonial-card reveal" style="transition-delay:0.24s">
+      <div class="testimonial-card reveal delay-2">
         <div class="stars">★★★★★</div>
         <p class="testimonial-text">"The AI Dispatcher handles our overnight check calls now. We wake up and everything is already updated. It's like having a dispatcher that never sleeps."</p>
         <div class="testimonial-author">
           <div class="author-avatar">DK</div>
           <div>
             <div class="author-name">David Kim</div>
-            <div class="author-role">Operations Manager, K&amp;D Freight</div>
+            <div class="author-role">Operations Manager, K&D Freight</div>
           </div>
         </div>
       </div>
@@ -1811,149 +1326,141 @@
   </section>
 
   <!-- PARTNERS -->
-  <section id="partners" style="padding:100px 8%;">
-    <div style="max-width:1100px; margin:0 auto;">
-      <div style="text-align:center" class="reveal">
-        <div class="section-label">Partners</div>
-        <h2 class="section-title" style="margin:0 auto 16px">In partnership with</h2>
-        <p class="section-sub" style="margin:0 auto 56px;">Working alongside teams who share our vision for AI in real-world operations.</p>
-      </div>
-      <div class="reveal" style="display:flex; justify-content:center;">
-        <a href="https://oqim.ai" target="_blank" rel="noopener" style="display:flex; align-items:center; gap:24px; background:var(--card); border:1px solid var(--border); border-radius:16px; padding:28px 40px; text-decoration:none; transition:all 0.25s; max-width:560px; width:100%;">
-          <div style="width:72px; height:72px; border-radius:14px; background:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden;">
-            <img src="/static/oqim.png" alt="Oqim.ai logo" style="width:100%; height:100%; object-fit:contain;" />
-          </div>
-          <div style="flex:1;">
-            <div style="color:var(--text); font-weight:700; font-size:1.15rem; margin-bottom:4px;">Oqim.ai</div>
-            <div style="color:var(--primary); font-size:0.78rem; font-weight:600; font-family:'IBM Plex Mono', monospace; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:8px;">AI Infrastructure Partner</div>
-            <div style="color:var(--muted2); font-size:0.92rem; line-height:1.55;">Powering language models and AI workflows behind the scenes — from document understanding to dispatcher conversations.</div>
-          </div>
-          <div style="color:var(--muted); font-size:1.4rem; flex-shrink:0;">→</div>
-        </a>
-      </div>
+  <section id="partners">
+    <div class="section-header reveal">
+      <div class="section-label">Partners</div>
+      <h2 class="section-title">In partnership with</h2>
+      <p class="section-sub">Working alongside teams who share our vision for AI in real-world operations.</p>
+    </div>
+    <div class="reveal">
+      <a href="https://oqim.ai" target="_blank" rel="noopener" class="partner-card">
+        <div class="partner-logo-wrap">
+          <img src="/static/oqim.png" alt="Oqim.ai logo" />
+        </div>
+        <div style="flex:1;">
+          <div class="partner-name">Oqim.ai</div>
+          <div class="partner-tag">AI Infrastructure Partner</div>
+          <div class="partner-desc">Powering language models and AI workflows behind the scenes — from document understanding to dispatcher conversations.</div>
+        </div>
+        <div class="partner-arrow">→</div>
+      </a>
     </div>
   </section>
 
   <!-- ABOUT / MISSION -->
-  <section id="about" style="padding:120px 8%;">
-    <div style="max-width:1100px; margin:0 auto;">
-      <div style="text-align:center" class="reveal">
-        <div class="section-label">Our mission</div>
-        <h2 class="section-title" style="margin:0 auto 28px">Give every dispatcher<br>an AI co-pilot</h2>
-      </div>
-      <div class="reveal" style="max-width:760px; margin:0 auto; text-align:center;">
-        <p style="font-size:1.05rem; color:var(--muted2); line-height:1.85; margin-bottom:22px;">
-          Trucking dispatchers spend hours every day on repetitive work — typing rate confirmations, chasing drivers for status updates, copying data between systems. It's the part of the job nobody enjoys, and it's where most mistakes happen.
-        </p>
-        <p style="font-size:1.05rem; color:var(--muted2); line-height:1.85; margin-bottom:22px;">
-          SimpleTrucking is building AI tools that handle the boring 80% — so dispatchers can focus on the 20% that actually grows the business: finding the right loads, building broker relationships, and supporting drivers.
-        </p>
-        <p style="font-size:1.05rem; color:var(--text); line-height:1.85; font-weight:500;">
-          Our goal: give every dispatcher in America — and eventually the world — an AI co-pilot that never sleeps, never mistypes a number, and never misses a check call.
-        </p>
-      </div>
+  <section id="about">
+    <div class="section-header reveal">
+      <div class="section-label">Our mission</div>
+      <h2 class="section-title">Give every dispatcher<br>an AI co-pilot</h2>
+    </div>
+    <div class="reveal" style="max-width:720px; margin:0 auto 56px; text-align:center;">
+      <p style="font-size:1.05rem; color:var(--text-dim); line-height:1.85; margin-bottom:22px;">
+        Trucking dispatchers spend hours every day on repetitive work — typing rate confirmations, chasing drivers for status updates, copying data between systems. It's the part of the job nobody enjoys, and it's where most mistakes happen.
+      </p>
+      <p style="font-size:1.05rem; color:var(--text-dim); line-height:1.85; margin-bottom:22px;">
+        SimpleTrucking is building AI tools that handle the boring 80% — so dispatchers can focus on the 20% that actually grows the business: finding the right loads, building broker relationships, and supporting drivers.
+      </p>
+      <p style="font-size:1.05rem; color:var(--text); line-height:1.85; font-weight:600;">
+        Our goal: give every dispatcher in America — and eventually the world — an AI co-pilot that never sleeps, never mistypes a number, and never misses a check call.
+      </p>
+    </div>
 
-      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:18px; margin-top:64px;">
-        <div class="reveal" style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px;">
-          <div style="font-family:'IBM Plex Mono', monospace; font-size:0.7rem; color:var(--primary); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px;">Problem</div>
-          <div style="color:var(--text); font-weight:600; line-height:1.5; margin-bottom:6px;">Manual data entry &amp; check calls</div>
-          <div style="color:var(--muted2); font-size:0.88rem; line-height:1.6;">Dispatchers lose 3–5 hours a day on repetitive work that should be automated.</div>
-        </div>
-        <div class="reveal" style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px;">
-          <div style="font-family:'IBM Plex Mono', monospace; font-size:0.7rem; color:var(--primary); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px;">Solution</div>
-          <div style="color:var(--text); font-weight:600; line-height:1.5; margin-bottom:6px;">AI purpose-built for dispatch</div>
-          <div style="color:var(--muted2); font-size:0.88rem; line-height:1.6;">RateCon Extractor, AI Updater, and AI Dispatcher — three tools, one workflow.</div>
-        </div>
-        <div class="reveal" style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px;">
-          <div style="font-family:'IBM Plex Mono', monospace; font-size:0.7rem; color:var(--primary); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px;">Market</div>
-          <div style="color:var(--text); font-weight:600; line-height:1.5; margin-bottom:6px;">$800B US trucking industry</div>
-          <div style="color:var(--muted2); font-size:0.88rem; line-height:1.6;">Thousands of dispatch operations across the US — most still running on manual processes.</div>
-        </div>
-        <div class="reveal" style="background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px;">
-          <div style="font-family:'IBM Plex Mono', monospace; font-size:0.7rem; color:var(--primary); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px;">Approach</div>
-          <div style="color:var(--text); font-weight:600; line-height:1.5; margin-bottom:6px;">Built with dispatchers</div>
-          <div style="color:var(--muted2); font-size:0.88rem; line-height:1.6;">Every feature shipped after direct feedback from working dispatch teams.</div>
-        </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; max-width:1000px; margin:0 auto 56px;">
+      <div class="reveal" style="background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:24px;">
+        <div style="font-family:'IBM Plex Mono', monospace; font-size:0.68rem; color:var(--accent); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px; font-weight:600;">Problem</div>
+        <div style="color:var(--text); font-weight:700; line-height:1.5; margin-bottom:6px;">Manual data entry & check calls</div>
+        <div style="color:var(--text-dim); font-size:0.86rem; line-height:1.6;">Dispatchers lose 3–5 hours a day on repetitive work that should be automated.</div>
       </div>
+      <div class="reveal delay-1" style="background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:24px;">
+        <div style="font-family:'IBM Plex Mono', monospace; font-size:0.68rem; color:var(--accent); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px; font-weight:600;">Solution</div>
+        <div style="color:var(--text); font-weight:700; line-height:1.5; margin-bottom:6px;">AI purpose-built for dispatch</div>
+        <div style="color:var(--text-dim); font-size:0.86rem; line-height:1.6;">RateCon Extractor, AI Updater, and AI Dispatcher — three tools, one workflow.</div>
+      </div>
+      <div class="reveal delay-2" style="background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:24px;">
+        <div style="font-family:'IBM Plex Mono', monospace; font-size:0.68rem; color:var(--accent); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px; font-weight:600;">Market</div>
+        <div style="color:var(--text); font-weight:700; line-height:1.5; margin-bottom:6px;">$800B US trucking industry</div>
+        <div style="color:var(--text-dim); font-size:0.86rem; line-height:1.6;">Thousands of dispatch operations across the US — most still running on manual processes.</div>
+      </div>
+      <div class="reveal delay-3" style="background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:24px;">
+        <div style="font-family:'IBM Plex Mono', monospace; font-size:0.68rem; color:var(--accent); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px; font-weight:600;">Approach</div>
+        <div style="color:var(--text); font-weight:700; line-height:1.5; margin-bottom:6px;">Built with dispatchers</div>
+        <div style="color:var(--text-dim); font-size:0.86rem; line-height:1.6;">Every feature shipped after direct feedback from working dispatch teams.</div>
+      </div>
+    </div>
 
-      <!-- Company facts -->
-      <div class="reveal" style="margin-top:64px; display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:0; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
-        <div style="padding:22px 24px; border-right:1px solid var(--border);">
-          <div style="font-family:'IBM Plex Mono', monospace; font-size:0.65rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">Founded</div>
-          <div style="color:var(--text); font-weight:700; font-size:1.05rem;">2025</div>
-        </div>
-        <div style="padding:22px 24px; border-right:1px solid var(--border);">
-          <div style="font-family:'IBM Plex Mono', monospace; font-size:0.65rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">Headquarters</div>
-          <div style="color:var(--text); font-weight:700; font-size:1.05rem;">Tashkent, UZ</div>
-        </div>
-        <div style="padding:22px 24px; border-right:1px solid var(--border);">
-          <div style="font-family:'IBM Plex Mono', monospace; font-size:0.65rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">Team</div>
-          <div style="color:var(--text); font-weight:700; font-size:1.05rem;">5 people</div>
-        </div>
-        <div style="padding:22px 24px;">
-          <div style="font-family:'IBM Plex Mono', monospace; font-size:0.65rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">Stage</div>
-          <div style="color:var(--text); font-weight:700; font-size:1.05rem;">Early traction</div>
-        </div>
+    <div class="reveal" style="max-width:900px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:0; border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+      <div style="padding:20px 24px; border-right:1px solid var(--border);">
+        <div style="font-family:'IBM Plex Mono', monospace; font-size:0.62rem; color:var(--text-muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">Founded</div>
+        <div style="color:var(--text); font-weight:700; font-size:1.05rem;">2025</div>
+      </div>
+      <div style="padding:20px 24px; border-right:1px solid var(--border);">
+        <div style="font-family:'IBM Plex Mono', monospace; font-size:0.62rem; color:var(--text-muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">Headquarters</div>
+        <div style="color:var(--text); font-weight:700; font-size:1.05rem;">Tashkent, UZ</div>
+      </div>
+      <div style="padding:20px 24px; border-right:1px solid var(--border);">
+        <div style="font-family:'IBM Plex Mono', monospace; font-size:0.62rem; color:var(--text-muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">Team</div>
+        <div style="color:var(--text); font-weight:700; font-size:1.05rem;">5 people</div>
+      </div>
+      <div style="padding:20px 24px;">
+        <div style="font-family:'IBM Plex Mono', monospace; font-size:0.62rem; color:var(--text-muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">Stage</div>
+        <div style="color:var(--text); font-weight:700; font-size:1.05rem;">Early traction</div>
       </div>
     </div>
   </section>
 
   <!-- TEAM -->
-  <section id="team" style="padding:120px 8%; background:var(--bg2); border-top:1px solid var(--border); border-bottom:1px solid var(--border);">
-    <div style="max-width:1100px; margin:0 auto;">
-      <div style="text-align:center" class="reveal">
-        <div class="section-label">Team</div>
-        <h2 class="section-title" style="margin:0 auto 16px">Built by people who<br>know dispatch</h2>
-        <p class="section-sub" style="margin:0 auto 64px;">A small team obsessed with making trucking software that actually saves time.</p>
+  <section id="team" style="background:var(--bg-elevated); border-top:1px solid var(--border); border-bottom:1px solid var(--border);">
+    <div class="section-header reveal">
+      <div class="section-label">Team</div>
+      <h2 class="section-title">Built by people who<br>know dispatch</h2>
+      <p class="section-sub">A small team obsessed with making trucking software that actually saves time.</p>
+    </div>
+    <div class="container">
+      <div class="team-grid">
+        <div class="team-card reveal">
+          <div class="team-avatar"><img src="/static/team/shahzod.jpg" alt="Shahzod Ne'matov" /></div>
+          <div class="team-name">Shahzod Ne'matov</div>
+          <div class="team-role">Co-founder (CEO)</div>
+          <div class="team-bio">AI engineer @ Abstract IT</div>
+        </div>
+        <div class="team-card reveal delay-1">
+          <div class="team-avatar"><img src="/static/team/abdushukur.jpg" alt="Abdushukur Dadajonov" /></div>
+          <div class="team-name">Abdushukur Dadajonov</div>
+          <div class="team-role">Co-founder (CMO)</div>
+          <div class="team-bio">Designer @ Sfera Marketing & RegistanLC</div>
+        </div>
+        <div class="team-card reveal delay-2">
+          <div class="team-avatar"><img src="/static/team/abdulaziz.jpg" alt="Abdulaziz Mahammadjonov" /></div>
+          <div class="team-name">Abdulaziz Mahammadjonov</div>
+          <div class="team-role">Mobile Developer (CTO)</div>
+          <div class="team-bio">Mobile Dev & Data Scientist at Ex Aisha</div>
+        </div>
       </div>
-
-      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:20px;">
-        <div class="reveal" style="background:var(--card); border:1px solid var(--border); border-radius:14px; padding:28px;">
-          <div style="width:64px; height:64px; border-radius:50%; overflow:hidden; margin-bottom:18px;"><img src="/static/team/shahzod.jpg" alt="Shahzod Ne'matov" style="width:100%; height:100%; object-fit:cover; display:block;" /></div>
-          <div style="color:var(--text); font-weight:700; font-size:1.05rem; margin-bottom:4px;">Shahzod Ne'matov</div>
-          <div style="color:var(--primary); font-size:0.82rem; font-weight:600; margin-bottom:14px; font-family:'IBM Plex Mono', monospace;">Co-founder (CEO)</div>
-          <div style="color:var(--muted2); font-size:0.88rem; line-height:1.65;">AI engineer @ Abstract IT</div>
-        </div>
-        <div class="reveal" style="background:var(--card); border:1px solid var(--border); border-radius:14px; padding:28px; transition-delay:0.1s;">
-          <div style="width:64px; height:64px; border-radius:50%; overflow:hidden; margin-bottom:18px;"><img src="/static/team/abdushukur.jpg" alt="Abdushukur Dadajonov" style="width:100%; height:100%; object-fit:cover; display:block;" /></div>
-          <div style="color:var(--text); font-weight:700; font-size:1.05rem; margin-bottom:4px;">Abdushukur Dadajonov</div>
-          <div style="color:var(--primary); font-size:0.82rem; font-weight:600; margin-bottom:14px; font-family:'IBM Plex Mono', monospace;">Co-founder (CMO)</div>
-          <div style="color:var(--muted2); font-size:0.88rem; line-height:1.65;">Designer @ Sfera Marketing &amp; RegistanLC</div>
-        </div>
-        <div class="reveal" style="background:var(--card); border:1px solid var(--border); border-radius:14px; padding:28px; transition-delay:0.2s;">
-          <div style="width:64px; height:64px; border-radius:50%; overflow:hidden; margin-bottom:18px;"><img src="/static/team/abdulaziz.jpg" alt="Abdulaziz Mahammadjonov" style="width:100%; height:100%; object-fit:cover; display:block; object-position:center top;" /></div>
-          <div style="color:var(--text); font-weight:700; font-size:1.05rem; margin-bottom:4px;">Abdulaziz Mahammadjonov</div>
-          <div style="color:var(--primary); font-size:0.82rem; font-weight:600; margin-bottom:14px; font-family:'IBM Plex Mono', monospace;">Mobile Developer (CTO)</div>
-          <div style="color:var(--muted2); font-size:0.88rem; line-height:1.65;">Mobile Dev &amp; Data Scientist at Ex Aisha</div>
-        </div>
-      </div>
-
-      <div class="reveal" style="text-align:center; margin-top:48px;">
-        <a href="mailto:ceo@simpletrucking.online?subject=Careers" style="color:var(--primary); font-weight:600; text-decoration:none; font-size:0.95rem;">We're hiring → ceo@simpletrucking.online</a>
+      <div class="reveal" style="text-align:center; margin-top:40px;">
+        <a href="mailto:ceo@simpletrucking.online?subject=Careers" style="color:var(--accent); font-weight:600; text-decoration:none; font-size:0.9rem;">We're hiring → ceo@simpletrucking.online</a>
       </div>
     </div>
   </section>
 
   <!-- CTA -->
   <section class="cta-section">
-    <h2 class="reveal">
-      Give your dispatch team<br>
-      <span class="gradient">an AI advantage</span>
-    </h2>
+    <h2 class="reveal">Give your dispatch team<br>an <span style="color:var(--accent)">AI advantage</span></h2>
     <p class="reveal">RateCon Extractor · AI Updater · AI Dispatcher — all in one platform. Free to start, no credit card needed.</p>
     <div class="cta-actions reveal">
-      <a href="mailto:ceo@simpletrucking.online?subject=Get Started" class="btn-hero">Get started free →</a>
-      <a href="mailto:ceo@simpletrucking.online" class="btn-hero-ghost">Talk to us</a>
+      <a href="mailto:ceo@simpletrucking.online?subject=Get Started" class="btn btn-primary btn-large">Get started free →</a>
+      <a href="mailto:ceo@simpletrucking.online" class="btn btn-ghost btn-large">Talk to us</a>
     </div>
   </section>
 
   <!-- FOOTER -->
   <footer>
-    <div class="footer-top">
+    <div class="footer-grid">
       <div class="footer-brand">
         <a href="#" class="footer-logo">
-          <div class="logo-icon"><img src="/static/logo.png" alt="SimpleTrucking logo" /></div>
-          SimpleTrucking
+          <div class="footer-logo-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <span class="footer-logo-text">SimpleTrucking</span>
         </a>
         <p>RateCon Extractor, AI Updater, and AI Dispatcher — three AI tools that save trucking dispatchers hours every day.</p>
       </div>
@@ -1997,109 +1504,17 @@
           observer.unobserve(e.target);
         }
       });
-    }, { threshold: 0.12 });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
     document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-    // Theme toggle
-    const toggle   = document.getElementById('themeToggle');
-    const iconMoon = document.getElementById('iconMoon');
-    const iconSun  = document.getElementById('iconSun');
-    const html     = document.documentElement;
-
-    function setTheme(light) {
-      html.classList.toggle('light', light);
-      iconMoon.style.display = light ? 'none'  : '';
-      iconSun.style.display  = light ? ''      : 'none';
-      localStorage.setItem('theme', light ? 'light' : 'dark');
-    }
-
-    setTheme(localStorage.getItem('theme') === 'light');
-
-    toggle.addEventListener('click', () => setTheme(!html.classList.contains('light')));
-
-    // Intro scroll-driven fade (returns when scrolling back to top)
-    const intro = document.getElementById('introOverlay');
-    const introVideo = document.querySelector('.intro-video');
-    const introGate = document.getElementById('introGate');
-    const introSoundToggle = document.getElementById('introSoundToggle');
-    const introScrollCue = document.querySelector('.intro-scroll-cue');
-    if (intro && introVideo && introGate) {
-      document.body.classList.add('has-intro');
-
-      const INTRO_VIDEO_POOL = [
-        'https://assets.mixkit.co/videos/23174/23174-720.mp4', // Worker + freight truck at parking
-        'https://assets.mixkit.co/videos/28787/28787-720.mp4', // Cargo truck on highway
-        'https://assets.mixkit.co/videos/23852/23852-720.mp4', // Worker giving directions
-        'https://assets.mixkit.co/videos/30065/30065-720.mp4'  // Logistics transport visual
-      ];
-      let currentVideoIndex = Math.floor(Math.random() * INTRO_VIDEO_POOL.length);
-      const setIntroVideo = (index) => {
-        currentVideoIndex = (index + INTRO_VIDEO_POOL.length) % INTRO_VIDEO_POOL.length;
-        introVideo.src = INTRO_VIDEO_POOL[currentVideoIndex];
-        introVideo.load();
-        introVideo.play().catch(() => {});
-      };
-      introVideo.addEventListener('error', () => setIntroVideo(currentVideoIndex + 1));
-      setIntroVideo(currentVideoIndex);
-      introVideo.loop = true;
-      introVideo.muted = true;
-      introVideo.volume = 0.75;
-      introVideo.play().catch(() => {});
-
-      let soundEnabled = false;
-      const setSound = (enabled) => {
-        soundEnabled = enabled;
-        if (introSoundToggle) introSoundToggle.textContent = enabled ? 'Sound On' : 'Sound Off';
-        if (enabled) {
-          introVideo.muted = false;
-          introVideo.play().catch(() => {});
-        } else {
-          introVideo.muted = true;
-        }
-      };
-      introSoundToggle?.addEventListener('click', () => setSound(!soundEnabled));
-
-      const syncIntro = () => {
-        const gateHeight = Math.max(introGate.offsetHeight, 1);
-        const progress = Math.min(Math.max(window.scrollY / gateHeight, 0), 1);
-
-        intro.style.opacity = String(1 - progress);
-        intro.style.visibility = progress >= 1 ? 'hidden' : 'visible';
-        document.documentElement.style.setProperty('--intro-reveal', String(progress));
-
-        const videoScale = 1.02 + (1 - progress) * 0.04;
-        const videoShiftX = (1 - progress) * 1.1;
-        introVideo.style.transform = `scale(${videoScale}) translate3d(${videoShiftX}%, 0, 0)`;
-      };
-
-      const tryResumeAudio = () => {
-        if (!soundEnabled) return;
-        introVideo.muted = false;
-        introVideo.play().catch(() => {});
-      };
-
-      const moveScrollCue = (x, y) => {
-        if (!introScrollCue) return;
-        const cx = Math.min(Math.max(x, 8), window.innerWidth - 8);
-        const cy = Math.min(Math.max(y, 8), window.innerHeight - 8);
-        introScrollCue.style.left = `${cx}px`;
-        introScrollCue.style.top = `${cy}px`;
-      };
-
-      if (introScrollCue && window.matchMedia('(pointer:fine)').matches) {
-        const seedX = Math.round(window.innerWidth * 0.5);
-        const seedY = Math.round(window.innerHeight * 0.88);
-        moveScrollCue(seedX, seedY);
-        window.addEventListener('mousemove', (e) => moveScrollCue(e.clientX, e.clientY), { passive: true });
-      }
-
-      window.addEventListener('scroll', syncIntro, { passive: true });
-      window.addEventListener('resize', syncIntro);
-      window.addEventListener('click', tryResumeAudio, { passive: true });
-      window.addEventListener('touchstart', tryResumeAudio, { passive: true });
-      window.addEventListener('keydown', tryResumeAudio);
-      syncIntro();
-    }
+    // Bento card mouse tracking for glow
+    document.querySelectorAll('.bento-card').forEach(card => {
+      card.addEventListener('mousemove', (e) => {
+        const rect = card.getBoundingClientRect();
+        card.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
+        card.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
+      });
+    });
   </script>
 
 </body>

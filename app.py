@@ -859,6 +859,15 @@ async def api_groups(authorization: str | None = Header(default=None)):
     return database.get_groups(get_company_id(dispatcher))
 
 
+@app.post("/api/telegram/link-code")
+async def api_telegram_link_code(authorization: str | None = Header(default=None)):
+    """Issue a short single-use code the driver pastes in their group:
+    `/link <code>`. This keeps the dispatcher's API token out of group chat."""
+    dispatcher = require_dispatcher(authorization)
+    get_company_id(dispatcher)  # link is a company action
+    return database.create_link_code(dispatcher["id"])
+
+
 class RenameBody(BaseModel):
     name: str
 
@@ -909,7 +918,7 @@ class SendBody(BaseModel):
 
 
 @app.post("/api/send")
-async def api_send(
+def api_send(
     body: SendBody,
     authorization: str | None = Header(default=None),
 ):
@@ -1064,7 +1073,7 @@ async def api_eld_delete_config(
 
 
 @app.get("/api/eld/drivers")
-async def api_eld_drivers(authorization: str | None = Header(default=None)):
+def api_eld_drivers(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
     _enforce_eld_rate_limit(dispatcher["id"], "eld_drivers_read")
     configs = database.get_eld_configs(dispatcher["id"])
@@ -1099,7 +1108,7 @@ async def api_eld_drivers(authorization: str | None = Header(default=None)):
 
 
 @app.get("/api/motive/dispatches")
-async def api_motive_dispatches(
+def api_motive_dispatches(
     status: str | None = Query(default=None),
     page: int = Query(default=1),
     authorization: str | None = Header(default=None),
@@ -1118,7 +1127,7 @@ async def api_motive_dispatches(
 
 
 @app.post("/api/motive/dispatches/{dispatch_id}/import")
-async def api_motive_import_dispatch(
+def api_motive_import_dispatch(
     dispatch_id: int,
     authorization: str | None = Header(default=None),
 ):
@@ -1161,7 +1170,7 @@ class MotivePushBody(BaseModel):
 
 
 @app.post("/api/loads/{load_id}/motive/push")
-async def api_motive_push_load(
+def api_motive_push_load(
     load_id: int,
     body: MotivePushBody,
     authorization: str | None = Header(default=None),
@@ -1210,7 +1219,7 @@ class MotiveSyncBody(BaseModel):
 
 
 @app.post("/api/loads/{load_id}/motive/sync-status")
-async def api_motive_sync_status(
+def api_motive_sync_status(
     load_id: int,
     body: MotiveSyncBody,
     authorization: str | None = Header(default=None),
@@ -1425,7 +1434,7 @@ async def api_ratecon_template_reset(authorization: str | None = Header(default=
 
 
 @app.get("/api/trucks")
-async def api_trucks(authorization: str | None = Header(default=None)):
+def api_trucks(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
     _enforce_eld_rate_limit(dispatcher["id"], "trucks_read")
     trucks = _get_dispatcher_trucks(dispatcher["id"])
@@ -1866,15 +1875,23 @@ def api_load_send_status(
 # ── Extract ───────────────────────────────────────────────────────────────────
 
 @app.post("/extract")
-async def extract_ratecon(file: UploadFile = File(...)):
-    suffix = Path(file.filename).suffix.lower()
+async def extract_ratecon(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+):
+    # Authenticated + rate-limited: Gemini and Maps are paid calls, so this must
+    # not be an open, anonymous cost/DoS vector.
+    dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "extract")
+
+    suffix = Path(file.filename or "").suffix.lower()
     if suffix not in SUPPORTED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file type: {suffix}. Allowed: {', '.join(SUPPORTED_EXTENSIONS)}"
         )
     if not os.environ.get("GEMINI_API_KEY"):
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+        raise HTTPException(status_code=503, detail="Extraction is not configured")
 
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
@@ -1885,9 +1902,11 @@ async def extract_ratecon(file: UploadFile = File(...)):
         tmp_path = tmp.name
 
     try:
-        from extractor.llm_extractor import extract
+        from extractor.llm_extractor import extract, ExtractionError
         gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
-        ratecon = extract(tmp_path, gmaps_api_key=gmaps_key or None)
+        # Gemini + Maps are blocking; run off the event loop so a single slow
+        # extraction can't freeze every other request on this worker.
+        ratecon = await asyncio.to_thread(extract, tmp_path, gmaps_key or None)
         return {"status": "ok", "data": ratecon.model_dump()}
     except ValidationError as e:
         errors = [
@@ -1895,8 +1914,11 @@ async def extract_ratecon(file: UploadFile = File(...)):
             for err in e.errors()
         ]
         return {"status": "validation_error", "errors": errors}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except ExtractionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception:
+        logger.exception("Extraction failed for dispatcher_id=%s", dispatcher["id"])
+        raise HTTPException(status_code=500, detail="Extraction failed. Please try again.")
     finally:
         os.unlink(tmp_path)
 
@@ -1907,10 +1929,24 @@ class GeocodeStopsBody(BaseModel):
 
 
 @app.post("/api/geocode-stops")
-async def api_geocode_stops(body: GeocodeStopsBody):
-    results = []
+async def api_geocode_stops(
+    body: GeocodeStopsBody,
+    authorization: str | None = Header(default=None),
+):
+    # Authenticated + rate-limited: each call fans out to the paid Google Maps
+    # geocoding/directions APIs, so it can't be left open and unthrottled.
+    dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "geocode")
     gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
-    for stop in body.stops:
+    # The geocode/route work is blocking httpx; offload it from the event loop.
+    return await asyncio.to_thread(
+        _geocode_stops_sync, body.stops, body.driver_origin, gmaps_key
+    )
+
+
+def _geocode_stops_sync(stops: list[dict], driver_origin: dict | None, gmaps_key: str) -> dict:
+    results = []
+    for stop in stops:
         addr = stop.get("address", {})
         parts = [
             addr.get("address_line_1", ""),
@@ -1938,8 +1974,8 @@ async def api_geocode_stops(body: GeocodeStopsBody):
     route_geometry = []
     valid_points = [r for r in results if r and r.get("lat") is not None and r.get("lon") is not None]
     driver_pt = None
-    if body.driver_origin and body.driver_origin.get("lat") is not None and body.driver_origin.get("lon") is not None:
-        driver_pt = {"lat": float(body.driver_origin["lat"]), "lon": float(body.driver_origin["lon"])}
+    if driver_origin and driver_origin.get("lat") is not None and driver_origin.get("lon") is not None:
+        driver_pt = {"lat": float(driver_origin["lat"]), "lon": float(driver_origin["lon"])}
     route_points = ([driver_pt] if driver_pt else []) + valid_points
     if len(route_points) >= 2:
         total_miles = 0.0
@@ -2010,7 +2046,7 @@ async def api_save_company(
 # ── Invoice API ───────────────────────────────────────────────────────────────
 
 @app.get("/api/loads/{load_id}/invoice")
-async def api_invoice(
+def api_invoice(
     load_id: int,
     authorization: str | None = Header(default=None),
 ):
@@ -2078,7 +2114,7 @@ async def api_analytics(authorization: str | None = Header(default=None)):
 # ── Map API ───────────────────────────────────────────────────────────────────
 
 @app.get("/api/map/locations")
-async def api_map_locations(authorization: str | None = Header(default=None)):
+def api_map_locations(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
     _enforce_eld_rate_limit(dispatcher["id"], "map_locations_read")
     trucks = _get_dispatcher_trucks(dispatcher["id"])
@@ -2103,7 +2139,7 @@ async def api_map_locations(authorization: str | None = Header(default=None)):
 
 
 @app.get("/api/map/nearby")
-async def api_map_nearby(
+def api_map_nearby(
     lat: float | None = Query(default=None),
     lon: float | None = Query(default=None),
     q: str | None = Query(default=None, description="Address/place to search instead of lat/lon"),
@@ -2362,7 +2398,7 @@ async def api_load_auto_send(
 # ── Alerts API ────────────────────────────────────────────────────────────────
 
 @app.get("/api/alerts")
-async def api_alerts(authorization: str | None = Header(default=None)):
+def api_alerts(authorization: str | None = Header(default=None)):
     from datetime import datetime, timezone
     dispatcher = require_dispatcher(authorization)
     loads = database.get_loads(get_company_id(dispatcher))
@@ -2478,39 +2514,23 @@ async def api_kpi_weekly(
                 "comment": "",
             }
 
-        def _parse_num(v):
-            if not v:
-                return 0.0
-            return float(str(v).replace("$", "").replace(",", "").strip() or 0)
-
-        rate = _parse_num(load.get("total_rate_usd"))
-        miles = _parse_num(load.get("miles"))
-        dhd = _parse_num(load.get("deadhead_miles"))
+        rate = database.parse_money(load.get("total_rate_usd"))
+        miles = database.parse_money(load.get("miles"))
+        dhd = database.parse_money(load.get("deadhead_miles"))
 
         drivers[dg_id]["loads"].append(load)
         drivers[dg_id]["total_rate"] += rate
         drivers[dg_id]["total_miles"] += miles
         drivers[dg_id]["total_dhd"] += dhd
 
-    # Calculate RPM and earnings for each driver
+    # Calculate RPM and earnings for each driver (shared tier logic)
     for dg_id, drv in drivers.items():
         drv["rpm"] = round(drv["total_rate"] / drv["total_miles"], 2) if drv["total_miles"] > 0 else 0
-
-        # Find matching tier
+        rpm_val = drv["rpm"] if drv["total_miles"] > 0 else None
         gross = drv["total_rate"]
-        rpm = drv["rpm"]
-        earning = 0
-        tier_pct = None
-        for tier in sorted(company_tiers, key=lambda t: t["min_gross"], reverse=True):
-            gross_ok = gross >= tier["min_gross"]
-            max_ok = tier["max_gross"] is None or gross < tier["max_gross"]
-            rpm_ok = rpm >= tier["min_rpm"] if tier["min_rpm"] else True
-            if gross_ok and max_ok and rpm_ok:
-                earning = round(gross * tier["percentage"] / 100, 2)
-                tier_pct = tier["percentage"]
-                break
-        drv["earning"] = earning
-        drv["tier_percentage"] = tier_pct
+        matched = database.match_tier(gross, rpm_val, company_tiers)
+        drv["earning"] = database.tier_earning(gross, matched)
+        drv["tier_percentage"] = matched["percentage"] if matched else None
 
         # Attach comment
         for c in comments:
@@ -2538,7 +2558,10 @@ async def api_kpi_comment(
 ):
     dispatcher = require_dispatcher(authorization)
     company_id = get_company_id(dispatcher)
-    database.upsert_kpi_comment(company_id, body.driver_group_id, body.week_start, body.comment)
+    try:
+        database.upsert_kpi_comment(company_id, body.driver_group_id, body.week_start, body.comment)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return {"ok": True}
 
 
@@ -2574,7 +2597,7 @@ async def api_kpi_entry_delete(
     dispatcher = require_dispatcher(authorization)
     if dispatcher.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Only admins can delete KPI entries")
-    ok = database.delete_kpi_entry(entry_id)
+    ok = database.delete_kpi_entry(entry_id, get_company_id(dispatcher))
     if not ok:
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"ok": True}
@@ -2582,16 +2605,10 @@ async def api_kpi_entry_delete(
 
 def _calc_tier(total_cost: float, total_miles: float, tiers: list[dict]):
     rpm = round(total_cost / total_miles, 2) if total_miles > 0 else 0
-    earning = 0
-    tier_pct = None
-    for tier in sorted(tiers, key=lambda t: t["min_gross"], reverse=True):
-        gross_ok = total_cost >= tier["min_gross"]
-        max_ok = tier["max_gross"] is None or total_cost < tier["max_gross"]
-        rpm_ok = rpm >= tier["min_rpm"] if tier["min_rpm"] else True
-        if gross_ok and max_ok and rpm_ok:
-            earning = round(total_cost * tier["percentage"] / 100, 2)
-            tier_pct = tier["percentage"]
-            break
+    rpm_val = rpm if total_miles > 0 else None
+    matched = database.match_tier(total_cost, rpm_val, tiers)
+    earning = database.tier_earning(total_cost, matched)
+    tier_pct = matched["percentage"] if matched else None
     return rpm, earning, tier_pct
 
 

@@ -21,6 +21,10 @@
       --bg: #07090f;
       --card: #0c1020;
       --card-inner: #080c18;
+      /* Aliases used across the app; resolve per-theme via the tokens above. */
+      --bg-secondary: var(--card-inner);
+      --surface-2: var(--card-inner);
+      --bg-card: var(--card);
       --card-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 4px 24px rgba(0,0,0,0.5);
       --text: #bec9e0;
       --text-muted: #7286a8;
@@ -483,6 +487,7 @@
     .settings-body.open { display: block; }
     .tpl-inner-tab.active { color: var(--primary) !important; border-bottom-color: var(--primary) !important; }
     .field { margin-bottom: 13px; }
+    .field-err { color: #ef4444; font-size: 0.72rem; margin-top: 3px; min-height: 0; }
     .field label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
     .field input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: 'IBM Plex Sans', sans-serif; font-size: 0.9rem; color: var(--text); background: var(--card-inner); outline: none; transition: border-color 0.15s; }
     .field input:focus { border-color: var(--primary); }
@@ -1596,8 +1601,8 @@
   </div>
 
   <!-- Generic Entity Modal -->
-  <div class="overlay" id="entity-modal" style="display:none;">
-    <div class="modal" style="max-width:560px;">
+  <div class="overlay" id="entity-modal" style="display:none;" onclick="if(event.target===this)closeEntityModal()">
+    <div class="modal" style="max-width:560px;" role="dialog" aria-modal="true" aria-labelledby="entity-modal-title">
       <div class="modal-title" id="entity-modal-title">New Record</div>
       <div id="entity-modal-fields" style="display:grid;gap:10px;margin-bottom:14px;"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -2162,7 +2167,7 @@ Rate: {{total_rate_usd}}
       dropZone.classList.add('collapsed');
       const fd = new FormData(); fd.append('file', selectedFile);
       try {
-        const resp = await fetch('/extract', { method:'POST', body:fd });
+        const resp = await fetch('/extract', { method:'POST', headers: authH(), body:fd });
         const data = await resp.json();
         resultSec.classList.add('visible');
         document.getElementById('err-body').innerHTML = '';
@@ -2283,7 +2288,7 @@ Rate: {{total_rate_usd}}
       try {
         const resp = await fetch('/api/geocode-stops', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...authH(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ stops, driver_origin: driverOrigin || null }),
         });
         if (spinner) spinner.classList.remove('visible');
@@ -2539,27 +2544,29 @@ Rate: {{total_rate_usd}}
         return;
       }
       try {
-        const [groups, botInfo] = await Promise.all([
+        const [groups, botInfo, codeRes] = await Promise.all([
           fetch('/api/groups', { headers: authH() }).then(r => r.json()),
           fetch('/api/bot-info').then(r => r.json()).catch(() => ({ username: null })),
+          fetch('/api/telegram/link-code', { method: 'POST', headers: authH() }).then(r => r.ok ? r.json() : null).catch(() => null),
         ]);
-        renderGroupsPage(groups, botInfo.username);
+        renderGroupsPage(groups, botInfo.username, codeRes && codeRes.code);
       } catch { el.innerHTML = `<div class="error-box">Failed to load groups</div>`; }
     }
 
-    function renderGroupsPage(groups, botUsername) {
+    function renderGroupsPage(groups, botUsername, linkCode) {
       const el = document.getElementById('groups-content');
-      const cmd = `/link ${token}`;
-      const botLine = botUsername
-        ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;">Add <strong style="color:var(--primary);">@${esc(botUsername)}</strong> to the group, then send the command below</div>`
-        : `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;">Add the bot to the group and send this command there</div>`;
+      // Single-use code (not the API token) — keeps the master credential out of chat.
+      const code = linkCode || '———';
+      const cmd = `/link ${code}`;
+      const botLine = `<div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;">One-time code, expires in 30 min. ${botUsername ? `Add <strong style="color:var(--primary);">@${esc(botUsername)}</strong> to the group first, then send the command there.` : 'Add the bot to the group first, then send this command there.'}</div>`;
 
       const banner = `
         <div class="link-banner">
-          <div class="link-banner-title">Add a new group with this command:</div>
+          <div class="link-banner-title">Link a new group — send this in the group chat:</div>
           <div class="copy-row">
             <div class="code-display">${esc(cmd)}</div>
             <button class="btn-outline" id="copy-cmd-btn">Copy</button>
+            <button class="btn-outline" id="new-code-btn">New code</button>
           </div>
           ${botLine}
         </div>`;
@@ -2575,18 +2582,20 @@ Rate: {{total_rate_usd}}
       // Copy + auto-refresh
       document.getElementById('copy-cmd-btn').addEventListener('click', () => {
         navigator.clipboard.writeText(cmd); toast('Command copied', 'success');
-        startGroupAutoRefresh(groups.length);
+        startGroupAutoRefresh(groups.length, cmd);
       });
+      const newCodeBtn = document.getElementById('new-code-btn');
+      if (newCodeBtn) newCodeBtn.addEventListener('click', () => { loadGroups(); toast('New code generated', 'success'); });
     }
 
-    function startGroupAutoRefresh(currentCount) {
+    function startGroupAutoRefresh(currentCount, cmd) {
       if (groupPollTimer) clearInterval(groupPollTimer);
       prevGroupCount = currentCount;
       // Show waiting banner
       const el = document.getElementById('groups-content');
       const banner = document.createElement('div');
       banner.className = 'waiting-banner'; banner.id = 'waiting-banner';
-      banner.innerHTML = `<div class="mini-spin"></div><span>Waiting for group to link... Send <strong>/link ${token}</strong> in your Telegram group</span>`;
+      banner.innerHTML = `<div class="mini-spin"></div><span>Waiting for group to link... Send <strong>${esc(cmd || '')}</strong> in your Telegram group</span>`;
       el.prepend(banner);
 
       groupPollTimer = setInterval(async () => {
@@ -4811,7 +4820,7 @@ Rate: {{total_rate_usd}}
         // Geocode and show route
         const geoResp = await fetch('/api/geocode-stops', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...authH(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ stops }),
         });
         spinner.style.display = 'none';
@@ -5290,6 +5299,7 @@ Rate: {{total_rate_usd}}
         if (!r.ok) throw new Error('Failed');
         const d = await r.json();
         const items = d.items || [];
+        _entityItems[slug] = items;
         if (!items.length) {
           el.innerHTML = `<div class="card" style="padding:48px;text-align:center;">
             <div style="font-size:2.5rem;margin-bottom:12px;opacity:0.4;">📋</div>
@@ -5300,7 +5310,7 @@ Rate: {{total_rate_usd}}
           return;
         }
         const cols = schema.listCols;
-        const headers = cols.map(c => `<th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">${c.replace(/_/g,' ')}</th>`).join('');
+        const headers = cols.map(c => `<th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">${esc(c.replace(/_/g,' '))}</th>`).join('');
         const rows = items.map(it => {
           const cells = cols.map(c => {
             let v = it[c];
@@ -5308,10 +5318,10 @@ Rate: {{total_rate_usd}}
             else if (typeof v === 'boolean') v = v ? 'Yes' : 'No';
             else if (typeof v === 'number' && (c === 'amount' || c === 'cost')) v = '$' + v.toLocaleString();
             else if (typeof v === 'string' && v.length > 60) v = v.substring(0,60) + '…';
-            return `<td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${v}</td>`;
+            return `<td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${esc(String(v))}</td>`;
           }).join('');
           return `<tr>${cells}<td style="padding:10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">
-            <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;" onclick='openEntityModal("${slug}", ${JSON.stringify(it).replace(/'/g, "&#39;")})'>Edit</button>
+            <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;" onclick="openEntityModal('${slug}', ${it.id})">Edit</button>
             <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;color:#ef4444;" onclick="deleteEntity('${slug}', ${it.id})">Delete</button>
           </td></tr>`;
         }).join('');
@@ -5327,30 +5337,108 @@ Rate: {{total_rate_usd}}
     }
 
     let _entityEditing = null;
-    function openEntityModal(slug, existing) {
+    let _entityItems = {};
+    let _entityKeyHandler = null;
+
+    // Replace bare numeric foreign-key inputs with real dropdowns, and free-text
+    // enums with selects. Keyed by `${slug}.${field}`.
+    const REF_FIELDS = {
+      'driver-documents.driver_group_id': 'groups',
+      'safety-tasks.driver_group_id': 'groups',
+      'safety-tasks.trailer_id': 'trailers',
+      'bills.vendor_id': 'vendors',
+      'transactions.load_id': 'loads',
+      'transactions.bill_id': 'bills',
+      'mailbox.load_id': 'loads',
+    };
+    const ENUM_OPTIONS = {
+      'transactions.tx_type': ['income', 'expense'],
+      'work-orders.status': ['open', 'in_progress', 'closed', 'cancelled'],
+      'work-orders.priority': ['low', 'normal', 'high', 'urgent'],
+      'safety-tasks.status': ['open', 'in_progress', 'done'],
+      'safety-tasks.priority': ['low', 'normal', 'high', 'urgent'],
+      'bills.status': ['unpaid', 'paid', 'partial', 'overdue'],
+      'trailers.status': ['available', 'in_use', 'maintenance', 'out_of_service'],
+    };
+
+    async function _loadRefOptions(ref) {
+      try {
+        if (ref === 'groups') {
+          const gs = await fetch('/api/groups', { headers: authH() }).then(r => r.json());
+          return (Array.isArray(gs) ? gs : []).map(g => ({ value: g.id, label: g.name || ('Group ' + g.id) }));
+        }
+        if (ref === 'loads') {
+          const raw = await fetch('/api/loads', { headers: authH() }).then(r => r.json());
+          const arr = Array.isArray(raw) ? raw : (raw.loads || raw.items || []);
+          return arr.map(l => ({ value: l.id, label: (l.load_number || ('Load ' + l.id)) + ((l.origin_state && l.destination_state) ? ` (${l.origin_state}→${l.destination_state})` : '') }));
+        }
+        const d = await fetch(`/api/entities/${ref}`, { headers: authH() }).then(r => r.json());
+        return (d.items || []).map(it => ({ value: it.id, label: it.name || it.unit_number || it.bill_number || it.title || ('#' + it.id) }));
+      } catch { return null; }
+    }
+
+    async function openEntityModal(slug, existing) {
       const schema = ENTITY_SCHEMAS[slug];
       if (!schema) return;
+      // Edit buttons pass the row id (no data embedded in markup → no XSS).
+      if (typeof existing === 'number') existing = (_entityItems[slug] || []).find(x => x.id === existing) || null;
       _entityEditing = { slug, id: existing ? existing.id : null };
       document.getElementById('entity-modal-title').textContent = (existing ? 'Edit ' : 'New ') + schema.title;
       const fieldsEl = document.getElementById('entity-modal-fields');
+      fieldsEl.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-muted);">Loading…</div>';
+      _showEntityModal();
+
+      // Prefetch dropdown data (vendors, groups, loads…) in parallel.
+      const refs = {};
+      await Promise.all(schema.fields.map(async f => {
+        const ref = REF_FIELDS[`${slug}.${f.k}`];
+        if (ref && !(ref in refs)) refs[ref] = await _loadRefOptions(ref);
+      }));
+      if (!_entityEditing || _entityEditing.slug !== slug) return; // modal closed meanwhile
+
       fieldsEl.innerHTML = schema.fields.map(f => {
+        const id = 'ef-' + f.k;
         const v = existing ? (existing[f.k] ?? '') : '';
-        const safe = String(v).replace(/"/g,'&quot;');
-        const req = f.required ? 'required' : '';
+        const key = `${slug}.${f.k}`;
+        const label = `<label for="${id}">${esc(f.label)}${f.required ? ' <span style="color:#ef4444">*</span>' : ''}</label>`;
+        const errEl = `<div class="field-err" id="err-${esc(f.k)}"></div>`;
+        const ref = REF_FIELDS[key];
+        const enums = ENUM_OPTIONS[key];
+
+        if (ref && refs[ref]) {  // foreign-key dropdown
+          const opts = ['<option value="">— none —</option>'].concat(
+            refs[ref].map(o => `<option value="${esc(String(o.value))}"${String(o.value) === String(v) ? ' selected' : ''}>${esc(o.label)}</option>`)
+          ).join('');
+          return `<div class="field">${label}<select id="${id}" data-type="number">${opts}</select>${errEl}</div>`;
+        }
+        if (enums) {  // enum dropdown (keep a legacy value not in the preset)
+          const list = (v && !enums.includes(String(v))) ? [String(v)].concat(enums) : enums;
+          const opts = ['<option value="">— none —</option>'].concat(
+            list.map(o => `<option value="${esc(o)}"${o === String(v) ? ' selected' : ''}>${esc(o)}</option>`)
+          ).join('');
+          return `<div class="field">${label}<select id="${id}">${opts}</select>${errEl}</div>`;
+        }
         if (f.type === 'textarea') {
-          return `<div class="field"><label>${f.label}${f.required?' *':''}</label>
-            <textarea id="ef-${f.k}" rows="3" placeholder="${f.placeholder||''}" ${req}>${safe}</textarea></div>`;
+          return `<div class="field">${label}<textarea id="${id}" rows="3" placeholder="${esc(f.placeholder || '')}">${esc(String(v))}</textarea>${errEl}</div>`;
         }
         const t = f.type || 'text';
-        return `<div class="field"><label>${f.label}${f.required?' *':''}</label>
-          <input type="${t}" id="ef-${f.k}" value="${safe}" placeholder="${f.placeholder||''}" ${req}/></div>`;
+        return `<div class="field">${label}<input type="${esc(t)}" id="${id}" value="${esc(String(v))}" placeholder="${esc(f.placeholder || '')}" data-type="${esc(t)}"/>${errEl}</div>`;
       }).join('');
+
+      const first = fieldsEl.querySelector('input,select,textarea');
+      if (first) first.focus();
+    }
+
+    function _showEntityModal() {
       document.getElementById('entity-modal').style.display = 'flex';
+      _entityKeyHandler = (e) => { if (e.key === 'Escape') closeEntityModal(); };
+      document.addEventListener('keydown', _entityKeyHandler);
     }
 
     function closeEntityModal() {
       document.getElementById('entity-modal').style.display = 'none';
       _entityEditing = null;
+      if (_entityKeyHandler) { document.removeEventListener('keydown', _entityKeyHandler); _entityKeyHandler = null; }
     }
 
     async function saveEntityModal() {
@@ -5358,14 +5446,25 @@ Rate: {{total_rate_usd}}
       const { slug, id } = _entityEditing;
       const schema = ENTITY_SCHEMAS[slug];
       const body = {};
+      let firstErr = null;
+      schema.fields.forEach(f => { const e = document.getElementById('err-' + f.k); if (e) e.textContent = ''; });
       for (const f of schema.fields) {
         const inp = document.getElementById('ef-' + f.k);
         if (!inp) continue;
         let v = inp.value;
-        if (v === '') continue;
-        if (f.type === 'number') v = Number(v);
+        const isNumber = (inp.dataset && inp.dataset.type === 'number') || f.type === 'number';
+        if (v === '' || v == null) {
+          if (f.required) { _setFieldErr(f.k, 'Required'); if (!firstErr) firstErr = inp; }
+          continue;
+        }
+        if (isNumber) {
+          const n = Number(v);
+          if (Number.isNaN(n)) { _setFieldErr(f.k, 'Must be a number'); if (!firstErr) firstErr = inp; continue; }
+          v = n;
+        }
         body[f.k] = v;
       }
+      if (firstErr) { firstErr.focus(); return; }
       try {
         const url = id ? `/api/entities/${slug}/${id}` : `/api/entities/${slug}`;
         const r = await fetch(url, {
@@ -5375,14 +5474,20 @@ Rate: {{total_rate_usd}}
         });
         if (!r.ok) {
           const err = await r.json().catch(() => ({}));
-          alert(err.detail || 'Save failed');
+          toast(err.detail || 'Save failed', 'error');
           return;
         }
         closeEntityModal();
+        toast(id ? 'Saved' : 'Created', 'success');
         loadEntityPage(slug);
       } catch (e) {
-        alert('Save failed: ' + e.message);
+        toast('Save failed: ' + e.message, 'error');
       }
+    }
+
+    function _setFieldErr(k, msg) {
+      const e = document.getElementById('err-' + k);
+      if (e) e.textContent = msg;
     }
 
     async function deleteEntity(slug, id) {
@@ -5390,12 +5495,13 @@ Rate: {{total_rate_usd}}
       try {
         const r = await fetch(`/api/entities/${slug}/${id}`, { method: 'DELETE', headers: authH() });
         if (!r.ok) {
-          alert('Delete failed');
+          toast('Delete failed', 'error');
           return;
         }
+        toast('Deleted', 'success');
         loadEntityPage(slug);
       } catch (e) {
-        alert('Delete failed: ' + e.message);
+        toast('Delete failed: ' + e.message, 'error');
       }
     }
 

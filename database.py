@@ -1,10 +1,12 @@
 import hashlib
 import json
 import os
+import re
 import secrets
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 
 import psycopg2
 import psycopg2.extras
@@ -411,6 +413,33 @@ def init_db():
         conn.execute("ALTER TABLE kpi_entries ADD COLUMN IF NOT EXISTS miles DOUBLE PRECISION NOT NULL DEFAULT 0")
         conn.execute("ALTER TABLE kpi_entries ADD COLUMN IF NOT EXISTS cost DOUBLE PRECISION NOT NULL DEFAULT 0")
 
+        # ── Single-use Telegram group-link codes ──────────────────────────────
+        # Drivers paste a short code (not the dispatcher's API token) into the
+        # group chat, so the master credential never travels through Telegram.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS telegram_link_codes (
+                code TEXT PRIMARY KEY,
+                dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+                created_at TIMESTAMP NOT NULL,
+                expires_at TIMESTAMP NOT NULL
+            )
+        """)
+
+        # ── Performance indexes on hot tables ─────────────────────────────────
+        # loads/dispatchers/groups are scanned on nearly every page; without
+        # these every query is a seq-scan that grows with total rows.
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_loads_dispatcher ON loads(dispatcher_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_loads_status ON loads(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_loads_group ON loads(group_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_loads_motive ON loads(motive_dispatch_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_dispatchers_company ON dispatchers(company_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_dispatchers_email ON dispatchers(email)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_groups_dispatcher ON driver_groups(dispatcher_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_eld_dispatcher ON eld_configs(dispatcher_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_load ON kpi_entries(load_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_lookup ON kpi_entries(company_id, dispatcher_id, week_start)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pay_tiers_company ON pay_tiers(company_id)")
+
     super_email = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
     super_pass = os.environ.get("SUPER_ADMIN_PASSWORD", "").strip()
     if super_email and super_pass:
@@ -470,6 +499,62 @@ def verify_password(password: str, stored: str) -> bool:
         return secrets.compare_digest(h2.hex(), h)
     except Exception:
         return False
+
+
+# ── Money / rate parsing + pay tiers (single source of truth) ─────────────────
+
+def parse_money(value) -> float:
+    """Parse a free-text money/number string like '$2,500.00' or '1,234' into a
+    float. Returns 0.0 for empty/unparseable input. Extracts the first
+    number-like token so values such as '$2,500 + FSC' still yield 2500.0."""
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).replace(",", "")
+    m = re.search(r"\d+(?:\.\d+)?", s)
+    return float(m.group()) if m else 0.0
+
+
+def _rate_to_numeric(col: str) -> str:
+    """SQL fragment that turns a free-text rate column into a numeric value,
+    tolerating '$', commas and trailing text without ever crashing the cast.
+    Use inside an f-string SQL query."""
+    return (
+        f"COALESCE(NULLIF(regexp_replace("
+        f"substring({col} FROM '[0-9][0-9,]*\\.?[0-9]*'), ',', '', 'g'), '')"
+        f"::numeric, 0)"
+    )
+
+
+def match_tier(gross: float, rpm: float | None, tiers: list[dict]) -> dict | None:
+    """Pick the pay tier for a load/period. Highest min_gross first.
+    rpm=None means miles are unknown, so the RPM floor is not enforced.
+    Returns None when no tier matches (caller should surface that, not pay $0
+    silently)."""
+    for tier in sorted(tiers, key=lambda t: t.get("min_gross") or 0, reverse=True):
+        if gross < (tier.get("min_gross") or 0):
+            continue
+        max_gross = tier.get("max_gross")
+        if max_gross is not None and gross >= max_gross:
+            continue
+        min_rpm = tier.get("min_rpm") or 0
+        if min_rpm and rpm is not None and rpm < min_rpm:
+            continue
+        return tier
+    return None
+
+
+def tier_earning(gross: float, tier: dict | None) -> float:
+    """Commission for a gross amount under a tier, computed with Decimal to
+    avoid binary-float drift on money."""
+    if not tier:
+        return 0.0
+    pct = Decimal(str(tier.get("percentage") or 0))
+    cents = (Decimal(str(gross)) * pct / Decimal(100)).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    return float(cents)
 
 
 # ── Dispatchers ───────────────────────────────────────────────────────────────
@@ -722,6 +807,48 @@ def link_group(dispatcher_id: int, chat_id: int, name: str) -> dict:
         )
         row = conn.fetchone()
         return {"id": row["id"], "dispatcher_id": dispatcher_id, "chat_id": chat_id, "name": name}
+
+
+def create_link_code(dispatcher_id: int, ttl_minutes: int = 30) -> dict:
+    """Generate a short single-use code a driver pastes in their group to link
+    it to this dispatcher. Expires after ttl_minutes. Keeps the dispatcher's
+    API token out of group chat."""
+    from datetime import timedelta
+    code = secrets.token_hex(3).upper()  # e.g. 'A1B2C3'
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(minutes=ttl_minutes)
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO telegram_link_codes (code, dispatcher_id, created_at, expires_at)
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (code) DO UPDATE SET dispatcher_id = EXCLUDED.dispatcher_id,
+                   created_at = EXCLUDED.created_at, expires_at = EXCLUDED.expires_at""",
+            (code, dispatcher_id, now, expires),
+        )
+    return {"code": code, "expires_at": expires.isoformat(), "ttl_minutes": ttl_minutes}
+
+
+def consume_link_code(code: str) -> dict | None:
+    """Validate and consume a single-use link code, returning the dispatcher
+    dict or None. The code is deleted on use and ignored if expired."""
+    now = datetime.now(timezone.utc)
+    code = (code or "").strip().upper()
+    with get_conn() as conn:
+        conn.execute(
+            "SELECT dispatcher_id FROM telegram_link_codes WHERE code = %s AND expires_at > %s",
+            (code, now),
+        )
+        row = conn.fetchone()
+        # Single-use: always remove any matching code, even if expired.
+        conn.execute("DELETE FROM telegram_link_codes WHERE code = %s", (code,))
+        if not row:
+            return None
+        conn.execute(
+            "SELECT * FROM dispatchers WHERE id = %s AND is_active = TRUE",
+            (row["dispatcher_id"],),
+        )
+        d = conn.fetchone()
+        return dict(d) if d else None
 
 
 def get_groups(company_id: int) -> list[dict]:
@@ -1145,12 +1272,12 @@ def create_company(name: str) -> dict:
 def get_all_companies() -> list[dict]:
     with get_conn() as conn:
         conn.execute(
-            """SELECT c.id, c.name, c.created_at,
+            f"""SELECT c.id, c.name, c.created_at,
                       (SELECT d2.name FROM dispatchers d2 WHERE d2.company_id = c.id AND d2.role = 'admin' LIMIT 1) as admin_name,
                       (SELECT d2.email FROM dispatchers d2 WHERE d2.company_id = c.id AND d2.role = 'admin' LIMIT 1) as admin_email,
                       COUNT(DISTINCT CASE WHEN d.role = 'user' THEN d.id END) as user_count,
                       COUNT(DISTINCT l.id) as load_count,
-                      COALESCE(SUM(CASE WHEN l.status='delivered' THEN CAST(REPLACE(REPLACE(l.total_rate_usd,'$',''),',','') AS DOUBLE PRECISION) ELSE 0 END), 0) as revenue
+                      COALESCE(SUM(CASE WHEN l.status='delivered' THEN {_rate_to_numeric('l.total_rate_usd')} ELSE 0 END), 0) as revenue
                FROM companies c
                LEFT JOIN dispatchers d ON d.company_id = c.id
                LEFT JOIN loads l ON l.dispatcher_id = d.id
@@ -1193,7 +1320,7 @@ def get_admin_stats() -> dict:
         conn.execute("SELECT COUNT(*) AS cnt FROM loads")
         total_loads = conn.fetchone()["cnt"]
         conn.execute(
-            "SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(total_rate_usd,'$',''),',','') AS DOUBLE PRECISION)), 0) AS total FROM loads WHERE status = 'delivered'"
+            f"SELECT COALESCE(SUM({_rate_to_numeric('total_rate_usd')}), 0) AS total FROM loads WHERE status = 'delivered'"
         )
         total_revenue = conn.fetchone()["total"]
         conn.execute("SELECT COUNT(*) AS cnt FROM loads WHERE status = 'dispatched'")
@@ -1367,29 +1494,13 @@ def get_earnings(company_id: int, dispatcher_id: int | None = None) -> list[dict
         worker_tiers = [t for t in tiers if t["dispatcher_id"] == worker_id]
         active_tiers = worker_tiers if worker_tiers else company_tiers
 
-        def _parse_num(v):
-            if not v:
-                return 0.0
-            return float(str(v).replace("$", "").replace(",", "").strip() or 0)
-
-        gross = _parse_num(load.get("total_rate_usd"))
-        miles = _parse_num(load.get("miles"))
+        gross = parse_money(load.get("total_rate_usd"))
+        miles = parse_money(load.get("miles"))
         rpm = gross / miles if miles > 0 else None
 
-        earning = 0.0
-        matched_tier = None
-        for tier in sorted(active_tiers, key=lambda t: t["min_gross"], reverse=True):
-            gross_ok = gross >= tier["min_gross"]
-            max_ok = tier["max_gross"] is None or gross < tier["max_gross"]
-            # skip RPM check if miles data is missing
-            rpm_ok = rpm is None or rpm >= tier["min_rpm"]
-            if gross_ok and max_ok and rpm_ok:
-                earning = round(gross * tier["percentage"] / 100, 2)
-                matched_tier = tier
-                break
-
+        matched_tier = match_tier(gross, rpm, active_tiers)
         load["rpm"] = round(rpm, 2) if rpm is not None else None
-        load["earning"] = earning
+        load["earning"] = tier_earning(gross, matched_tier)
         load["tier_percentage"] = matched_tier["percentage"] if matched_tier else None
         result.append(load)
 
@@ -1438,6 +1549,14 @@ def get_kpi_comments(company_id: int, week_start: str) -> list[dict]:
 def upsert_kpi_comment(company_id: int, driver_group_id: int, week_start: str, comment: str):
     now = datetime.now(timezone.utc)
     with get_conn() as conn:
+        # The driver group must belong to the caller's company.
+        conn.execute(
+            """SELECT 1 FROM driver_groups dg JOIN dispatchers d ON dg.dispatcher_id = d.id
+               WHERE dg.id = %s AND d.company_id = %s""",
+            (driver_group_id, company_id),
+        )
+        if not conn.fetchone():
+            raise ValueError("Driver group not found")
         conn.execute(
             """INSERT INTO kpi_comments (company_id, driver_group_id, week_start, comment, updated_at)
                VALUES (%s, %s, %s, %s, %s)
@@ -1454,8 +1573,17 @@ def add_kpi_entry(company_id: int, dispatcher_id: int, week_start: str,
     now = datetime.now(timezone.utc)
     with get_conn() as conn:
         if load_id:
+            # The load must belong to the caller's company (no cross-tenant FK).
             conn.execute(
-                "SELECT id FROM kpi_entries WHERE load_id = %s", (load_id,)
+                """SELECT 1 FROM loads l JOIN dispatchers d ON l.dispatcher_id = d.id
+                   WHERE l.id = %s AND d.company_id = %s""",
+                (load_id, company_id),
+            )
+            if not conn.fetchone():
+                raise ValueError("Load not found")
+            conn.execute(
+                "SELECT id FROM kpi_entries WHERE load_id = %s AND company_id = %s",
+                (load_id, company_id),
             )
             if conn.fetchone():
                 raise ValueError("This load is already assigned to a KPI entry")
@@ -1468,15 +1596,20 @@ def add_kpi_entry(company_id: int, dispatcher_id: int, week_start: str,
         return {"id": row["id"]}
 
 
-def delete_kpi_entry(entry_id: int, dispatcher_id: int | None = None) -> bool:
+def delete_kpi_entry(entry_id: int, company_id: int, dispatcher_id: int | None = None) -> bool:
+    """Delete a KPI entry, always scoped to the caller's company so one tenant
+    can never delete another tenant's row by guessing its id."""
     with get_conn() as conn:
         if dispatcher_id:
             conn.execute(
-                "DELETE FROM kpi_entries WHERE id = %s AND dispatcher_id = %s",
-                (entry_id, dispatcher_id),
+                "DELETE FROM kpi_entries WHERE id = %s AND company_id = %s AND dispatcher_id = %s",
+                (entry_id, company_id, dispatcher_id),
             )
         else:
-            conn.execute("DELETE FROM kpi_entries WHERE id = %s", (entry_id,))
+            conn.execute(
+                "DELETE FROM kpi_entries WHERE id = %s AND company_id = %s",
+                (entry_id, company_id),
+            )
         return conn.rowcount > 0
 
 
@@ -1651,12 +1784,12 @@ def dashboard_summary(company_id: int) -> dict:
     """Aggregate metrics for the dashboard landing page."""
     with get_conn() as conn:
         conn.execute(
-            """SELECT
+            f"""SELECT
                  COUNT(*) FILTER (WHERE status = 'upcoming')   AS upcoming_loads,
                  COUNT(*) FILTER (WHERE status = 'dispatched') AS active_loads,
                  COUNT(*) FILTER (WHERE status = 'delivered')  AS delivered_loads,
                  COUNT(*)                                       AS total_loads,
-                 COALESCE(SUM(CASE WHEN total_rate_usd ~ '^[0-9.]+$' THEN total_rate_usd::DOUBLE PRECISION ELSE 0 END), 0) AS total_revenue
+                 COALESCE(SUM({_rate_to_numeric('total_rate_usd')}) FILTER (WHERE status = 'delivered'), 0) AS total_revenue
                FROM loads l
                JOIN dispatchers d ON l.dispatcher_id = d.id
                WHERE d.company_id = %s""",

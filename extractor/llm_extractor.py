@@ -1,4 +1,9 @@
+import hashlib
+import logging
 import os
+import time
+from collections import OrderedDict
+
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -6,6 +11,14 @@ from dotenv import load_dotenv
 from extractor.validator import RateCon
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+class ExtractionError(Exception):
+    """Raised when extraction cannot complete (quota, timeout, transient error,
+    or empty model output). Carries a user-safe message — map to HTTP 503 at the
+    API layer instead of leaking the raw provider exception."""
+
 
 EXTRACTION_PROMPT = """You are an expert logistics document analyst specializing in rate confirmations (ratecons).
 
@@ -38,6 +51,28 @@ IMPORTANT:
 - Extract ALL stops, not just the first one.
 """
 
+REQUEST_TIMEOUT_MS = 60_000  # 60s cap on the Gemini call
+MAX_RETRIES = 3
+_TRANSIENT_MARKERS = (
+    "429", "resource_exhausted", "rate limit", "quota",
+    "500", "502", "503", "unavailable", "deadline", "timeout",
+)
+
+# Small in-process LRU: identical file bytes → prior result. Avoids paying for a
+# re-extraction when the same PDF is uploaded again seconds later.
+_CACHE_MAX = 64
+_result_cache: "OrderedDict[str, RateCon]" = OrderedDict()
+
+
+def _is_transient(exc: Exception) -> bool:
+    s = str(exc).lower()
+    return any(m in s for m in _TRANSIENT_MARKERS)
+
+
+def _is_quota(exc: Exception) -> bool:
+    s = str(exc).lower()
+    return "429" in s or "resource_exhausted" in s or "quota" in s
+
 
 def _stop_address_string(stop) -> str:
     a = stop.address
@@ -55,13 +90,19 @@ def _fill_missing_miles(ratecon: RateCon, api_key: str | None) -> None:
         if miles:
             ratecon.miles = str(miles)
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning("Miles fallback calc failed: %s", e)
+        logger.warning("Miles fallback calc failed: %s", e)
 
 
 def extract(file_path: str, gmaps_api_key: str | None = None) -> RateCon:
     """
     Reads a PDF or image ratecon file and returns a validated RateCon object.
+
+    Hardened against real-world failure modes:
+      - identical files are served from a small in-process cache (cost control),
+      - the Gemini call has a hard timeout and bounded retries with backoff on
+        transient/quota errors,
+      - empty model output and quota exhaustion raise ExtractionError (→ 503)
+        instead of an opaque 500.
     If the extracted miles field is empty, falls back to calculating total
     driving miles via Google Maps (with OSRM fallback) from the stops.
     """
@@ -69,30 +110,71 @@ def extract(file_path: str, gmaps_api_key: str | None = None) -> RateCon:
 
     mime_type, file_bytes = read_file(file_path)
 
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    cache_key = hashlib.sha256(file_bytes).hexdigest()
+    cached = _result_cache.get(cache_key)
+    if cached is not None:
+        _result_cache.move_to_end(cache_key)
+        return cached.model_copy(deep=True)
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            types.Content(
-                parts=[
-                    types.Part(text=EXTRACTION_PROMPT),
-                    types.Part(
-                        inline_data=types.Blob(
-                            mime_type=mime_type,
-                            data=file_bytes,
-                        ),
-                    ),
-                ]
-            )
-        ],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_json_schema=RateCon.model_json_schema(),
-            temperature=0.0,
-        ),
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise ExtractionError("Extraction is not configured (missing API key).")
+
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
     )
+
+    response = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    types.Content(
+                        parts=[
+                            types.Part(text=EXTRACTION_PROMPT),
+                            types.Part(
+                                inline_data=types.Blob(
+                                    mime_type=mime_type,
+                                    data=file_bytes,
+                                ),
+                            ),
+                        ]
+                    )
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=RateCon.model_json_schema(),
+                    temperature=0.0,
+                ),
+            )
+            break
+        except Exception as exc:
+            is_last = attempt >= MAX_RETRIES - 1
+            if _is_transient(exc) and not is_last:
+                time.sleep(0.8 * (2 ** attempt))
+                continue
+            if _is_quota(exc):
+                raise ExtractionError(
+                    "Extraction is temporarily unavailable (AI quota reached). "
+                    "Please try again shortly."
+                ) from exc
+            logger.warning("Gemini extraction failed: %s", exc)
+            raise ExtractionError(
+                "Could not read this document. Please try again with a clearer file."
+            ) from exc
+
+    if response is None or not getattr(response, "text", None):
+        raise ExtractionError(
+            "The document could not be read (no data returned). Try a clearer scan."
+        )
 
     ratecon = RateCon.model_validate_json(response.text)
     _fill_missing_miles(ratecon, gmaps_api_key)
-    return ratecon
+
+    _result_cache[cache_key] = ratecon
+    _result_cache.move_to_end(cache_key)
+    if len(_result_cache) > _CACHE_MAX:
+        _result_cache.popitem(last=False)
+    return ratecon.model_copy(deep=True)

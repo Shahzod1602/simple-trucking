@@ -1,3 +1,4 @@
+import json
 import os
 import httpx
 
@@ -25,9 +26,19 @@ def get_me() -> dict:
     return resp.json().get("result", {})
 
 
-def get_updates(offset: int = 0) -> list[dict]:
+def get_updates(offset: int = 0, timeout: int = 25) -> list[dict]:
+    # Real long polling: Telegram holds the request open up to `timeout` seconds
+    # and returns as soon as an update arrives (low latency, far fewer requests).
     url = TELEGRAM_API.format(token=_token(), method="getUpdates")
-    resp = httpx.get(url, params={"offset": offset, "timeout": 2}, timeout=10)
+    resp = httpx.get(
+        url,
+        params={
+            "offset": offset,
+            "timeout": timeout,
+            "allowed_updates": json.dumps(["message", "my_chat_member"]),
+        },
+        timeout=timeout + 10,
+    )
     resp.raise_for_status()
     data = resp.json()
     return data.get("result", [])

@@ -2,11 +2,14 @@
 Geocoding (Google Maps or Nominatim fallback) and routing (Google Maps or OSRM fallback).
 """
 
+import logging
 import math
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse"
@@ -15,6 +18,21 @@ OSRM = "https://router.project-osrm.org/route/v1/driving"
 HEADERS = {"User-Agent": "SimpleTruckingETA/1.0"}
 
 EARTH_RADIUS_MILES = 3958.7613
+
+# Geocoded coordinates are stable, so successful lookups are memoized in-process.
+# This cuts repeated Google/Nominatim cost (the same warehouse addresses are
+# geocoded over and over) and keeps us within Nominatim's ~1 req/s usage policy.
+_GEOCODE_CACHE: dict[str, dict] = {}
+_REVERSE_CACHE: dict[tuple, str] = {}
+_CACHE_MAX = 5000
+
+
+def _cache_put(cache: dict, key, value) -> None:
+    if len(cache) >= _CACHE_MAX:
+        # Cheap eviction: drop a quarter of the entries (no ordering dependency).
+        for k in list(cache.keys())[: _CACHE_MAX // 4]:
+            cache.pop(k, None)
+    cache[key] = value
 
 
 def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -52,48 +70,78 @@ def _geocode_google(address: str, api_key: str | None = None) -> dict | None:
     return None
 
 
-def geocode(address: str, api_key: str | None = None, _depth: int = 0) -> dict | None:
-    """Convert address string to {lat, lon}.
-    Uses Google Maps if api_key or GOOGLE_MAPS_API_KEY is set, otherwise Nominatim with fallback.
-    """
-    if _depth > 3 or not address.strip():
+def _geocode_impl(address: str, api_key: str | None, depth: int) -> dict | None:
+    if depth > 3 or not address.strip():
         return None
 
-    # Try Google Maps first (much more accurate)
-    if _depth == 0:
-        result = _geocode_google(address, api_key)
-        if result:
-            return result
+    # Try Google Maps first (much more accurate). A Google error (429/5xx) must
+    # NOT abort the whole geocode — fall through to Nominatim instead.
+    if depth == 0:
+        try:
+            result = _geocode_google(address, api_key)
+            if result:
+                return result
+        except Exception as e:
+            logger.warning("Google geocode error, falling back to Nominatim: %s", e)
 
     # Nominatim fallback
-    resp = httpx.get(
-        NOMINATIM,
-        params={"q": address, "format": "json", "limit": 1},
-        headers=HEADERS,
-        timeout=10,
-    )
-    resp.raise_for_status()
-    results = resp.json()
+    try:
+        resp = httpx.get(
+            NOMINATIM,
+            params={"q": address, "format": "json", "limit": 1},
+            headers=HEADERS,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        results = resp.json()
+    except Exception as e:
+        logger.warning("Nominatim geocode error: %s", e)
+        results = None
+
     if results:
         return {"lat": float(results[0]["lat"]), "lon": float(results[0]["lon"])}
 
     # Strip first token and retry
     parts = address.split(", ", 1)
     if len(parts) > 1:
-        return geocode(parts[1], api_key, _depth + 1)
+        return _geocode_impl(parts[1], api_key, depth + 1)
     return None
 
 
+def geocode(address: str, api_key: str | None = None, _depth: int = 0) -> dict | None:
+    """Convert an address string to {lat, lon}. Uses Google Maps if a key is
+    available, otherwise Nominatim, with a stripped-address retry. Results are
+    cached since coordinates don't change."""
+    key = (address or "").strip().lower()
+    if not key:
+        return None
+    cached = _GEOCODE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    result = _geocode_impl(address, api_key, 0)
+    if result:
+        _cache_put(_GEOCODE_CACHE, key, result)
+    return result
+
+
 def reverse_geocode(lat: float, lon: float) -> str | None:
-    """Convert lat/lon to a short human-readable address."""
-    resp = httpx.get(
-        NOMINATIM_REVERSE,
-        params={"lat": lat, "lon": lon, "format": "json"},
-        headers=HEADERS,
-        timeout=10,
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    """Convert lat/lon to a short human-readable address (cached ~11m grid)."""
+    rkey = (round(lat, 4), round(lon, 4))
+    cached = _REVERSE_CACHE.get(rkey)
+    if cached is not None:
+        return cached
+    try:
+        resp = httpx.get(
+            NOMINATIM_REVERSE,
+            params={"lat": lat, "lon": lon, "format": "json"},
+            headers=HEADERS,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning("Reverse geocode error: %s", e)
+        return None
     addr = data.get("address", {})
     parts = [
         (addr.get("house_number", "") + " " + addr.get("road", "")).strip(),
@@ -102,7 +150,10 @@ def reverse_geocode(lat: float, lon: float) -> str | None:
         addr.get("postcode", ""),
         addr.get("country", ""),
     ]
-    return ", ".join(p for p in parts if p) or data.get("display_name")
+    result = ", ".join(p for p in parts if p) or data.get("display_name")
+    if result:
+        _cache_put(_REVERSE_CACHE, rkey, result)
+    return result
 
 
 def _get_route_google(origin: dict, destination: dict, api_key: str) -> dict | None:
@@ -166,25 +217,28 @@ def get_route_geometry(
     """
     Return the actual driving route geometry between two {lat, lon} points
     as a list of (lat, lon) tuples. Uses Google Directions if a key is
-    available, otherwise OSRM.
+    available, otherwise OSRM. A Google error falls back to OSRM.
     """
     key = _get_gmaps_key(api_key)
     if key:
-        resp = httpx.get(
-            "https://maps.googleapis.com/maps/api/directions/json",
-            params={
-                "origin": f"{origin['lat']},{origin['lon']}",
-                "destination": f"{destination['lat']},{destination['lon']}",
-                "mode": "driving",
-                "key": key,
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("status") == "OK" and data.get("routes"):
-            encoded = data["routes"][0]["overview_polyline"]["points"]
-            return decode_polyline(encoded)
+        try:
+            resp = httpx.get(
+                "https://maps.googleapis.com/maps/api/directions/json",
+                params={
+                    "origin": f"{origin['lat']},{origin['lon']}",
+                    "destination": f"{destination['lat']},{destination['lon']}",
+                    "mode": "driving",
+                    "key": key,
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("status") == "OK" and data.get("routes"):
+                encoded = data["routes"][0]["overview_polyline"]["points"]
+                return decode_polyline(encoded)
+        except Exception as e:
+            logger.warning("Google directions error, falling back to OSRM: %s", e)
 
     # OSRM fallback
     coords = f"{origin['lon']},{origin['lat']};{destination['lon']},{destination['lat']}"
@@ -206,13 +260,16 @@ def get_route(origin: dict, destination: dict, api_key: str | None = None) -> di
     """
     Calculate route between two {lat, lon} points.
     Uses Google Maps Distance Matrix if key available, otherwise OSRM.
-    Returns {duration_seconds, distance_meters}.
+    A Google error falls back to OSRM. Returns {duration_seconds, distance_meters}.
     """
     key = _get_gmaps_key(api_key)
     if key:
-        result = _get_route_google(origin, destination, key)
-        if result:
-            return result
+        try:
+            result = _get_route_google(origin, destination, key)
+            if result:
+                return result
+        except Exception as e:
+            logger.warning("Google route error, falling back to OSRM: %s", e)
 
     # OSRM fallback
     coords = f"{origin['lon']},{origin['lat']};{destination['lon']},{destination['lat']}"
@@ -270,7 +327,7 @@ def calculate_eta(origin: dict, destination: dict, buffer_hours: float = 0, api_
     buffer_sec = int(buffer_hours * 3600)
     total_sec = duration_sec + buffer_sec
 
-    eta_utc = datetime.utcnow() + timedelta(seconds=total_sec)
+    eta_utc = datetime.now(timezone.utc) + timedelta(seconds=total_sec)
     distance_miles = round(route["distance_meters"] / 1609.34, 1)
 
     return {

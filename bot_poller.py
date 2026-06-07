@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import telegram
 import database
-from database import get_dispatcher_by_token, link_group
+from database import link_group
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,25 @@ def _to_datetime(val) -> datetime | None:
 
 _offset = 0
 _stop_event = threading.Event()
+
+
+def _load_offset() -> None:
+    """Restore the Telegram update offset across restarts so a redeploy/crash
+    doesn't re-process (and double-apply) commands like /delivered or /arrived."""
+    global _offset
+    try:
+        val = database.get_global_setting("bot_offset")
+        if val:
+            _offset = int(val)
+    except Exception as e:
+        logger.warning("Could not load bot offset: %s", e)
+
+
+def _save_offset() -> None:
+    try:
+        database.set_global_setting("bot_offset", str(_offset))
+    except Exception as e:
+        logger.warning("Could not save bot offset: %s", e)
 
 
 # ── Status message helper ──────────────────────────────────────────────────────
@@ -147,132 +166,149 @@ def _process_updates(updates: list[dict]):
     global _offset
     for update in updates:
         _offset = update["update_id"] + 1
-        message = update.get("message") or update.get("my_chat_member")
-        if not message:
-            continue
-        text = (message.get("text") or "").strip()
-        chat = message.get("chat", {})
-        chat_id = chat.get("id")
+        # Isolate each update: one malformed message must not abort the batch.
+        try:
+            _handle_update(update)
+        except Exception as e:
+            logger.warning("Error handling update %s: %s", update.get("update_id"), e)
+    # Persist the acknowledged offset so a restart resumes where we left off.
+    _save_offset()
 
-        if not text.startswith("/"):
-            continue
 
-        # /link <token>
-        if text.startswith("/link"):
-            parts = text.split()
-            if len(parts) < 2:
-                _reply(message, "Usage: /link <dispatcher_token>")
-                continue
-            dispatcher_token = parts[1]
-            dispatcher = get_dispatcher_by_token(dispatcher_token)
-            if not dispatcher:
-                _reply(message, "Token not found. Register at /login and copy your token from the Groups page.")
-                continue
-            chat_title = chat.get("title") or chat.get("username") or str(chat_id)
-            try:
-                link_group(dispatcher["id"], chat_id, chat_title)
-                _reply(message, f"✅ Group '{chat_title}' linked to {dispatcher['name']}!")
-            except Exception as e:
-                logger.error("link_group error: %s", e)
-                _reply(message, "Something went wrong. Please try again.")
+def _handle_update(update: dict):
+    message = update.get("message") or update.get("my_chat_member")
+    if not message:
+        return
+    text = (message.get("text") or "").strip()
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
 
-        # /help
-        elif text.startswith("/help"):
-            _reply(message, (
-                "🚛 *SimpleTrucking Bot Commands*\n\n"
-                "/status — Send current location & status update\n"
-                "/eta — Show ETA for current stop\n"
-                "/arrived — Mark current stop as complete\n"
-                "/delivered — Mark load as delivered\n"
-                "/pickup — Mark upcoming load as dispatched\n"
-                "/help — Show this message"
-            ))
+    if not text.startswith("/"):
+        return
+    parts = text.split()
+    # Normalize: strip a trailing @botname and lowercase, then match exactly so
+    # "/deliveredxyz" no longer fires "/delivered" and "/status@MyBot" works.
+    cmd = parts[0].split("@", 1)[0].lower()
 
-        # /status
-        elif text.startswith("/status"):
-            load = database.get_active_load_by_chat_id(chat_id)
-            if not load:
-                _reply(message, "No active dispatched load found for this group.")
-                continue
-            if not load.get("driver_eld_id"):
-                _reply(message, "No ELD driver assigned to this load.")
-                continue
-            if not database.get_eld_configs(load["dispatcher_id"]):
-                _reply(message, "ELD not configured for your dispatcher.")
-                continue
-            msg = _build_status_message(load)
-            _reply(message, msg if msg else "Could not retrieve driver location.")
+    # /link <code> — single-use code, NOT the dispatcher's API token
+    if cmd == "/link":
+        if len(parts) < 2:
+            _reply(message, "Usage: /link <code>\n\nGet a code in the app: Settings → Telegram → Link a group.")
+            return
+        code = parts[1].strip()
+        # Old flow pasted the API token (UUID) into chat — refuse it.
+        if len(code) >= 32 and "-" in code:
+            _reply(message, "That looks like an old token. For your security, open the app → Settings → Telegram and use the short link code instead.")
+            return
+        dispatcher = database.consume_link_code(code)
+        if not dispatcher:
+            _reply(message, "Invalid or expired code. Generate a fresh one in the app (Settings → Telegram).")
+            return
+        chat_title = chat.get("title") or chat.get("username") or str(chat_id)
+        try:
+            link_group(dispatcher["id"], chat_id, chat_title)
+            _reply(message, f"✅ Group '{chat_title}' linked to {dispatcher['name']}!")
+        except Exception as e:
+            logger.error("link_group error: %s", e)
+            _reply(message, "Something went wrong. Please try again.")
 
-        # /eta
-        elif text.startswith("/eta"):
-            load = database.get_active_load_by_chat_id(chat_id)
-            if not load:
-                _reply(message, "No active dispatched load found for this group.")
-                continue
-            if not load.get("eta_utc"):
-                _reply(message, "No ETA calculated yet. Ask your dispatcher to refresh ETA.")
-                continue
-            try:
-                eta_dt = _to_datetime(load["eta_utc"])
-                local_str = eta_dt.strftime("%b %d %I:%M %p UTC")
-                mi = f" ({load['eta_miles']} mi)" if load.get("eta_miles") else ""
-                load_id_display = load.get("load_number") or load["id"]
-                _reply(message, f"📍 Load {load_id_display} ETA: {local_str}{mi}")
-            except Exception as e:
-                logger.warning("ETA reply error: %s", e)
-                _reply(message, f"ETA: {load['eta_utc']}")
+    # /help
+    elif cmd == "/help":
+        _reply(message, (
+            "🚛 *SimpleTrucking Bot Commands*\n\n"
+            "/status — Send current location & status update\n"
+            "/eta — Show ETA for current stop\n"
+            "/arrived — Mark current stop as complete\n"
+            "/delivered — Mark load as delivered\n"
+            "/pickup — Mark upcoming load as dispatched\n"
+            "/help — Show this message"
+        ))
 
-        # /arrived
-        elif text.startswith("/arrived"):
-            load = database.get_active_load_by_chat_id(chat_id)
-            if not load:
-                _reply(message, "No active dispatched load found for this group.")
-                continue
-            stops = _json.loads(load.get("stops_json") or "[]")
-            idx = load.get("current_stop_index", 0)
-            if not stops:
-                _reply(message, "No stops configured for this load.")
-                continue
-            if idx + 1 >= len(stops):
-                _reply(message, "✅ You're at the last stop! Use /delivered to complete the load.")
-                continue
-            new_idx = idx + 1
-            database.update_load_stop_index(load["id"], load["company_id"], new_idx)
-            next_stop = stops[new_idx]
-            next_city = f"{next_stop.get('city', '')}, {next_stop.get('state', '')}".strip(", ")
-            next_type = next_stop.get("type", "stop").capitalize()
+    # /status
+    elif cmd == "/status":
+        load = database.get_active_load_by_chat_id(chat_id)
+        if not load:
+            _reply(message, "No active dispatched load found for this group.")
+            return
+        if not load.get("driver_eld_id"):
+            _reply(message, "No ELD driver assigned to this load.")
+            return
+        if not database.get_eld_configs(load["dispatcher_id"]):
+            _reply(message, "ELD not configured for your dispatcher.")
+            return
+        msg = _build_status_message(load)
+        _reply(message, msg if msg else "Could not retrieve driver location.")
+
+    # /eta
+    elif cmd == "/eta":
+        load = database.get_active_load_by_chat_id(chat_id)
+        if not load:
+            _reply(message, "No active dispatched load found for this group.")
+            return
+        if not load.get("eta_utc"):
+            _reply(message, "No ETA calculated yet. Ask your dispatcher to refresh ETA.")
+            return
+        try:
+            eta_dt = _to_datetime(load["eta_utc"])
+            local_str = eta_dt.strftime("%b %d %I:%M %p UTC")
+            mi = f" ({load['eta_miles']} mi)" if load.get("eta_miles") else ""
             load_id_display = load.get("load_number") or load["id"]
-            msg = (
-                f"✅ Arrived at stop {idx + 1}/{len(stops)}\n\n"
-                f"Load {load_id_display}: Moved to next {next_type}\n"
-                f"📍 {next_city or next_stop.get('address', '—')}"
-            )
-            if new_idx + 1 >= len(stops):
-                msg += "\n\n⚠️ This is the last stop — use /delivered when complete."
-            _reply(message, msg)
+            _reply(message, f"📍 Load {load_id_display} ETA: {local_str}{mi}")
+        except Exception as e:
+            logger.warning("ETA reply error: %s", e)
+            _reply(message, f"ETA: {load['eta_utc']}")
 
-        # /delivered
-        elif text.startswith("/delivered"):
-            load = database.get_active_load_by_chat_id(chat_id)
-            if not load:
-                _reply(message, "No active dispatched load found for this group.")
-                continue
-            database.update_load_status(load["id"], load["company_id"], "delivered")
-            load_id_display = load.get("load_number") or load["id"]
-            _reply(message, f"✅ Load {load_id_display} marked as *delivered*! Great job! 🎉")
+    # /arrived
+    elif cmd == "/arrived":
+        load = database.get_active_load_by_chat_id(chat_id)
+        if not load:
+            _reply(message, "No active dispatched load found for this group.")
+            return
+        stops = _json.loads(load.get("stops_json") or "[]")
+        idx = load.get("current_stop_index", 0)
+        if not stops:
+            _reply(message, "No stops configured for this load.")
+            return
+        if idx + 1 >= len(stops):
+            _reply(message, "✅ You're at the last stop! Use /delivered to complete the load.")
+            return
+        new_idx = idx + 1
+        database.update_load_stop_index(load["id"], load["company_id"], new_idx)
+        next_stop = stops[new_idx]
+        next_city = f"{next_stop.get('city', '')}, {next_stop.get('state', '')}".strip(", ")
+        next_type = next_stop.get("type", "stop").capitalize()
+        load_id_display = load.get("load_number") or load["id"]
+        msg = (
+            f"✅ Arrived at stop {idx + 1}/{len(stops)}\n\n"
+            f"Load {load_id_display}: Moved to next {next_type}\n"
+            f"📍 {next_city or next_stop.get('address', '—')}"
+        )
+        if new_idx + 1 >= len(stops):
+            msg += "\n\n⚠️ This is the last stop — use /delivered when complete."
+        _reply(message, msg)
 
-        # /pickup
-        elif text.startswith("/pickup"):
-            load = database.get_upcoming_load_by_chat_id(chat_id)
-            if not load:
-                _reply(message, "No upcoming load found for this group.")
-                continue
-            stops = _json.loads(load.get("stops_json") or "[]")
-            first_delivery = next((i for i, s in enumerate(stops) if s.get("type") == "delivery"), None)
-            new_idx = first_delivery if first_delivery is not None else 0
-            database.update_load_status(load["id"], load["company_id"], "dispatched", new_idx)
-            load_id_display = load.get("load_number") or load["id"]
-            _reply(message, f"🚛 Load {load_id_display} marked as *dispatched*! Safe travels!")
+    # /delivered
+    elif cmd == "/delivered":
+        load = database.get_active_load_by_chat_id(chat_id)
+        if not load:
+            _reply(message, "No active dispatched load found for this group.")
+            return
+        database.update_load_status(load["id"], load["company_id"], "delivered")
+        load_id_display = load.get("load_number") or load["id"]
+        _reply(message, f"✅ Load {load_id_display} marked as *delivered*! Great job! 🎉")
+
+    # /pickup
+    elif cmd == "/pickup":
+        load = database.get_upcoming_load_by_chat_id(chat_id)
+        if not load:
+            _reply(message, "No upcoming load found for this group.")
+            return
+        stops = _json.loads(load.get("stops_json") or "[]")
+        first_delivery = next((i for i, s in enumerate(stops) if s.get("type") == "delivery"), None)
+        new_idx = first_delivery if first_delivery is not None else 0
+        database.update_load_status(load["id"], load["company_id"], "dispatched", new_idx)
+        load_id_display = load.get("load_number") or load["id"]
+        _reply(message, f"🚛 Load {load_id_display} marked as *dispatched*! Safe travels!")
 
 
 def _reply(message: dict, text: str):
@@ -298,7 +334,7 @@ def _poll_loop():
                 _process_updates(updates)
         except Exception as e:
             logger.warning("Polling error: %s", e)
-        time.sleep(3)
+            time.sleep(3)  # back off only on error; long-poll already blocks
 
 
 
@@ -352,9 +388,10 @@ def _auto_send_loop():
 
 def start():
     _stop_event.clear()
+    _load_offset()
     threading.Thread(target=_poll_loop, daemon=True, name="bot-poller").start()
     threading.Thread(target=_auto_send_loop, daemon=True, name="auto-send").start()
-    logger.info("Bot poller started (with auto-send)")
+    logger.info("Bot poller started (with auto-send), offset=%s", _offset)
 
 
 def stop():

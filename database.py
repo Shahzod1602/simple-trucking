@@ -404,6 +404,31 @@ def init_db():
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_mailbox_company_received ON mailbox_messages(company_id, received_at DESC)")
 
+        # ── Email accounts: Relay-connected Gmail/Outlook mailboxes per company ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_accounts (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                relay_account_id TEXT NOT NULL UNIQUE,
+                provider TEXT NOT NULL,
+                email TEXT NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                last_polled_at TIMESTAMP,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_email_accounts_company ON email_accounts(company_id)")
+
+        # Extend mailbox_messages for real inbound email (Relay) + threaded reply.
+        conn.execute("ALTER TABLE mailbox_messages ADD COLUMN IF NOT EXISTS account_id INTEGER REFERENCES email_accounts(id) ON DELETE SET NULL")
+        conn.execute("ALTER TABLE mailbox_messages ADD COLUMN IF NOT EXISTS external_id TEXT")
+        conn.execute("ALTER TABLE mailbox_messages ADD COLUMN IF NOT EXISTS thread_id TEXT")
+        conn.execute("ALTER TABLE mailbox_messages ADD COLUMN IF NOT EXISTS rfc_message_id TEXT")
+        conn.execute("ALTER TABLE mailbox_messages ADD COLUMN IF NOT EXISTS to_addr TEXT")
+        conn.execute("ALTER TABLE mailbox_messages ADD COLUMN IF NOT EXISTS attachments_json TEXT")
+        # Dedup inbound email by provider message id (partial unique — manual rows have NULL).
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_mailbox_ext ON mailbox_messages(company_id, external_id) WHERE external_id IS NOT NULL")
+
         # Migrate kpi_entries: drop old unique constraint if exists (schema changed)
         try:
             conn.execute("ALTER TABLE kpi_entries DROP CONSTRAINT IF EXISTS kpi_entries_company_id_dispatcher_id_week_start_key")
@@ -1700,8 +1725,8 @@ _ENTITY_COLUMNS = {
     "work_orders": ["wo_number", "title", "equipment_type", "equipment_ref", "trailer_id",
                     "vendor_id", "opened_at", "closed_at", "cost", "status", "priority",
                     "description"],
-    "mailbox_messages": ["dispatcher_id", "source", "from_addr", "subject", "body",
-                         "load_id", "is_read", "attachment_path", "received_at"],
+    "mailbox_messages": ["dispatcher_id", "source", "from_addr", "to_addr", "subject",
+                         "body", "load_id", "is_read", "attachment_path", "received_at"],
 }
 
 
@@ -1776,6 +1801,114 @@ def delete_entity(table: str, entity_id: int, company_id: int) -> bool:
             (entity_id, company_id),
         )
         return conn.rowcount > 0
+
+
+# ── Email accounts (Relay) + inbound email ────────────────────────────────────
+
+def create_email_account(company_id: int, relay_account_id: str, provider: str, email: str) -> dict:
+    """Link a Relay-connected mailbox to a company (idempotent on relay_account_id)."""
+    now = datetime.now(timezone.utc)
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO email_accounts (company_id, relay_account_id, provider, email, is_active, created_at)
+               VALUES (%s, %s, %s, %s, TRUE, %s)
+               ON CONFLICT (relay_account_id) DO UPDATE
+                 SET company_id = EXCLUDED.company_id, provider = EXCLUDED.provider,
+                     email = EXCLUDED.email, is_active = TRUE
+               RETURNING *""",
+            (company_id, relay_account_id, provider, email, now),
+        )
+        return dict(conn.fetchone())
+
+
+def list_email_accounts(company_id: int) -> list[dict]:
+    with get_conn() as conn:
+        conn.execute(
+            "SELECT * FROM email_accounts WHERE company_id = %s ORDER BY id DESC",
+            (company_id,),
+        )
+        return [dict(r) for r in conn.fetchall()]
+
+
+def list_all_active_email_accounts() -> list[dict]:
+    """Every active connected mailbox across all companies (for the poller)."""
+    with get_conn() as conn:
+        conn.execute("SELECT * FROM email_accounts WHERE is_active = TRUE ORDER BY id")
+        return [dict(r) for r in conn.fetchall()]
+
+
+def get_email_account(account_id: int, company_id: int | None = None) -> dict | None:
+    with get_conn() as conn:
+        if company_id is None:
+            conn.execute("SELECT * FROM email_accounts WHERE id = %s", (account_id,))
+        else:
+            conn.execute(
+                "SELECT * FROM email_accounts WHERE id = %s AND company_id = %s",
+                (account_id, company_id),
+            )
+        row = conn.fetchone()
+        return dict(row) if row else None
+
+
+def update_email_account_polled(account_id: int) -> None:
+    now = datetime.now(timezone.utc)
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE email_accounts SET last_polled_at = %s WHERE id = %s",
+            (now, account_id),
+        )
+
+
+def delete_email_account(account_id: int, company_id: int) -> dict | None:
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM email_accounts WHERE id = %s AND company_id = %s RETURNING *",
+            (account_id, company_id),
+        )
+        row = conn.fetchone()
+        return dict(row) if row else None
+
+
+def insert_inbound_email(
+    company_id: int,
+    account_id: int,
+    *,
+    external_id: str,
+    from_addr: str | None,
+    to_addr: str | None,
+    subject: str | None,
+    body: str | None,
+    thread_id: str | None,
+    rfc_message_id: str | None,
+    attachments_json: str | None,
+    received_at,
+) -> bool:
+    """Store an inbound email. Returns False if already stored (dedup by external_id)."""
+    now = datetime.now(timezone.utc)
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO mailbox_messages
+                 (company_id, account_id, source, from_addr, to_addr, subject, body,
+                  thread_id, rfc_message_id, external_id, attachments_json, is_read,
+                  received_at, created_at)
+               VALUES (%s, %s, 'email', %s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, %s)
+               ON CONFLICT (company_id, external_id) WHERE external_id IS NOT NULL
+                 DO NOTHING
+               RETURNING id""",
+            (company_id, account_id, from_addr, to_addr, subject, body,
+             thread_id, rfc_message_id, external_id, attachments_json, received_at, now),
+        )
+        return conn.fetchone() is not None
+
+
+def mailbox_external_exists(company_id: int, external_id: str) -> bool:
+    """Cheap dedup check so the poller skips already-stored messages."""
+    with get_conn() as conn:
+        conn.execute(
+            "SELECT 1 FROM mailbox_messages WHERE company_id = %s AND external_id = %s LIMIT 1",
+            (company_id, external_id),
+        )
+        return conn.fetchone() is not None
 
 
 # ── Dashboard summary ─────────────────────────────────────────────────────────

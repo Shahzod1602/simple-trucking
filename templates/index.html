@@ -6,7 +6,7 @@
   <title>SimpleTrucking</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -598,7 +598,7 @@
     #tg-group-list, #tgm-dialogs { flex: 1; overflow-y: auto; padding: 4px 0; }
     .tg-group-item { display: flex; align-items: center; gap: 11px; padding: 8px 13px; cursor: pointer; transition: background 0.12s; }
     .tg-group-item:hover  { background: var(--card-inner); }
-    .tg-group-item.active { background: var(--primary); }
+    .tg-group-item.active { background: #3390ec; }
     .tg-group-item.active .tg-group-name, .tg-group-item.active .tg-sub, .tg-group-item.active .tg-when { color: #fff !important; opacity: 1; }
     .tg-avatar { width: 48px; height: 48px; border-radius: 50%; background: #5b9bd5; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.1rem; flex-shrink: 0; }
     .tg-item-body { flex: 1; min-width: 0; }
@@ -606,7 +606,7 @@
     .tg-group-name { font-size: 0.92rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tg-when { font-size: 0.68rem; color: var(--text-muted); flex-shrink: 0; }
     .tg-sub { font-size: 0.8rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .tg-unread { background: var(--primary); color: #fff; border-radius: 11px; min-width: 19px; height: 19px; padding: 0 6px; font-size: 0.7rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .tg-unread { background: #3390ec; color: #fff; border-radius: 11px; min-width: 19px; height: 19px; padding: 0 6px; font-size: 0.7rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
     /* ── Telegram-like: chat area ── */
     #tg-chat-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -615,29 +615,38 @@
     #tg-chat-header { padding: 8px 16px; font-weight: 600; font-size: 0.95rem; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; align-items: center; gap: 11px; background: var(--card); }
     #tg-avatar-big, #tgm-avatar-big { width: 40px; height: 40px; border-radius: 50%; background: #5b9bd5; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.95rem; flex-shrink: 0; }
     #tg-messages, #tgm-messages {
-      flex: 1; overflow-y: auto; padding: 16px 7%; display: flex; flex-direction: column; gap: 3px;
-      background-color: #cdd6e0;
-      background-image: radial-gradient(rgba(255,255,255,0.22) 1.5px, transparent 1.6px), radial-gradient(rgba(255,255,255,0.14) 1.5px, transparent 1.6px);
-      background-size: 38px 38px, 38px 38px; background-position: 0 0, 19px 19px;
+      flex: 1; overflow-y: auto; padding: 14px 6%; display: flex; flex-direction: column; gap: 2px;
+      background-color: #93b29f;
+      background-image: url("/static/tg-bg-pattern.svg"), linear-gradient(165deg, #c8d6a6 0%, #8eb591 36%, #79a89f 68%, #97c08a 100%);
+      background-repeat: repeat, no-repeat;
+      background-size: 360px auto, cover;
     }
     [data-theme="dark"] #tg-messages, [data-theme="dark"] #tgm-messages {
       background-color: #0e1621;
-      background-image: radial-gradient(rgba(255,255,255,0.05) 1.5px, transparent 1.6px), radial-gradient(rgba(255,255,255,0.03) 1.5px, transparent 1.6px);
+      background-image: url("/static/tg-bg-pattern.svg"), linear-gradient(#0e1621, #0e1621);
+      background-size: 360px auto, cover;
     }
-    .tg-msg { max-width: 68%; padding: 6px 9px 6px 11px; border-radius: 12px; font-size: 0.9rem; line-height: 1.38; word-break: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.09); }
-    .tg-msg-in  { align-self: flex-start; background: #fff;     color: #0e1621; border-bottom-left-radius: 4px; }
-    .tg-msg-out { align-self: flex-end;   background: #effdde;  color: #0e1621; border-bottom-right-radius: 4px; }
-    [data-theme="dark"] .tg-msg-in  { background: #182533; color: #e9eef5; }
-    [data-theme="dark"] .tg-msg-out { background: #2b5278; color: #fff; }
-    .tg-msg-meta { font-size: 0.72rem; font-weight: 600; color: var(--primary); margin-bottom: 2px; }
-    .tg-time { font-size: 0.62rem; opacity: 0.5; float: right; margin: 8px 0 -2px 9px; }
+    .tg-msg { max-width: 70%; padding: 5px 10px 6px; font-size: 0.92rem; line-height: 1.4; word-break: break-word; position: relative; box-shadow: 0 1px 1px rgba(0,0,0,0.14); --tg-bub: #fff; }
+    .tg-msg-in  { align-self: flex-start; background: var(--tg-bub); color: #0e1621; border-radius: 9px 9px 9px 0; }
+    .tg-msg-out { align-self: flex-end; --tg-bub: #effdde; background: var(--tg-bub); color: #0e1621; border-radius: 9px 9px 0 9px; }
+    [data-theme="dark"] .tg-msg-in  { --tg-bub: #182533; color: #e9eef5; }
+    [data-theme="dark"] .tg-msg-out { --tg-bub: #2b5278; color: #fff; }
+    /* Telegram bubble tails (curved corner) */
+    .tg-msg-in::after  { content: ''; position: absolute; bottom: 0; left: -7px; width: 12px; height: 15px; background: var(--tg-bub); clip-path: polygon(100% 0, 100% 100%, 0 100%); border-bottom-left-radius: 13px; }
+    .tg-msg-out::after { content: ''; position: absolute; bottom: 0; right: -7px; width: 12px; height: 15px; background: var(--tg-bub); clip-path: polygon(0 0, 100% 100%, 0 100%); border-bottom-right-radius: 13px; }
+    .tg-msg-meta { font-size: 0.8rem; font-weight: 500; color: #3390ec; margin-bottom: 1px; }
+    .tg-time { font-size: 0.65rem; color: rgba(0,0,0,0.4); float: right; margin: 6px -3px -2px 9px; user-select: none; }
+    [data-theme="dark"] .tg-time { color: rgba(255,255,255,0.45); }
+    .tg-check { color: #5cc15a; margin-left: 3px; letter-spacing: -2px; }
+    [data-theme="dark"] .tg-msg-out .tg-time { color: rgba(255,255,255,0.6); }
 
     /* ── Telegram-like: input ── */
+    #page-telegram, #page-telegram .tg-msg, #page-telegram #tg-msg-input, #page-telegram #tgm-input { font-family: 'Roboto', 'IBM Plex Sans', -apple-system, sans-serif; }
     #tg-input-row { display: flex; align-items: flex-end; gap: 9px; padding: 8px 14px; border-top: 1px solid var(--border); background: var(--card); }
-    #tg-msg-input, #tgm-input { flex: 1; resize: none; min-height: 42px; max-height: 120px; padding: 11px 15px; border-radius: 20px; border: 1px solid var(--border); background: var(--card-inner); color: var(--text); font-family: 'IBM Plex Sans', sans-serif; font-size: 0.9rem; outline: none; transition: border-color 0.15s; line-height: 1.4; }
-    #tg-msg-input:focus, #tgm-input:focus { border-color: var(--primary); }
-    #tg-send-btn, #tgm-send { width: 42px; height: 42px; border-radius: 50%; border: none; background: var(--primary); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; font-size: 1.1rem; }
-    #tg-send-btn:hover:not(:disabled), #tgm-send:hover:not(:disabled) { background: var(--primary-hover); }
+    #tg-msg-input, #tgm-input { flex: 1; resize: none; min-height: 42px; max-height: 120px; padding: 11px 15px; border-radius: 20px; border: 1px solid var(--border); background: var(--card-inner); color: var(--text); font-family: 'Roboto', 'IBM Plex Sans', sans-serif; font-size: 0.95rem; outline: none; transition: border-color 0.15s; line-height: 1.4; }
+    #tg-msg-input:focus, #tgm-input:focus { border-color: #3390ec; }
+    #tg-send-btn, #tgm-send { width: 42px; height: 42px; border-radius: 50%; border: none; background: #3390ec; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; font-size: 1.1rem; }
+    #tg-send-btn:hover:not(:disabled), #tgm-send:hover:not(:disabled) { background: #2b82d9; }
     #tg-send-btn:disabled, #tgm-send:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* ── Loads table ── */
@@ -6539,7 +6548,7 @@ Rate: {{total_rate_usd}}
         const msgs = document.getElementById('tg-messages');
         const div = document.createElement('div');
         div.className = 'tg-msg tg-msg-out';
-        div.innerHTML = `${esc(msg)}<span class="tg-time">${esc(tgTime(new Date().toISOString()))}</span>`;
+        div.innerHTML = `${esc(msg)}<span class="tg-time">${esc(tgTime(new Date().toISOString()))}<span class="tg-check">✓✓</span></span>`;
         msgs.appendChild(div);
         msgs.scrollTop = msgs.scrollHeight;
         input.value = '';
@@ -6765,7 +6774,7 @@ Rate: {{total_rate_usd}}
       const box = document.getElementById('tgm-messages');
       if (!box) return;
       const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-      box.innerHTML = msgs.map(m => `<div class="tg-msg ${m.out ? 'tg-msg-out' : 'tg-msg-in'}">${(!m.out && m.sender) ? `<div class="tg-msg-meta">${esc(m.sender)}</div>` : ''}${esc(m.text || '')}<span class="tg-time">${esc(tgTime(m.date))}</span></div>`).join('')
+      box.innerHTML = msgs.map(m => `<div class="tg-msg ${m.out ? 'tg-msg-out' : 'tg-msg-in'}">${(!m.out && m.sender) ? `<div class="tg-msg-meta">${esc(m.sender)}</div>` : ''}${esc(m.text || '')}<span class="tg-time">${esc(tgTime(m.date))}${m.out ? '<span class="tg-check">✓✓</span>' : ''}</span></div>`).join('')
         || '<div style="color:var(--text-muted);font-size:0.82rem;margin:auto;">No messages</div>';
       if (atBottom) box.scrollTop = box.scrollHeight;
     }

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" viewBox="0 0 500 500">
+  <g fill="#ffffff" opacity="0.10">
+    <!-- paper plane -->
+    <path transform="translate(36,44) rotate(-15) scale(1.7)" d="M2 21l21-9L2 3v7l15 2-15 2z"/>
+    <!-- heart -->
+    <path transform="translate(178,36) rotate(12) scale(1.6)" d="M12 21.3l-1.45-1.32C5.4 15.3 2 12.2 2 8.5 2 5.4 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.4 22 8.5c0 3.7-3.4 6.8-8.55 11.48z"/>
+    <!-- star -->
+    <path transform="translate(322,58) scale(1.7)" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>
+    <!-- chat bubble -->
+    <path transform="translate(436,40) rotate(8) scale(1.7)" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
+    <!-- music note -->
+    <path transform="translate(244,168) rotate(-8) scale(1.7)" d="M12 3v10.6A4 4 0 1 0 14 17V7l6-1.2V3z"/>
+    <!-- bolt -->
+    <path transform="translate(384,190) rotate(14) scale(1.7)" d="M13 2L3 14h7v8l10-12h-7z"/>
+    <!-- star -->
+    <path transform="translate(44,300) rotate(18) scale(1.5)" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>
+    <!-- heart -->
+    <path transform="translate(206,312) rotate(-12) scale(1.7)" d="M12 21.3l-1.45-1.32C5.4 15.3 2 12.2 2 8.5 2 5.4 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.4 22 8.5c0 3.7-3.4 6.8-8.55 11.48z"/>
+    <!-- paper plane -->
+    <path transform="translate(340,332) rotate(168) scale(1.6)" d="M2 21l21-9L2 3v7l15 2-15 2z"/>
+    <!-- chat bubble -->
+    <path transform="translate(120,420) rotate(-6) scale(1.6)" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
+    <!-- music note -->
+    <path transform="translate(452,398) rotate(12) scale(1.6)" d="M12 3v10.6A4 4 0 1 0 14 17V7l6-1.2V3z"/>
+    <!-- bolt -->
+    <path transform="translate(252,452) rotate(-10) scale(1.5)" d="M13 2L3 14h7v8l10-12h-7z"/>
+  </g>
+  <g fill="none" stroke="#ffffff" stroke-width="2" opacity="0.10">
+    <!-- smiley -->
+    <g transform="translate(78,170) scale(1.7)">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M8 14s1.5 2 4 2 4-2 4-2" stroke-linecap="round"/>
+      <circle cx="9" cy="9.5" r="0.6" fill="#fff" stroke="none"/>
+      <circle cx="15" cy="9.5" r="0.6" fill="#fff" stroke="none"/>
+    </g>
+    <!-- smiley -->
+    <g transform="translate(300,438) scale(1.6)">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M8 14s1.5 2 4 2 4-2 4-2" stroke-linecap="round"/>
+      <circle cx="9" cy="9.5" r="0.6" fill="#fff" stroke="none"/>
+      <circle cx="15" cy="9.5" r="0.6" fill="#fff" stroke="none"/>
+    </g>
+  </g>
+</svg>

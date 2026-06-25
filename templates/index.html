@@ -126,7 +126,16 @@
       font-size: 0.66rem; font-weight: 700; color: var(--sidebar-text);
       letter-spacing: 1.5px; text-transform: uppercase;
       padding: 10px 9px 4px; margin-top: 4px;
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none;
     }
+    .nav-label::after {
+      content: ''; width: 5px; height: 5px; margin-right: 3px;
+      border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg); transition: transform 0.15s; opacity: 0.5;
+    }
+    .nav-label.collapsed::after { transform: rotate(-45deg); }
+    .nav-item.nav-collapsed-hide { display: none; }
     .nav-item {
       display: flex; align-items: center; gap: 9px;
       padding: 8px 9px; border-radius: 6px; border: none;
@@ -485,6 +494,14 @@
     .settings-title.open { margin-bottom: 14px; }
     .settings-body { display: none; }
     .settings-body.open { display: block; }
+    .pwd-wrap { position: relative; }
+    .pwd-wrap input { padding-right: 40px; }
+    .pwd-toggle {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; font-size: 0.95rem;
+      opacity: 0.55; padding: 4px 6px; line-height: 1;
+    }
+    .pwd-toggle:hover { opacity: 0.9; }
     .tpl-inner-tab.active { color: var(--primary) !important; border-bottom-color: var(--primary) !important; }
     .field { margin-bottom: 13px; }
     .field-err { color: #ef4444; font-size: 0.72rem; margin-top: 3px; min-height: 0; }
@@ -1116,9 +1133,9 @@
           <div class="settings-body">
             <div class="err-banner" id="pw-err"></div>
             <div class="ok-banner" id="pw-ok">Password changed successfully!</div>
-            <div class="field"><label>Current Password</label><input type="password" id="pw-current" placeholder="••••••••" /></div>
-            <div class="field"><label>New Password</label><input type="password" id="pw-new" placeholder="At least 6 characters" /></div>
-            <div class="field"><label>Confirm New Password</label><input type="password" id="pw-confirm" placeholder="Repeat new password" /></div>
+            <div class="field"><label>Current Password</label><div class="pwd-wrap"><input type="password" id="pw-current" placeholder="••••••••" /><button type="button" class="pwd-toggle" data-target="pw-current" aria-label="Show password">👁</button></div></div>
+            <div class="field"><label>New Password</label><div class="pwd-wrap"><input type="password" id="pw-new" placeholder="At least 6 characters" /><button type="button" class="pwd-toggle" data-target="pw-new" aria-label="Show password">👁</button></div></div>
+            <div class="field"><label>Confirm New Password</label><div class="pwd-wrap"><input type="password" id="pw-confirm" placeholder="Repeat new password" /><button type="button" class="pwd-toggle" data-target="pw-confirm" aria-label="Show password">👁</button></div></div>
             <button class="btn-blue" id="pw-save-btn" style="margin-top:4px;">Update Password</button>
           </div>
         </div>
@@ -1634,6 +1651,17 @@
     </div>
   </div>
 
+  <!-- Confirm modal (replaces native confirm()) -->
+  <div class="overlay" id="confirm-modal" style="display:none;">
+    <div class="modal" style="max-width:420px;" role="dialog" aria-modal="true">
+      <div id="confirm-modal-msg" style="font-size:0.9rem;line-height:1.5;margin-bottom:18px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn-outline" id="confirm-modal-cancel">Cancel</button>
+        <button class="btn-blue" id="confirm-modal-ok">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Send Modal -->
   <div class="overlay" id="send-modal">
     <div class="modal">
@@ -1949,6 +1977,63 @@ Rate: {{total_rate_usd}}
       setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 3200);
     }
 
+    // ── Branded confirm (drop-in async replacement for window.confirm) ──────
+    function confirmModal(message, opts = {}) {
+      return new Promise(resolve => {
+        const ov = document.getElementById('confirm-modal');
+        document.getElementById('confirm-modal-msg').textContent = message;
+        const okBtn = document.getElementById('confirm-modal-ok');
+        const cancelBtn = document.getElementById('confirm-modal-cancel');
+        okBtn.textContent = opts.confirmText || 'Confirm';
+        ov.style.display = 'flex';
+        const cleanup = (val) => {
+          ov.style.display = 'none';
+          okBtn.onclick = null; cancelBtn.onclick = null; ov.onclick = null;
+          document.removeEventListener('keydown', onKey);
+          resolve(val);
+        };
+        const onKey = (e) => {
+          if (e.key === 'Escape') cleanup(false);
+          else if (e.key === 'Enter') cleanup(true);
+        };
+        okBtn.onclick = () => cleanup(true);
+        cancelBtn.onclick = () => cleanup(false);
+        ov.onclick = (e) => { if (e.target === ov) cleanup(false); };
+        document.addEventListener('keydown', onKey);
+        okBtn.focus();
+      });
+    }
+
+    // ── Session expiry: any /api 401 (while logged in) means the token died ──
+    (function () {
+      const _fetch = window.fetch;
+      let _expired = false;
+      window.fetch = async function (input, init) {
+        const res = await _fetch(input, init);
+        try {
+          const url = typeof input === 'string' ? input : (input && input.url) || '';
+          if (res.status === 401 && url.includes('/api/') && token && !_expired) {
+            _expired = true;
+            token = null; localStorage.removeItem(TOKEN_KEY);
+            toast('Session expired — please sign in again', 'error');
+            setTimeout(() => { window.location.href = '/login'; }, 1200);
+          }
+        } catch {}
+        return res;
+      };
+    })();
+
+    // ── Show / hide password (delegated for all .pwd-toggle) ──────────────
+    document.addEventListener('click', e => {
+      const t = e.target.closest('.pwd-toggle');
+      if (!t) return;
+      const inp = document.getElementById(t.dataset.target);
+      if (!inp) return;
+      const show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      t.textContent = show ? '🙈' : '👁';
+    });
+
     // ── Theme ─────────────────────────────────────────────────────────────
     let isDark = localStorage.getItem('st_theme') !== 'light';
     function applyTheme() {
@@ -2053,13 +2138,47 @@ Rate: {{total_rate_usd}}
       if (page === 'trucks')    loadTrucksPage();
       if (page === 'telegram')  loadTgGroups();
       if (page === 'kpi')       loadKpiPage();
-      if (page === 'mailbox')   loadMailbox();
+      // Auto-refresh the mailbox only while it's the active page.
+      if (_mailboxPollTimer) { clearInterval(_mailboxPollTimer); _mailboxPollTimer = null; }
+      if (page === 'mailbox') {
+        loadMailbox();
+        _mailboxPollTimer = setInterval(loadMailbox, 60000);
+      }
       // Generic entity pages
       if (['customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions'].includes(page)) {
         loadEntityPage(page);
       }
     }
+    let _mailboxPollTimer = null;
     document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => goTo(b.dataset.page)));
+
+    // ── Collapsible sidebar groups (state persisted) ───────────────────────
+    function initNavGroups() {
+      let collapsed;
+      try { collapsed = new Set(JSON.parse(localStorage.getItem('st_nav_collapsed') || '[]')); }
+      catch { collapsed = new Set(); }
+      document.querySelectorAll('.sidebar-nav .nav-label').forEach(label => {
+        const key = label.textContent.trim();
+        const items = [];
+        let n = label.nextElementSibling;
+        while (n && !n.classList.contains('nav-label')) {
+          if (n.classList.contains('nav-item')) items.push(n);
+          n = n.nextElementSibling;
+        }
+        const apply = (isCollapsed) => {
+          label.classList.toggle('collapsed', isCollapsed);
+          items.forEach(it => it.classList.toggle('nav-collapsed-hide', isCollapsed));
+        };
+        apply(collapsed.has(key));
+        label.addEventListener('click', () => {
+          const nowCollapsed = !label.classList.contains('collapsed');
+          apply(nowCollapsed);
+          if (nowCollapsed) collapsed.add(key); else collapsed.delete(key);
+          localStorage.setItem('st_nav_collapsed', JSON.stringify([...collapsed]));
+        });
+      });
+    }
+    initNavGroups();
     function closeSidebar() {
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('sb-overlay').classList.remove('open');
@@ -2244,7 +2363,7 @@ Rate: {{total_rate_usd}}
       toast('Template saved', 'success');
     });
     document.getElementById('reset-tpl').addEventListener('click', async () => {
-      if (!confirm('Reset template to default?')) return;
+      if (!await confirmModal('Reset template to default?')) return;
       currentTpl = DEFAULT_TPL;
       document.getElementById('tpl-ta').value = DEFAULT_TPL;
       const rcEd = document.getElementById('rc-tpl-editor');
@@ -2713,7 +2832,7 @@ Rate: {{total_rate_usd}}
     }
 
     async function doDelete(g, card) {
-      if (!confirm(`Remove group "${g.name}"?`)) return;
+      if (!await confirmModal(`Remove group "${g.name}"?`)) return;
       try {
         const r = await fetch(`/api/groups/${g.id}`, { method:'DELETE', headers:authH() });
         if (!r.ok) throw new Error();
@@ -2755,8 +2874,8 @@ Rate: {{total_rate_usd}}
     }
 
     document.getElementById('hist-search').addEventListener('input', e => renderHistory(e.target.value));
-    document.getElementById('clear-hist').addEventListener('click', () => {
-      if (!confirm('Clear all history?')) return;
+    document.getElementById('clear-hist').addEventListener('click', async () => {
+      if (!await confirmModal('Clear all history?')) return;
       localStorage.removeItem(HIST_KEY); renderHistory(); toast('History cleared');
     });
 
@@ -2874,7 +2993,7 @@ Rate: {{total_rate_usd}}
     }
 
     async function disconnectEmail(id) {
-      if (!confirm('Disconnect this mailbox?')) return;
+      if (!await confirmModal('Disconnect this mailbox?')) return;
       try {
         const r = await fetch('/api/email/' + id + '/disconnect', { method: 'POST', headers: authH() });
         if (!r.ok) throw new Error();
@@ -2909,19 +3028,43 @@ Rate: {{total_rate_usd}}
         return;
       }
       el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading…</div>';
+      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
       try {
-        const d = await fetch('/api/entities/mailbox', { headers: authH() }).then(r => r.json());
+        const [d, accData] = await Promise.all([
+          fetch('/api/entities/mailbox', { headers: authH() }).then(r => r.json()),
+          fetch('/api/email/accounts', { headers: authH() }).then(r => r.json()).catch(() => ({ accounts: [] })),
+        ]);
         const items = d.items || [];
+        const hasAccount = (accData.accounts || []).length > 0;
         _mailboxItems = {};
         items.forEach(it => { _mailboxItems[it.id] = it; });
         refreshUnreadBadge();
         if (!items.length) {
+          let cta;
+          if (isAdmin && !hasAccount) {
+            cta = `<div style="font-size:0.83rem;color:var(--text-muted);margin-bottom:14px;">Connect a mailbox to receive broker emails here automatically.</div>
+              <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+                <button class="btn-blue" onclick="connectEmail('gmail')">Connect Gmail</button>
+                <button class="btn-outline" onclick="connectEmail('outlook')">Connect Outlook</button>
+              </div>`;
+          } else if (isAdmin) {
+            cta = '<div style="font-size:0.83rem;color:var(--text-muted);">No messages yet — broker emails will appear here automatically.</div>';
+          } else {
+            cta = '<div style="font-size:0.83rem;color:var(--text-muted);">No messages yet. Ask your admin to connect a mailbox.</div>';
+          }
           el.innerHTML = `<div class="card" style="padding:48px;text-align:center;">
             <div style="font-size:2.5rem;margin-bottom:12px;opacity:0.4;">📭</div>
-            <div style="font-weight:600;margin-bottom:6px;">No messages yet</div>
-            <div style="font-size:0.83rem;color:var(--text-muted);">Connect a mailbox in Settings → Email Accounts, or compose a message.</div></div>`;
+            <div style="font-weight:600;margin-bottom:10px;">Mailbox</div>${cta}</div>`;
           return;
         }
+        const banner = (isAdmin && !hasAccount)
+          ? `<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-size:0.83rem;color:var(--text-muted);">Connect a mailbox to auto-receive broker emails.</span>
+              <span style="display:flex;gap:6px;">
+                <button class="btn-blue" style="padding:5px 10px;font-size:0.78rem;" onclick="connectEmail('gmail')">Gmail</button>
+                <button class="btn-outline" style="padding:5px 10px;font-size:0.78rem;" onclick="connectEmail('outlook')">Outlook</button>
+              </span></div>`
+          : '';
         const rows = items.map(it => {
           const atts = _mailboxAttachments(it);
           const unread = !it.is_read;
@@ -2932,7 +3075,7 @@ Rate: {{total_rate_usd}}
             <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">${esc(when)}</td>
           </tr>`;
         }).join('');
-        el.innerHTML = `<div class="card" style="padding:0;overflow:hidden;"><table style="width:100%;border-collapse:collapse;">
+        el.innerHTML = banner + `<div class="card" style="padding:0;overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="width:100%;border-collapse:collapse;min-width:480px;">
           <thead><tr style="background:var(--surface-2);">
             <th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">From</th>
             <th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Subject</th>
@@ -3131,7 +3274,7 @@ Rate: {{total_rate_usd}}
     });
 
     document.getElementById('tpl-reset-btn').addEventListener('click', async () => {
-      if (!confirm('Reset template to default?')) return;
+      if (!await confirmModal('Reset template to default?')) return;
       try {
         await fetch('/api/settings/status-template', { method: 'DELETE', headers: authH() });
         document.getElementById('tpl-editor').value = _tplDefault;
@@ -3186,7 +3329,7 @@ Rate: {{total_rate_usd}}
     });
 
     document.getElementById('rc-tpl-reset-btn').addEventListener('click', async () => {
-      if (!confirm('Reset ratecon template to default?')) return;
+      if (!await confirmModal('Reset ratecon template to default?')) return;
       try {
         await fetch('/api/settings/ratecon-template', { method: 'DELETE', headers: authH() });
         document.getElementById('rc-tpl-editor').value = DEFAULT_TPL;
@@ -3256,7 +3399,7 @@ Rate: {{total_rate_usd}}
     }
 
     async function deleteTeamUser(id, name) {
-      if (!confirm(`Remove ${name}?`)) return;
+      if (!await confirmModal(`Remove ${name}?`)) return;
       await fetch(`/api/admin/dispatchers/${id}`, { method:'DELETE', headers: authH() });
       loadTeamUsers();
     }
@@ -3416,7 +3559,7 @@ Rate: {{total_rate_usd}}
     });
 
     async function deleteKpiEntry(id) {
-      if (!confirm('Delete this entry?')) return;
+      if (!await confirmModal('Delete this entry?')) return;
       await fetch(`/api/kpi/entry/${id}`, { method: 'DELETE', headers: authH() });
       await loadKpiMy();
     }
@@ -3813,7 +3956,7 @@ Rate: {{total_rate_usd}}
     });
 
     async function deleteTier(id) {
-      if (!confirm('Delete this tier?')) return;
+      if (!await confirmModal('Delete this tier?')) return;
       await fetch(`/api/pay-tiers/${id}`, { method: 'DELETE', headers: authH() });
       loadKpiTiers();
       loadKpiBoard();
@@ -3824,7 +3967,7 @@ Rate: {{total_rate_usd}}
       const msg = existing.length
         ? `This will replace ${existing.length} existing tier(s) with the standard 4-tier scale. Continue?`
         : 'Load the standard 4-tier pay scale?';
-      if (!confirm(msg)) return;
+      if (!await confirmModal(msg)) return;
       const btn = document.getElementById('tier-standard-btn');
       btn.disabled = true; btn.textContent = 'Loading...';
       const standardTiers = [
@@ -4071,7 +4214,7 @@ Rate: {{total_rate_usd}}
     }
 
     async function disconnectEld(configId, provider) {
-      if (!confirm(`Disconnect ${ELD_PROVIDER_NAMES[provider] || provider}?`)) return;
+      if (!await confirmModal(`Disconnect ${ELD_PROVIDER_NAMES[provider] || provider}?`)) return;
       await fetch(`/api/eld/config?config_id=${encodeURIComponent(configId)}`, { method: 'DELETE', headers: authH() });
       toast('ELD disconnected');
       loadEldConfig();
@@ -4177,7 +4320,7 @@ Rate: {{total_rate_usd}}
     }
 
     async function deleteGmapsKey() {
-      if (!confirm('Remove Google Maps API key?')) return;
+      if (!await confirmModal('Remove Google Maps API key?')) return;
       await fetch('/api/settings/google-maps', { method: 'DELETE', headers: authH() });
       document.getElementById('gmaps-apikey').value = '';
       document.getElementById('gmaps-current').style.display = 'none';
@@ -4306,7 +4449,7 @@ Rate: {{total_rate_usd}}
     }
 
     async function deleteCompanyUser(userId, name) {
-      if (!confirm(`Delete "${name}"? This will remove all their loads and driver groups.`)) return;
+      if (!await confirmModal(`Delete "${name}"? This will remove all their loads and driver groups.`)) return;
       try {
         const r = await fetch(`/api/company/users/${userId}`, { method:'DELETE', headers:authH() });
         if (!r.ok) { const d=await r.json(); throw new Error(d.detail); }
@@ -4385,12 +4528,12 @@ Rate: {{total_rate_usd}}
         card.querySelector('[data-act="role"]').addEventListener('click', async e => {
           const btn = e.currentTarget;
           const newRole = btn.dataset.role === 'admin' ? 'user' : 'admin';
-          if (!confirm(`Change ${d.name}'s role to ${newRole}?`)) return;
+          if (!await confirmModal(`Change ${d.name}'s role to ${newRole}?`)) return;
           await fetch(`/api/admin/dispatchers/${d.id}`, { method:'PATCH', headers:{...authH(),'Content-Type':'application/json'}, body:JSON.stringify({role:newRole}) });
           toast(`${d.name} is now ${newRole}`); loadAdmin();
         });
         card.querySelector('[data-act="delete"]').addEventListener('click', async () => {
-          if (!confirm(`Delete ${d.name}? This will remove all their linked groups.`)) return;
+          if (!await confirmModal(`Delete ${d.name}? This will remove all their linked groups.`)) return;
           await fetch(`/api/admin/dispatchers/${d.id}`, { method:'DELETE', headers:authH() });
           toast(`${d.name} deleted`); loadAdmin();
         });
@@ -4717,7 +4860,7 @@ Rate: {{total_rate_usd}}
     function renderLoadsTable(loads) {
       const el = document.getElementById('loads-content');
       if (!loads.length) {
-        el.innerHTML = `<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-truck"></i></div><div class="empty-title">No loads yet</div><div class="empty-desc">Extract a ratecon and click "Save Load" to add trips here.</div></div>`;
+        el.innerHTML = `<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-truck"></i></div><div class="empty-title">No loads yet</div><div class="empty-desc">Extract a rate confirmation and click "Save Load" to add trips here.</div><button class="btn-blue" style="margin-top:14px;" onclick="goTo('extract')">+ Extract a rate confirmation</button></div>`;
         return;
       }
       const rows = loads.map(l => {
@@ -4967,7 +5110,7 @@ Rate: {{total_rate_usd}}
         const fromDelivered = currentStatus === 'delivered';
         if (isBackward || fromDelivered) {
           const msg = `Revert load from "${currentStatus}" back to "${status}"?`;
-          if (!confirm(msg)) return;
+          if (!await confirmModal(msg)) return;
         }
       }
       const r = await fetch(`/api/loads/${loadId}/status`, {
@@ -4996,7 +5139,7 @@ Rate: {{total_rate_usd}}
     }
 
     async function deleteLoad(loadId, btn) {
-      if (!confirm('Delete this load?')) return;
+      if (!await confirmModal('Delete this load?')) return;
       const r = await fetch(`/api/loads/${loadId}`, { method:'DELETE', headers: authH() });
       if (r.ok) { toast('Load deleted'); loadLoadsPage(); }
       else toast('Failed to delete', 'error');
@@ -5303,29 +5446,31 @@ Rate: {{total_rate_usd}}
         if (!r.ok) throw new Error('Failed');
         const d = await r.json();
         const fmtMoney = (n) => '$' + Math.round(n).toLocaleString();
-        const card = (title, value, sub, color) => `
-          <div class="card" style="padding:16px;min-height:96px;">
+        const card = (title, value, sub, color, page) => `
+          <div class="card" style="padding:16px;min-height:96px;${page ? 'cursor:pointer;' : ''}"${page ? ` onclick="goTo('${page}')"` : ''}>
             <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">${title}</div>
             <div style="font-size:1.7rem;font-weight:700;color:${color || 'var(--text)'};line-height:1;">${value}</div>
             ${sub ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;">${sub}</div>` : ''}
           </div>`;
         el.innerHTML = `
+          <div id="dash-top"></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px;">
-            ${card('Total Revenue', fmtMoney(d.total_revenue), `${d.total_loads} loads total`, '#22c55e')}
-            ${card('Active Loads', d.active_loads, 'In transit now', '#3b82f6')}
-            ${card('Upcoming', d.upcoming_loads, 'Pickup pending')}
-            ${card('Delivered', d.delivered_loads, 'Completed loads')}
-            ${card('Unread Mail', d.unread_mailbox, 'In your mailbox', d.unread_mailbox > 0 ? '#f59e0b' : null)}
-            ${card('Open Safety', d.open_safety_tasks, 'Pending tasks', d.open_safety_tasks > 0 ? '#ef4444' : null)}
-            ${card('Expiring Docs', d.expiring_documents, 'Within 30 days', d.expiring_documents > 0 ? '#ef4444' : null)}
+            ${card('Total Revenue', fmtMoney(d.total_revenue), `${d.total_loads} loads total`, '#22c55e', 'loads')}
+            ${card('Active Loads', d.active_loads, 'In transit now', '#3b82f6', 'live-loads')}
+            ${card('Upcoming', d.upcoming_loads, 'Pickup pending', null, 'loads')}
+            ${card('Delivered', d.delivered_loads, 'Completed loads', null, 'loads')}
+            ${card('Unread Mail', d.unread_mailbox, 'In your mailbox', d.unread_mailbox > 0 ? '#f59e0b' : null, 'mailbox')}
+            ${card('Open Safety', d.open_safety_tasks, 'Pending tasks', d.open_safety_tasks > 0 ? '#ef4444' : null, 'safety-tasks')}
+            ${card('Expiring Docs', d.expiring_documents, 'Within 30 days', d.expiring_documents > 0 ? '#ef4444' : null, 'driver-documents')}
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-            ${card('Drivers', d.drivers)}
-            ${card('Customers', d.customers)}
-            ${card('Vendors', d.vendors)}
-            ${card('Trailers', d.trailers)}
-            ${card('Locations', d.locations)}
+            ${card('Drivers', d.drivers, null, null, 'groups')}
+            ${card('Customers', d.customers, null, null, 'customers')}
+            ${card('Vendors', d.vendors, null, null, 'vendors')}
+            ${card('Trailers', d.trailers, null, null, 'trailers')}
+            ${card('Locations', d.locations, null, null, 'locations')}
           </div>`;
+        renderDashboardTop(d);
         // Update mailbox badge
         const badge = document.getElementById('mailbox-badge');
         if (d.unread_mailbox > 0) {
@@ -5337,6 +5482,53 @@ Rate: {{total_rate_usd}}
       } catch (e) {
         el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Could not load dashboard</div>';
       }
+    }
+
+    // Welcome banner (no loads yet) + admin first-run setup checklist.
+    async function renderDashboardTop(d) {
+      const top = document.getElementById('dash-top');
+      if (!top) return;
+      let html = '';
+      if ((d.total_loads || 0) === 0) {
+        html += `<div class="card" style="padding:18px;margin-bottom:16px;border-left:3px solid var(--primary);">
+          <div style="font-weight:700;margin-bottom:6px;">👋 Welcome to SimpleTrucking</div>
+          <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.5;">Get your first load in:
+            <a href="#" onclick="goTo('extract');return false;" style="color:var(--primary);font-weight:600;">1) Extract a rate confirmation</a>
+            → 2) Save Load → 3) Send to your Telegram group.</div>
+        </div>`;
+      }
+      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+      if (isAdmin && localStorage.getItem('st_onboarding_dismissed') !== '1') {
+        try {
+          const s = await fetch('/api/onboarding/status', { headers: authH() }).then(r => r.json());
+          const items = [
+            { k:'company_info', label:'Add company info (for invoices)', page:'settings' },
+            { k:'eld',          label:'Connect ELD (automatic ETA)',      page:'settings' },
+            { k:'email',        label:'Connect email (Mailbox)',          page:'settings' },
+            { k:'team',         label:'Invite your team',                 page:'settings' },
+            { k:'first_load',   label:'Create your first load',           page:'extract'  },
+          ];
+          const done = items.filter(i => s[i.k]).length;
+          if (done < items.length) {
+            html += `<div class="card" style="padding:18px;margin-bottom:16px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div style="font-weight:700;">Setup checklist <span style="color:var(--text-muted);font-weight:500;font-size:0.85rem;">(${done}/${items.length})</span></div>
+                <button onclick="dismissOnboarding()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.8rem;">Dismiss</button>
+              </div>
+              ${items.map(i => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:0.86rem;${s[i.k]?'opacity:0.55;':''}">
+                <span>${s[i.k] ? '✅' : '⬜'}</span>
+                ${s[i.k] ? esc(i.label) : `<a href="#" onclick="goTo('${i.page}');return false;" style="color:var(--primary);">${esc(i.label)}</a>`}
+              </div>`).join('')}
+            </div>`;
+          }
+        } catch {}
+      }
+      top.innerHTML = html;
+    }
+
+    function dismissOnboarding() {
+      localStorage.setItem('st_onboarding_dismissed', '1');
+      loadDashboardPage();
     }
 
     async function loadLiveLoadsPage() {
@@ -5360,7 +5552,7 @@ Rate: {{total_rate_usd}}
             <td style="padding:10px;border-bottom:1px solid var(--border);">${l.eta_utc || '—'}</td>
           </tr>`).join('');
         el.innerHTML = `
-          <div class="card" style="padding:0;overflow:hidden;">
+          <div class="card" style="padding:0;overflow-x:auto;-webkit-overflow-scrolling:touch;">
             <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
               <thead><tr style="background:var(--surface-2);">
                 <th style="padding:10px;text-align:left;font-weight:600;font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Load #</th>
@@ -5565,7 +5757,7 @@ Rate: {{total_rate_usd}}
             <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;color:#ef4444;" onclick="deleteEntity('${slug}', ${it.id})">Delete</button>
           </td></tr>`;
         }).join('');
-        el.innerHTML = `<div class="card" style="padding:0;overflow:hidden;">
+        el.innerHTML = `<div class="card" style="padding:0;overflow-x:auto;-webkit-overflow-scrolling:touch;">
           <table style="width:100%;border-collapse:collapse;">
             <thead><tr style="background:var(--surface-2);">${headers}<th></th></tr></thead>
             <tbody>${rows}</tbody>
@@ -5731,7 +5923,7 @@ Rate: {{total_rate_usd}}
     }
 
     async function deleteEntity(slug, id) {
-      if (!confirm('Delete this record?')) return;
+      if (!await confirmModal('Delete this record?')) return;
       try {
         const r = await fetch(`/api/entities/${slug}/${id}`, { method: 'DELETE', headers: authH() });
         if (!r.ok) {
@@ -6202,7 +6394,7 @@ Rate: {{total_rate_usd}}
     }
 
     async function deletePod(podId) {
-      if (!confirm('Delete this file?')) return;
+      if (!await confirmModal('Delete this file?')) return;
       try {
         await fetch(`/api/loads/${filesLoadId}/pod/${podId}`, { method: 'DELETE', headers: authH() });
         await loadPods();

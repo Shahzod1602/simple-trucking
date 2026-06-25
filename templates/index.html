@@ -1163,6 +1163,18 @@
             </div>
           </div>
         </div>
+        <div class="card settings-section" id="email-section" style="display:none">
+          <div class="settings-title">Email Accounts</div>
+          <div class="settings-body">
+            <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Connect a Gmail or Outlook mailbox so broker emails land in your Mailbox and you can reply right here.</p>
+            <div id="email-not-configured" style="display:none;font-size:0.83rem;color:#f59e0b;margin-bottom:12px;">Email integration is not configured on the server yet.</div>
+            <div id="email-connected-list" style="margin-bottom:16px;"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn-outline" onclick="connectEmail('gmail')">+ Connect Gmail</button>
+              <button class="btn-outline" onclick="connectEmail('outlook')">+ Connect Outlook</button>
+            </div>
+          </div>
+        </div>
         <div class="card settings-section" id="company-info-section" style="display:none">
           <div class="settings-title">Company Info (for Invoices)</div>
           <div class="settings-body">
@@ -1446,8 +1458,8 @@
             <p class="page-subtitle">Broker emails and system messages</p>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn-outline" onclick="loadEntityPage('mailbox')">↺ Refresh</button>
-            <button class="btn-blue" onclick="openEntityModal('mailbox')">+ New Message</button>
+            <button class="btn-outline" onclick="loadMailbox()">↺ Refresh</button>
+            <button class="btn-blue" onclick="openCompose()">+ New Message</button>
           </div>
         </div>
         <div id="page-mailbox-content"></div>
@@ -1608,6 +1620,16 @@
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn-outline" onclick="closeEntityModal()">Cancel</button>
         <button class="btn-blue" id="entity-modal-save" onclick="saveEntityModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mailbox message / compose modal -->
+  <div class="overlay" id="mailbox-modal" style="display:none;" onclick="if(event.target===this)closeMailboxModal()">
+    <div class="modal" style="max-width:640px;" role="dialog" aria-modal="true">
+      <div id="mailbox-modal-body" style="margin-bottom:14px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn-outline" onclick="closeMailboxModal()">Close</button>
       </div>
     </div>
   </div>
@@ -2031,8 +2053,9 @@ Rate: {{total_rate_usd}}
       if (page === 'trucks')    loadTrucksPage();
       if (page === 'telegram')  loadTgGroups();
       if (page === 'kpi')       loadKpiPage();
+      if (page === 'mailbox')   loadMailbox();
       // Generic entity pages
-      if (['mailbox','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions'].includes(page)) {
+      if (['customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions'].includes(page)) {
         loadEntityPage(page);
       }
     }
@@ -2172,25 +2195,7 @@ Rate: {{total_rate_usd}}
         resultSec.classList.add('visible');
         document.getElementById('err-body').innerHTML = '';
         if (data.status === 'ok') {
-          enterExtractFullscreen();
-          document.getElementById('status-badge').className = 'badge ok';
-          document.getElementById('status-badge').textContent = 'Success';
-          lastExtractedData = data.data;
-          document.getElementById('tp-tpl').style.display = '';
-          resultTa.value = fillTpl(currentTpl, data.data);
-          if (token) { sendBtn.classList.add('visible'); document.getElementById('save-load-btn').classList.add('visible'); }
-          // Populate result meta
-          const d = data.data;
-          const metaParts = [];
-          if (d.load_number) metaParts.push(`<span><i class="ph-bold ph-hash" style="font-size:0.75rem;"></i> ${esc(d.load_number)}</span>`);
-          if (d.broker) metaParts.push(`<span><i class="ph-bold ph-buildings" style="font-size:0.75rem;"></i> ${esc(d.broker)}</span>`);
-          if (d.total_rate_usd) metaParts.push(`<span><i class="ph-bold ph-currency-dollar" style="font-size:0.75rem;"></i> ${esc(d.total_rate_usd)}</span>`);
-          if (d.stops && d.stops.length) metaParts.push(`<span><i class="ph-bold ph-map-pin" style="font-size:0.75rem;"></i> ${d.stops.length} stops</span>`);
-          document.getElementById('result-meta').innerHTML = metaParts.join('');
-          document.getElementById('extract-col-meta').textContent = d.load_number ? `Load #${d.load_number}` : '';
-          showRouteMap(d.stops || []);
-          populateExtractGroups();
-          toast('Data extracted successfully', 'success');
+          renderExtractData(data.data);
         } else {
           exitExtractFullscreen();
           document.getElementById('status-badge').className = 'badge error';
@@ -2803,6 +2808,8 @@ Rate: {{total_rate_usd}}
       const isAdmin = userRole === 'admin' || userRole === 'superadmin';
       document.getElementById('eld-section').style.display = isAdmin ? '' : 'none';
       document.getElementById('company-info-section').style.display = isAdmin ? '' : 'none';
+      document.getElementById('email-section').style.display = isAdmin ? '' : 'none';
+      if (isAdmin) loadEmailAccounts();
       const teamSection = document.getElementById('team-section');
       const tplSection = document.getElementById('template-section');
       if (isAdmin) {
@@ -2815,6 +2822,239 @@ Rate: {{total_rate_usd}}
         teamSection.style.display = 'none';
         tplSection.style.display = 'none';
       }
+    }
+
+    // ── Extract rendering (shared by file upload + email attachments) ──────
+    function renderExtractData(d) {
+      enterExtractFullscreen();
+      document.getElementById('status-badge').className = 'badge ok';
+      document.getElementById('status-badge').textContent = 'Success';
+      lastExtractedData = d;
+      document.getElementById('tp-tpl').style.display = '';
+      resultTa.value = fillTpl(currentTpl, d);
+      if (token) { sendBtn.classList.add('visible'); document.getElementById('save-load-btn').classList.add('visible'); }
+      const metaParts = [];
+      if (d.load_number) metaParts.push(`<span><i class="ph-bold ph-hash" style="font-size:0.75rem;"></i> ${esc(d.load_number)}</span>`);
+      if (d.broker) metaParts.push(`<span><i class="ph-bold ph-buildings" style="font-size:0.75rem;"></i> ${esc(d.broker)}</span>`);
+      if (d.total_rate_usd) metaParts.push(`<span><i class="ph-bold ph-currency-dollar" style="font-size:0.75rem;"></i> ${esc(d.total_rate_usd)}</span>`);
+      if (d.stops && d.stops.length) metaParts.push(`<span><i class="ph-bold ph-map-pin" style="font-size:0.75rem;"></i> ${d.stops.length} stops</span>`);
+      document.getElementById('result-meta').innerHTML = metaParts.join('');
+      document.getElementById('extract-col-meta').textContent = d.load_number ? `Load #${d.load_number}` : '';
+      showRouteMap(d.stops || []);
+      populateExtractGroups();
+      toast('Data extracted successfully', 'success');
+    }
+
+    // ── Email accounts (Relay) ────────────────────────────────────────────
+    async function loadEmailAccounts() {
+      const list = document.getElementById('email-connected-list');
+      if (!list) return;
+      list.innerHTML = '<div style="color:var(--text-muted);font-size:0.83rem;">Loading…</div>';
+      try {
+        const d = await fetch('/api/email/accounts', { headers: authH() }).then(r => r.json());
+        document.getElementById('email-not-configured').style.display = d.configured ? 'none' : '';
+        const accs = d.accounts || [];
+        if (!accs.length) { list.innerHTML = '<div style="color:var(--text-muted);font-size:0.83rem;">No mailboxes connected yet.</div>'; return; }
+        list.innerHTML = accs.map(a => `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;">
+            <div><div style="font-weight:600;font-size:0.85rem;">${esc(a.email || '—')}</div>
+              <div style="font-size:0.72rem;color:var(--text-muted);text-transform:capitalize;">${esc(a.provider)}${a.last_polled_at ? ' · synced' : ''}</div></div>
+            <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;color:#ef4444;" onclick="disconnectEmail(${a.id})">Disconnect</button>
+          </div>`).join('');
+      } catch { list.innerHTML = '<div style="color:var(--text-muted);font-size:0.83rem;">Failed to load.</div>'; }
+    }
+
+    async function connectEmail(provider) {
+      try {
+        const r = await fetch('/api/email/connect/' + provider, { headers: authH() });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.url) { toast(d.detail || 'Could not start connection', 'error'); return; }
+        window.location.href = d.url;
+      } catch { toast('Could not start connection', 'error'); }
+    }
+
+    async function disconnectEmail(id) {
+      if (!confirm('Disconnect this mailbox?')) return;
+      try {
+        const r = await fetch('/api/email/' + id + '/disconnect', { method: 'POST', headers: authH() });
+        if (!r.ok) throw new Error();
+        toast('Mailbox disconnected', 'success');
+        loadEmailAccounts();
+      } catch { toast('Could not disconnect', 'error'); }
+    }
+
+    // Surface the ?email=connected result after the OAuth round-trip.
+    (function () {
+      const p = new URLSearchParams(location.search);
+      const e = p.get('email');
+      if (!e) return;
+      if (e === 'connected') toast('Mailbox connected', 'success');
+      else if (e === 'invalid_state') toast('Connection expired — please try again', 'error');
+      else if (e === 'error') toast('Could not connect mailbox', 'error');
+      history.replaceState(null, '', location.pathname);
+    })();
+
+    // ── Mailbox (email) ───────────────────────────────────────────────────
+    let _mailboxItems = {};
+
+    function _mailboxAttachments(it) {
+      try { return it.attachments_json ? JSON.parse(it.attachments_json) : []; } catch { return []; }
+    }
+
+    async function loadMailbox() {
+      const el = document.getElementById('page-mailbox-content');
+      if (!el) return;
+      if (!token) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-lock"></i></div><div class="empty-title">Sign in required</div></div>';
+        return;
+      }
+      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading…</div>';
+      try {
+        const d = await fetch('/api/entities/mailbox', { headers: authH() }).then(r => r.json());
+        const items = d.items || [];
+        _mailboxItems = {};
+        items.forEach(it => { _mailboxItems[it.id] = it; });
+        refreshUnreadBadge();
+        if (!items.length) {
+          el.innerHTML = `<div class="card" style="padding:48px;text-align:center;">
+            <div style="font-size:2.5rem;margin-bottom:12px;opacity:0.4;">📭</div>
+            <div style="font-weight:600;margin-bottom:6px;">No messages yet</div>
+            <div style="font-size:0.83rem;color:var(--text-muted);">Connect a mailbox in Settings → Email Accounts, or compose a message.</div></div>`;
+          return;
+        }
+        const rows = items.map(it => {
+          const atts = _mailboxAttachments(it);
+          const unread = !it.is_read;
+          const when = it.received_at ? new Date(it.received_at).toLocaleString() : '';
+          return `<tr style="cursor:pointer;${unread ? 'font-weight:700;' : ''}" onclick="openMessage(${it.id})">
+            <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;white-space:nowrap;">${unread ? '<span style="color:var(--primary);">●</span> ' : ''}${esc(it.from_addr || '—')}</td>
+            <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${esc(it.subject || '(no subject)')} ${atts.length ? '📎' : ''}</td>
+            <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">${esc(when)}</td>
+          </tr>`;
+        }).join('');
+        el.innerHTML = `<div class="card" style="padding:0;overflow:hidden;"><table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:var(--surface-2);">
+            <th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">From</th>
+            <th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Subject</th>
+            <th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Received</th>
+          </tr></thead><tbody>${rows}</tbody></table></div>`;
+      } catch {
+        el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Failed to load</div>';
+      }
+    }
+
+    function refreshUnreadBadge() {
+      const unread = Object.values(_mailboxItems).filter(m => !m.is_read).length;
+      const badge = document.getElementById('mailbox-badge');
+      if (!badge) return;
+      if (unread > 0) { badge.textContent = unread; badge.style.display = ''; }
+      else { badge.style.display = 'none'; }
+    }
+
+    function openMessage(id) {
+      const it = _mailboxItems[id];
+      if (!it) return;
+      const atts = _mailboxAttachments(it);
+      if (!it.is_read) {
+        fetch('/api/entities/mailbox/' + id, { method: 'PATCH', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ is_read: true }) })
+          .then(() => { it.is_read = true; refreshUnreadBadge(); }).catch(() => {});
+      }
+      const canReply = !!it.account_id;
+      const attHtml = atts.length ? `<div style="margin:12px 0;">${atts.map(a => {
+        const fname = (a.filename || 'attachment').replace(/'/g, '');
+        const isPdf = a.mimeType === 'application/pdf' || fname.toLowerCase().endsWith('.pdf');
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.82rem;">
+          📎 <a href="#" onclick="downloadAttachment(${id},'${esc(a.id)}','${esc(fname)}');return false;">${esc(a.filename || 'attachment')}</a>
+          ${isPdf ? `<button class="btn-outline" style="padding:2px 8px;font-size:0.72rem;" onclick="extractAttachment(${id},'${esc(a.id)}')">Extract</button>` : ''}
+        </div>`;
+      }).join('')}</div>` : '';
+      document.getElementById('mailbox-modal-body').innerHTML = `
+        <div style="font-weight:700;font-size:1rem;margin-bottom:4px;">${esc(it.subject || '(no subject)')}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:2px;">From: ${esc(it.from_addr || '—')}</div>
+        ${it.to_addr ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:2px;">To: ${esc(it.to_addr)}</div>` : ''}
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:10px;">${it.received_at ? esc(new Date(it.received_at).toLocaleString()) : ''}</div>
+        ${attHtml}
+        <div style="white-space:pre-wrap;font-size:0.86rem;line-height:1.5;border-top:1px solid var(--border);padding-top:12px;max-height:40vh;overflow:auto;">${esc(it.body || '(no content)')}</div>
+        ${canReply ? `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+          <textarea id="mailbox-reply-text" rows="4" placeholder="Write a reply…" style="width:100%;"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button class="btn-blue" onclick="sendReply(${id})">Send Reply</button></div>
+        </div>` : '<div style="font-size:0.78rem;color:var(--text-muted);margin-top:12px;">Replying is available for connected mailbox emails.</div>'}`;
+      document.getElementById('mailbox-modal').style.display = 'flex';
+    }
+
+    function closeMailboxModal() { document.getElementById('mailbox-modal').style.display = 'none'; }
+
+    async function downloadAttachment(msgId, attId, filename) {
+      try {
+        const r = await fetch(`/api/mailbox/${msgId}/attachments/${encodeURIComponent(attId)}`, { headers: authH() });
+        if (!r.ok) throw new Error();
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename || 'attachment';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      } catch { toast('Could not download attachment', 'error'); }
+    }
+
+    async function extractAttachment(msgId, attId) {
+      toast('Extracting…', 'info');
+      try {
+        const r = await fetch(`/api/mailbox/${msgId}/attachments/${encodeURIComponent(attId)}/extract`, { method: 'POST', headers: authH() });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast(d.detail || 'Extraction failed', 'error'); return; }
+        if (d.status === 'validation_error') { toast('Could not validate: ' + (d.errors || []).join('; '), 'error'); return; }
+        if (d.status === 'ok' && d.data) {
+          closeMailboxModal();
+          goTo('extract');
+          document.getElementById('result-section').classList.add('visible');
+          renderExtractData(d.data);
+        }
+      } catch { toast('Extraction failed', 'error'); }
+    }
+
+    async function sendReply(id) {
+      const ta = document.getElementById('mailbox-reply-text');
+      const text = (ta.value || '').trim();
+      if (!text) { ta.focus(); return; }
+      try {
+        const r = await fetch('/api/mailbox/' + id + '/reply', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast(d.detail || 'Could not send reply', 'error'); return; }
+        toast('Reply sent', 'success');
+        closeMailboxModal();
+        loadMailbox();
+      } catch { toast('Could not send reply', 'error'); }
+    }
+
+    async function openCompose() {
+      let accs = [];
+      try { const d = await fetch('/api/email/accounts', { headers: authH() }).then(r => r.json()); accs = d.accounts || []; } catch {}
+      if (!accs.length) { toast('Connect a mailbox first (Settings → Email Accounts)', 'error'); return; }
+      const opts = accs.map(a => `<option value="${a.id}">${esc(a.email || a.provider)}</option>`).join('');
+      document.getElementById('mailbox-modal-body').innerHTML = `
+        <div style="font-weight:700;font-size:1rem;margin-bottom:12px;">New Message</div>
+        <div class="field"><label>From</label><select id="cmp-account">${opts}</select></div>
+        <div class="field"><label>To</label><input type="text" id="cmp-to" placeholder="recipient@example.com"/></div>
+        <div class="field"><label>Subject</label><input type="text" id="cmp-subject"/></div>
+        <div class="field"><label>Message</label><textarea id="cmp-body" rows="6"></textarea></div>
+        <div style="display:flex;justify-content:flex-end;"><button class="btn-blue" onclick="sendCompose()">Send</button></div>`;
+      document.getElementById('mailbox-modal').style.display = 'flex';
+    }
+
+    async function sendCompose() {
+      const account_id = document.getElementById('cmp-account').value;
+      const to = document.getElementById('cmp-to').value.trim();
+      const subject = document.getElementById('cmp-subject').value.trim();
+      const text = document.getElementById('cmp-body').value.trim();
+      if (!to || !subject || !text) { toast('Fill in recipient, subject and message', 'error'); return; }
+      try {
+        const r = await fetch('/api/email/send', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ account_id, to, subject, text }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast(d.detail || 'Could not send', 'error'); return; }
+        toast('Email sent', 'success');
+        closeMailboxModal();
+      } catch { toast('Could not send', 'error'); }
     }
 
     // ── Status Template ────────────────────────────────────────────────

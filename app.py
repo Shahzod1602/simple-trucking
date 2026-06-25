@@ -1,16 +1,21 @@
 import logging
 import asyncio
+import hashlib
+import hmac
+import json
 import os
+import re
 import tempfile
 import time
 import collections
 from collections import deque
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
@@ -20,6 +25,7 @@ import database
 import bot_poller
 import telegram as tg
 import routing
+from relay import relay
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -31,7 +37,7 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _truck_prefetch_task
+    global _truck_prefetch_task, _email_poller_task
     database.init_db()
     database.ensure_superadmin(
         os.getenv("SUPER_ADMIN_EMAIL", ""),
@@ -40,6 +46,7 @@ async def lifespan(app: FastAPI):
     UPLOADS_DIR.mkdir(exist_ok=True)
     bot_enabled = os.getenv("DISABLE_BOT_POLLER", "0") != "1"
     prefetch_enabled = os.getenv("DISABLE_TRUCK_PREFETCH", "0") != "1"
+    email_enabled = os.getenv("DISABLE_EMAIL_POLLER", "0") != "1" and relay.configured
     if bot_enabled:
         # Only one worker should run bot poller (use file lock)
         import fcntl
@@ -47,6 +54,15 @@ async def lifespan(app: FastAPI):
             _bot_lock_fd = open("/tmp/bot_poller.lock", "w")
             fcntl.flock(_bot_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             bot_poller.start()
+        except (IOError, OSError):
+            pass  # another worker holds the lock
+    if email_enabled:
+        # Only one worker should poll Relay for inbound email (file lock).
+        import fcntl
+        try:
+            _email_lock_fd = open("/tmp/email_poller.lock", "w")
+            fcntl.flock(_email_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _email_poller_task = asyncio.create_task(_email_poller_loop())
         except (IOError, OSError):
             pass  # another worker holds the lock
     if prefetch_enabled:
@@ -59,6 +75,13 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
         _truck_prefetch_task = None
+    if _email_poller_task:
+        _email_poller_task.cancel()
+        try:
+            await _email_poller_task
+        except asyncio.CancelledError:
+            pass
+        _email_poller_task = None
     if bot_enabled:
         bot_poller.stop()
 
@@ -80,8 +103,13 @@ _attempts: dict[str, dict] = {}  # {ip: {count, blocked_until}}
 _truck_cache: dict[int, dict] = {}  # {dispatcher_id: {"ts": float, "trucks": list[dict]}}
 _eld_call_windows: dict[tuple[int, str], deque] = {}
 _truck_prefetch_task: asyncio.Task | None = None
+_email_poller_task: asyncio.Task | None = None
 MAX_ATTEMPTS = 5
 BLOCK_SECS = 3 * 60  # 3 minutes
+
+# ── Email (Relay) integration config ──────────────────────────────────────────
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+EMAIL_POLL_INTERVAL = int(os.environ.get("EMAIL_POLL_INTERVAL", "60"))
 
 
 def _check_rate_limit(ip: str) -> int:
@@ -172,6 +200,88 @@ async def _prefetch_trucks_loop():
         except Exception as exc:
             logger.warning("Truck prefetch loop error: %s", exc)
         await asyncio.sleep(20)
+
+
+# ── Inbound email poller (Relay) ──────────────────────────────────────────────
+
+def _parse_iso(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _email_html_to_text(html: str) -> str:
+    text = re.sub(r"(?is)<(script|style).*?</\1>", " ", html)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</p>", "\n", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    import html as _html_lib
+    text = _html_lib.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s*\n+", "\n\n", text)
+    return text.strip()
+
+
+def _format_addr(obj: dict | None) -> str:
+    if not obj:
+        return ""
+    email = (obj.get("email") or "").strip()
+    name = (obj.get("name") or "").strip()
+    if name and email:
+        return f"{name} <{email}>"
+    return name or email
+
+
+async def _poll_one_mailbox(acc: dict) -> None:
+    relay_id = acc["relay_account_id"]
+    company_id = acc["company_id"]
+    messages = await relay.list_messages(relay_id, limit=15)
+    for meta in messages:
+        ext_id = meta.get("id")
+        if not ext_id:
+            continue
+        if database.mailbox_external_exists(company_id, ext_id):
+            continue
+        full = await relay.get_message(relay_id, ext_id)
+        if not full:
+            continue
+        body_obj = full.get("body") or {}
+        body = body_obj.get("text")
+        if not body and body_obj.get("html"):
+            body = _email_html_to_text(body_obj["html"])
+        to_list = full.get("to") or []
+        to_addr = ", ".join(_format_addr(t) for t in to_list if t)
+        attachments = full.get("attachments") or []
+        database.insert_inbound_email(
+            company_id,
+            acc["id"],
+            external_id=ext_id,
+            from_addr=_format_addr(full.get("from")),
+            to_addr=to_addr or None,
+            subject=full.get("subject") or "",
+            body=(body or "").strip(),
+            thread_id=full.get("threadId"),
+            rfc_message_id=full.get("messageId"),
+            attachments_json=json.dumps(attachments) if attachments else None,
+            received_at=_parse_iso(full.get("date")) or datetime.now(timezone.utc),
+        )
+    database.update_email_account_polled(acc["id"])
+
+
+async def _email_poller_loop():
+    while True:
+        try:
+            for acc in database.list_all_active_email_accounts():
+                try:
+                    await _poll_one_mailbox(acc)
+                except Exception as exc:
+                    logger.warning("Email poll failed for account_id=%s: %s", acc.get("id"), exc)
+        except Exception as exc:
+            logger.warning("Email poller loop error: %s", exc)
+        await asyncio.sleep(EMAIL_POLL_INTERVAL)
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -2808,6 +2918,244 @@ async def api_delete_entity(slug: str, entity_id: int, authorization: str | None
         raise HTTPException(status_code=404, detail="Not found")
     _audit_event(dispatcher, f"{table}.delete", table, str(entity_id))
     return {"ok": True}
+
+
+# ── Email (Relay) integration ─────────────────────────────────────────────────
+# A signed, short-lived state ties the OAuth round-trip back to a company. The
+# browser callback carries no Bearer token, so the company id travels inside it.
+
+def _email_state_secret() -> str:
+    return (
+        os.environ.get("RELAY_STATE_SECRET")
+        or os.environ.get("SUPER_ADMIN_PASSWORD")
+        or "ratecon-dev-state-secret"
+    )
+
+
+def _sign_connect_state(company_id: int, dispatcher_id: int, ttl: int = 900) -> str:
+    exp = int(time.time()) + ttl
+    payload = f"{company_id}.{dispatcher_id}.{exp}"
+    sig = hmac.new(_email_state_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{payload}.{sig}"
+
+
+def _verify_connect_state(state: str) -> tuple[int, int] | None:
+    parts = (state or "").split(".")
+    if len(parts) != 4:
+        return None
+    company_id_s, dispatcher_id_s, exp_s, sig = parts
+    payload = f"{company_id_s}.{dispatcher_id_s}.{exp_s}"
+    expected = hmac.new(_email_state_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(sig, expected):
+        return None
+    try:
+        if int(exp_s) < int(time.time()):
+            return None
+        return int(company_id_s), int(dispatcher_id_s)
+    except ValueError:
+        return None
+
+
+@app.get("/api/email/connect/{provider}")
+async def email_connect(provider: str, authorization: str | None = Header(default=None)):
+    dispatcher = require_company_admin(authorization)
+    company_id = get_company_id(dispatcher)
+    if provider not in ("gmail", "outlook"):
+        raise HTTPException(status_code=400, detail="Unknown provider")
+    if not relay.configured:
+        raise HTTPException(status_code=503, detail="Email integration is not configured")
+    if not PUBLIC_BASE_URL:
+        raise HTTPException(status_code=503, detail="PUBLIC_BASE_URL is not configured")
+    state = _sign_connect_state(company_id, dispatcher["id"])
+    return_url = f"{PUBLIC_BASE_URL}/api/email/callback?st={state}"
+    url = await relay.connect_start(provider, return_url)
+    if not url:
+        raise HTTPException(status_code=502, detail="Could not start email connection")
+    return {"url": url}
+
+
+@app.get("/api/email/callback")
+async def email_callback(
+    st: str = Query(default=""),
+    accountId: str = Query(default=""),
+    email: str = Query(default=""),
+    provider: str = Query(default=""),
+):
+    verified = _verify_connect_state(st)
+    if not verified:
+        return RedirectResponse(url="/?email=invalid_state#mailbox", status_code=302)
+    company_id, _dispatcher_id = verified
+    if accountId:
+        try:
+            database.create_email_account(company_id, accountId, provider or "gmail", email or "")
+        except Exception as exc:
+            logger.warning("Email callback store failed: %s", exc)
+            return RedirectResponse(url="/?email=error#mailbox", status_code=302)
+    return RedirectResponse(url="/?email=connected#mailbox", status_code=302)
+
+
+@app.get("/api/email/accounts")
+async def email_accounts(authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    rows = database.list_email_accounts(company_id)
+    return {
+        "configured": relay.configured,
+        "accounts": [
+            {
+                "id": r["id"],
+                "provider": r["provider"],
+                "email": r["email"],
+                "is_active": r["is_active"],
+                "last_polled_at": r.get("last_polled_at").isoformat() if r.get("last_polled_at") else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.post("/api/email/{account_id}/disconnect")
+async def email_disconnect(account_id: int, authorization: str | None = Header(default=None)):
+    dispatcher = require_company_admin(authorization)
+    company_id = get_company_id(dispatcher)
+    acc = database.get_email_account(account_id, company_id)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Not found")
+    await relay.disconnect(acc["relay_account_id"])
+    database.delete_email_account(account_id, company_id)
+    _audit_event(dispatcher, "email_account.disconnect", "email_accounts", str(account_id))
+    return {"ok": True}
+
+
+@app.post("/api/email/send")
+async def email_send(request: Request, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    account_id = body.get("account_id")
+    to = body.get("to")
+    subject = (body.get("subject") or "").strip()
+    text = body.get("text") or body.get("body")
+    if isinstance(to, str):
+        to = [a.strip() for a in to.split(",") if a.strip()]
+    if not account_id or not isinstance(to, list) or not to:
+        raise HTTPException(status_code=400, detail="account_id and at least one recipient are required")
+    if not subject:
+        raise HTTPException(status_code=400, detail="Subject is required")
+    if not text:
+        raise HTTPException(status_code=400, detail="Message body is required")
+    acc = database.get_email_account(int(account_id), company_id)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Email account not found")
+    ok = await relay.send(acc["relay_account_id"], to=to, subject=subject, text=text)
+    if not ok:
+        raise HTTPException(status_code=502, detail="Could not send email")
+    _audit_event(dispatcher, "email.send", "email_accounts", str(account_id))
+    return {"ok": True}
+
+
+@app.post("/api/mailbox/{msg_id}/reply")
+async def mailbox_reply(msg_id: int, request: Request, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    msg = database.get_entity("mailbox_messages", msg_id, company_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Reply body is required")
+    account_id = msg.get("account_id")
+    if not account_id:
+        raise HTTPException(status_code=400, detail="This message is not linked to an email account")
+    acc = database.get_email_account(int(account_id), company_id)
+    if not acc:
+        raise HTTPException(status_code=400, detail="Email account is no longer connected")
+    to_addr = msg.get("from_addr")
+    if not to_addr:
+        raise HTTPException(status_code=400, detail="Original sender address is unknown")
+    ok = await relay.send(
+        acc["relay_account_id"],
+        to=[to_addr],
+        subject=msg.get("subject") or "(no subject)",
+        text=text,
+        thread_id=msg.get("thread_id"),
+        in_reply_to=msg.get("rfc_message_id"),
+        reply_to_message_id=msg.get("external_id"),
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail="Could not send reply")
+    database.update_entity("mailbox_messages", msg_id, company_id, {"is_read": True})
+    _audit_event(dispatcher, "email.reply", "mailbox_messages", str(msg_id))
+    return {"ok": True}
+
+
+@app.get("/api/mailbox/{msg_id}/attachments/{attachment_id}")
+async def mailbox_attachment(msg_id: int, attachment_id: str, authorization: str | None = Header(default=None)):
+    dispatcher = require_dispatcher(authorization)
+    company_id = get_company_id(dispatcher)
+    msg = database.get_entity("mailbox_messages", msg_id, company_id)
+    if not msg or not msg.get("account_id") or not msg.get("external_id"):
+        raise HTTPException(status_code=404, detail="Attachment not available")
+    acc = database.get_email_account(int(msg["account_id"]), company_id)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Email account not found")
+    result = await relay.get_attachment(acc["relay_account_id"], msg["external_id"], attachment_id)
+    if not result:
+        raise HTTPException(status_code=502, detail="Could not download attachment")
+    content, content_type, filename = result
+    safe_name = filename.replace('"', "")
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+    )
+
+
+@app.post("/api/mailbox/{msg_id}/attachments/{attachment_id}/extract")
+async def mailbox_attachment_extract(msg_id: int, attachment_id: str, authorization: str | None = Header(default=None)):
+    """Run an email PDF/image attachment through the ratecon extractor (one-click load prep)."""
+    dispatcher = require_dispatcher(authorization)
+    _enforce_eld_rate_limit(dispatcher["id"], "extract")
+    company_id = get_company_id(dispatcher)
+    msg = database.get_entity("mailbox_messages", msg_id, company_id)
+    if not msg or not msg.get("account_id") or not msg.get("external_id"):
+        raise HTTPException(status_code=404, detail="Attachment not available")
+    acc = database.get_email_account(int(msg["account_id"]), company_id)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Email account not found")
+    if not os.environ.get("GEMINI_API_KEY"):
+        raise HTTPException(status_code=503, detail="Extraction is not configured")
+    result = await relay.get_attachment(acc["relay_account_id"], msg["external_id"], attachment_id)
+    if not result:
+        raise HTTPException(status_code=502, detail="Could not download attachment")
+    content, _content_type, filename = result
+    suffix = Path(filename).suffix.lower() or ".pdf"
+    if suffix not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported attachment type: {suffix}")
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="Attachment exceeds 20MB limit")
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    try:
+        from extractor.llm_extractor import extract, ExtractionError
+        gmaps_key = database.get_global_setting("google_maps_key") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
+        ratecon = await asyncio.to_thread(extract, tmp_path, gmaps_key or None)
+        return {"status": "ok", "data": ratecon.model_dump()}
+    except ValidationError as e:
+        errors = [f"{' > '.join(str(x) for x in err['loc'])}: {err['msg']}" for err in e.errors()]
+        return {"status": "validation_error", "errors": errors}
+    except ExtractionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    finally:
+        os.unlink(tmp_path)
 
 
 if __name__ == "__main__":

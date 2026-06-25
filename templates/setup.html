@@ -134,6 +134,15 @@
     .panel { display: none; }
     .panel.active { display: block; animation: fadeUp 0.2s ease; }
     @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .pwd-wrap { position: relative; }
+    .pwd-wrap input { padding-right: 40px; }
+    .pwd-toggle {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; font-size: 0.95rem;
+      opacity: 0.55; padding: 4px 6px; line-height: 1;
+    }
+    .pwd-toggle:hover { opacity: 0.9; }
   </style>
 </head>
 <body>
@@ -148,8 +157,13 @@
   </a>
 
   <div class="card">
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-login" type="button">Sign In</button>
+      <button class="tab-btn" id="tab-signup" type="button">Sign Up</button>
+    </div>
     <div class="form-body">
-      <div id="panel-login">
+      <!-- LOGIN -->
+      <div class="panel active" id="panel-login">
         <div class="err-banner" id="login-err"></div>
         <div class="field">
           <label>Email</label>
@@ -157,9 +171,39 @@
         </div>
         <div class="field">
           <label>Password</label>
-          <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" />
+          <div class="pwd-wrap">
+            <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" />
+            <button type="button" class="pwd-toggle" data-target="l-pass" aria-label="Show password">👁</button>
+          </div>
         </div>
         <button class="btn-submit" id="login-btn">Sign In</button>
+        <div class="form-footer">New here? <a href="#" id="go-signup">Create an account</a></div>
+      </div>
+
+      <!-- SIGNUP -->
+      <div class="panel" id="panel-signup">
+        <div class="err-banner" id="signup-err"></div>
+        <div class="field">
+          <label>Company name</label>
+          <input type="text" id="s-company" placeholder="Acme Logistics" autocomplete="organization" />
+        </div>
+        <div class="field">
+          <label>Your name</label>
+          <input type="text" id="s-name" placeholder="John Smith" autocomplete="name" />
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="s-email" placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <div class="pwd-wrap">
+            <input type="password" id="s-pass" placeholder="At least 6 characters" autocomplete="new-password" />
+            <button type="button" class="pwd-toggle" data-target="s-pass" aria-label="Show password">👁</button>
+          </div>
+        </div>
+        <button class="btn-submit" id="signup-btn">Create account</button>
+        <div class="form-footer">Already have an account? <a href="#" id="go-login">Sign in</a></div>
       </div>
     </div>
   </div>
@@ -214,6 +258,61 @@
 
     document.getElementById('login-btn').addEventListener('click', doLogin);
     document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+    // ── Tabs (Sign In / Sign Up) ───────────────────────────────────────────
+    function showTab(which) {
+      const isLogin = which === 'login';
+      document.getElementById('tab-login').classList.toggle('active', isLogin);
+      document.getElementById('tab-signup').classList.toggle('active', !isLogin);
+      document.getElementById('panel-login').classList.toggle('active', isLogin);
+      document.getElementById('panel-signup').classList.toggle('active', !isLogin);
+    }
+    document.getElementById('tab-login').addEventListener('click', () => showTab('login'));
+    document.getElementById('tab-signup').addEventListener('click', () => showTab('signup'));
+    document.getElementById('go-signup').addEventListener('click', e => { e.preventDefault(); showTab('signup'); });
+    document.getElementById('go-login').addEventListener('click', e => { e.preventDefault(); showTab('login'); });
+
+    // ── Signup ──────────────────────────────────────────────────────────────
+    async function doRegister() {
+      const company = document.getElementById('s-company').value.trim();
+      const name    = document.getElementById('s-name').value.trim();
+      const email   = document.getElementById('s-email').value.trim();
+      const pass    = document.getElementById('s-pass').value;
+      if (!company || !name || !email || !pass) { showErr('signup-err', 'Please fill in all fields'); return; }
+      if (pass.length < 6) { showErr('signup-err', 'Password must be at least 6 characters'); return; }
+
+      const btn = document.getElementById('signup-btn');
+      btn.disabled = true; btn.textContent = 'Creating account...';
+      try {
+        const r = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company_name: company, name, email, password: pass }),
+        });
+        const data = await r.json();
+        if (!r.ok) { showErr('signup-err', data.detail || 'Could not create account'); return; }
+        localStorage.setItem('st_token', data.token);
+        localStorage.setItem('st_name', data.name);
+        window.location.href = '/app';
+      } catch {
+        showErr('signup-err', 'Connection error. Please try again.');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Create account';
+      }
+    }
+    document.getElementById('signup-btn').addEventListener('click', doRegister);
+    document.getElementById('s-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+
+    // ── Show / hide password ──────────────────────────────────────────────
+    document.querySelectorAll('.pwd-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const inp = document.getElementById(btn.dataset.target);
+        if (!inp) return;
+        const show = inp.type === 'password';
+        inp.type = show ? 'text' : 'password';
+        btn.textContent = show ? '🙈' : '👁';
+      });
+    });
   </script>
 </body>
 </html>

@@ -444,7 +444,11 @@ async def logo_image():
 
 # ── Auth API ──────────────────────────────────────────────────────────────────
 
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 class RegisterBody(BaseModel):
+    company_name: str
     name: str
     email: str
     password: str
@@ -468,17 +472,24 @@ class CreateUserBody(BaseModel):
 
 @app.post("/api/register")
 async def api_register(body: RegisterBody):
+    """Self-serve signup: creates a new company and its first admin user."""
+    company_name = body.company_name.strip()
     name = body.name.strip()
     email = body.email.strip().lower()
+    if not company_name:
+        raise HTTPException(status_code=400, detail="Company name is required")
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required")
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="Invalid email address")
+        raise HTTPException(status_code=400, detail="Your name is required")
+    if not EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Enter a valid email (e.g. you@company.com)")
     if len(body.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if database.get_dispatcher_by_email(email):
         raise HTTPException(status_code=409, detail="This email is already registered")
-    dispatcher = database.create_dispatcher(name, email, body.password)
+    company = database.create_company(company_name)
+    dispatcher = database.create_company_user(
+        company["id"], name, email, body.password, role="admin"
+    )
     return {"token": dispatcher["token"], "name": dispatcher["name"], "role": dispatcher["role"]}
 
 
@@ -509,6 +520,22 @@ async def api_login(request: Request, body: LoginBody):
 async def api_me(authorization: str | None = Header(default=None)):
     d = require_dispatcher(authorization)
     return {"id": d["id"], "name": d["name"], "role": d.get("role", "user"), "email": d.get("email", "")}
+
+
+@app.get("/api/onboarding/status")
+async def api_onboarding_status(authorization: str | None = Header(default=None)):
+    """First-run checklist state for the dashboard (admin onboarding)."""
+    d = require_dispatcher(authorization)
+    company_id = d.get("company_id")
+    if not company_id:
+        return {"company_info": False, "eld": False, "email": False, "team": False, "first_load": False}
+    return {
+        "company_info": database.get_company_info(d["id"]) is not None,
+        "eld": len(database.get_eld_configs(d["id"])) > 0,
+        "email": len(database.list_email_accounts(company_id)) > 0,
+        "team": len(database.get_company_dispatchers(company_id)) > 1,
+        "first_load": database.company_has_loads(company_id),
+    }
 
 
 @app.get("/api/health")

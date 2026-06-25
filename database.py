@@ -1319,6 +1319,18 @@ def get_company(company_id: int) -> dict | None:
         return dict(row) if row else None
 
 
+def company_has_loads(company_id: int) -> bool:
+    """True if any dispatcher in the company has created at least one load."""
+    with get_conn() as conn:
+        conn.execute(
+            """SELECT 1 FROM loads l
+               JOIN dispatchers d ON l.dispatcher_id = d.id
+               WHERE d.company_id = %s LIMIT 1""",
+            (company_id,),
+        )
+        return conn.fetchone() is not None
+
+
 def update_company(company_id: int, name: str) -> bool:
     with get_conn() as conn:
         conn.execute("UPDATE companies SET name = %s WHERE id = %s", (name, company_id))

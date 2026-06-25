@@ -5,7 +5,7 @@ import re
 import secrets
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 import psycopg2
@@ -447,6 +447,33 @@ def init_db():
                 dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
                 created_at TIMESTAMP NOT NULL,
                 expires_at TIMESTAMP NOT NULL
+            )
+        """)
+
+        # ── Real Telegram (MTProto) — connected personal accounts + login state ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS telegram_accounts (
+                id SERIAL PRIMARY KEY,
+                company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                dispatcher_id INTEGER NOT NULL UNIQUE REFERENCES dispatchers(id) ON DELETE CASCADE,
+                tg_user_id BIGINT,
+                phone TEXT,
+                username TEXT,
+                name TEXT,
+                session_enc TEXT NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMP NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS telegram_logins (
+                login_id TEXT PRIMARY KEY,
+                dispatcher_id INTEGER NOT NULL REFERENCES dispatchers(id) ON DELETE CASCADE,
+                method TEXT NOT NULL,
+                phone TEXT,
+                phone_code_hash TEXT,
+                session_enc TEXT,
+                created_at TIMESTAMP NOT NULL
             )
         """)
 
@@ -917,6 +944,79 @@ def delete_group(group_id: int, company_id: int) -> bool:
             (group_id, company_id),
         )
         return conn.rowcount > 0
+
+
+# ── Real Telegram (MTProto) accounts + transient login state ──────────────────
+
+def get_tg_account(dispatcher_id: int) -> dict | None:
+    with get_conn() as conn:
+        conn.execute("SELECT * FROM telegram_accounts WHERE dispatcher_id = %s", (dispatcher_id,))
+        row = conn.fetchone()
+        return dict(row) if row else None
+
+
+def upsert_tg_account(company_id: int, dispatcher_id: int, session_enc: str, me: dict) -> dict:
+    now = datetime.now(timezone.utc)
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO telegram_accounts
+                 (company_id, dispatcher_id, tg_user_id, phone, username, name, session_enc, is_active, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE, %s)
+               ON CONFLICT (dispatcher_id) DO UPDATE
+                 SET tg_user_id = EXCLUDED.tg_user_id, phone = EXCLUDED.phone,
+                     username = EXCLUDED.username, name = EXCLUDED.name,
+                     session_enc = EXCLUDED.session_enc, is_active = TRUE
+               RETURNING *""",
+            (company_id, dispatcher_id, me.get("tg_user_id"), me.get("phone"),
+             me.get("username"), me.get("name"), session_enc, now),
+        )
+        return dict(conn.fetchone())
+
+
+def delete_tg_account(dispatcher_id: int) -> dict | None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM telegram_accounts WHERE dispatcher_id = %s RETURNING *", (dispatcher_id,))
+        row = conn.fetchone()
+        return dict(row) if row else None
+
+
+def create_tg_login(dispatcher_id: int, method: str, *, phone: str | None = None,
+                    phone_code_hash: str | None = None, session_enc: str | None = None) -> str:
+    login_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    with get_conn() as conn:
+        # one pending login per dispatcher; clear stale ones first
+        conn.execute("DELETE FROM telegram_logins WHERE dispatcher_id = %s OR created_at < %s",
+                     (dispatcher_id, now - timedelta(minutes=10)))
+        conn.execute(
+            """INSERT INTO telegram_logins (login_id, dispatcher_id, method, phone, phone_code_hash, session_enc, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (login_id, dispatcher_id, method, phone, phone_code_hash, session_enc, now),
+        )
+    return login_id
+
+
+def get_tg_login(login_id: str, dispatcher_id: int) -> dict | None:
+    with get_conn() as conn:
+        conn.execute(
+            "SELECT * FROM telegram_logins WHERE login_id = %s AND dispatcher_id = %s",
+            (login_id, dispatcher_id),
+        )
+        row = conn.fetchone()
+        return dict(row) if row else None
+
+
+def update_tg_login(login_id: str, *, phone_code_hash: str | None = None, session_enc: str | None = None) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE telegram_logins SET phone_code_hash = COALESCE(%s, phone_code_hash), session_enc = COALESCE(%s, session_enc) WHERE login_id = %s",
+            (phone_code_hash, session_enc, login_id),
+        )
+
+
+def delete_tg_login(login_id: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM telegram_logins WHERE login_id = %s", (login_id,))
 
 
 # ── Loads ─────────────────────────────────────────────────────────────────────

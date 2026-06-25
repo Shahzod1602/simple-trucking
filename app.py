@@ -26,6 +26,7 @@ import bot_poller
 import telegram as tg
 import routing
 from relay import relay
+from tg_account import tg as tgacct
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -3183,6 +3184,190 @@ async def mailbox_attachment_extract(msg_id: int, attachment_id: str, authorizat
         raise HTTPException(status_code=503, detail=str(e))
     finally:
         os.unlink(tmp_path)
+
+
+# ── Real Telegram (MTProto) — "My Telegram" tab ───────────────────────────────
+
+def _tg_account_view(acc: dict | None) -> dict | None:
+    if not acc:
+        return None
+    return {"name": acc.get("name"), "username": acc.get("username"), "phone": acc.get("phone")}
+
+
+@app.get("/api/tg/status")
+async def tg_status(authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    acc = database.get_tg_account(d["id"])
+    return {"configured": tgacct.configured, "connected": bool(acc), "account": _tg_account_view(acc)}
+
+
+@app.post("/api/tg/login/qr/start")
+async def tg_qr_start(authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    if not tgacct.configured:
+        raise HTTPException(status_code=503, detail="Telegram is not configured on the server")
+    try:
+        res = await tgacct.qr_start()
+    except Exception:
+        logger.exception("tg qr_start failed")
+        raise HTTPException(status_code=502, detail="Could not start Telegram login")
+    login_id = database.create_tg_login(d["id"], "qr", session_enc=res["session"])
+    return {"login_id": login_id, "qr_url": res["qr_url"]}
+
+
+@app.get("/api/tg/login/qr/poll")
+async def tg_qr_poll(login_id: str = Query(...), authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    lg = database.get_tg_login(login_id, d["id"])
+    if not lg:
+        raise HTTPException(status_code=404, detail="Login session expired — start again")
+    try:
+        res = await tgacct.qr_check(lg["session_enc"])
+    except Exception:
+        logger.exception("tg qr_check failed")
+        return {"status": "pending"}
+    if res.get("status") == "ok":
+        database.upsert_tg_account(get_company_id(d), d["id"], res["session"], res["me"])
+        database.delete_tg_login(login_id)
+        _audit_event(d, "tg.connect", "telegram_accounts", metadata={"method": "qr"})
+        return {"status": "ok", "account": res["me"]}
+    return {"status": "pending"}
+
+
+@app.post("/api/tg/login/phone/start")
+async def tg_phone_start(request: Request, authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    if not tgacct.configured:
+        raise HTTPException(status_code=503, detail="Telegram is not configured on the server")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    phone = (body.get("phone") or "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Phone number is required")
+    try:
+        res = await tgacct.send_code(phone)
+    except Exception:
+        logger.exception("tg send_code failed")
+        raise HTTPException(status_code=502, detail="Could not send the login code")
+    login_id = database.create_tg_login(
+        d["id"], "phone", phone=phone, phone_code_hash=res["phone_code_hash"], session_enc=res["session"]
+    )
+    return {"login_id": login_id}
+
+
+@app.post("/api/tg/login/phone/code")
+async def tg_phone_code(request: Request, authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    login_id = body.get("login_id") or ""
+    code = (body.get("code") or "").strip()
+    lg = database.get_tg_login(login_id, d["id"])
+    if not lg:
+        raise HTTPException(status_code=404, detail="Login session expired — start again")
+    if not code:
+        raise HTTPException(status_code=400, detail="Code is required")
+    try:
+        res = await tgacct.sign_in_code(lg["session_enc"], lg["phone"], code, lg["phone_code_hash"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    if res.get("status") == "2fa":
+        database.update_tg_login(login_id, session_enc=res["session"])
+        return {"status": "2fa"}
+    database.upsert_tg_account(get_company_id(d), d["id"], res["session"], res["me"])
+    database.delete_tg_login(login_id)
+    _audit_event(d, "tg.connect", "telegram_accounts", metadata={"method": "phone"})
+    return {"status": "ok", "account": res["me"]}
+
+
+@app.post("/api/tg/login/phone/password")
+async def tg_phone_password(request: Request, authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    login_id = body.get("login_id") or ""
+    password = body.get("password") or ""
+    lg = database.get_tg_login(login_id, d["id"])
+    if not lg:
+        raise HTTPException(status_code=404, detail="Login session expired — start again")
+    if not password:
+        raise HTTPException(status_code=400, detail="2FA password is required")
+    try:
+        res = await tgacct.sign_in_password(lg["session_enc"], password)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Incorrect 2FA password")
+    database.upsert_tg_account(get_company_id(d), d["id"], res["session"], res["me"])
+    database.delete_tg_login(login_id)
+    _audit_event(d, "tg.connect", "telegram_accounts", metadata={"method": "phone-2fa"})
+    return {"status": "ok", "account": res["me"]}
+
+
+@app.post("/api/tg/disconnect")
+async def tg_disconnect(authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    acc = database.get_tg_account(d["id"])
+    if acc:
+        try:
+            await tgacct.logout(acc["session_enc"])
+        except Exception:
+            pass
+        database.delete_tg_account(d["id"])
+        _audit_event(d, "tg.disconnect", "telegram_accounts")
+    return {"ok": True}
+
+
+@app.get("/api/tg/dialogs")
+async def tg_dialogs(authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    acc = database.get_tg_account(d["id"])
+    if not acc:
+        raise HTTPException(status_code=400, detail="Telegram is not connected")
+    try:
+        return {"dialogs": await tgacct.list_dialogs(acc["session_enc"])}
+    except Exception:
+        logger.exception("tg dialogs failed")
+        raise HTTPException(status_code=502, detail="Could not load chats — you may need to reconnect Telegram")
+
+
+@app.get("/api/tg/history")
+async def tg_history(chat_id: int = Query(...), limit: int = Query(30), authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    acc = database.get_tg_account(d["id"])
+    if not acc:
+        raise HTTPException(status_code=400, detail="Telegram is not connected")
+    try:
+        return {"messages": await tgacct.get_history(acc["session_enc"], chat_id, min(limit, 80))}
+    except Exception:
+        logger.exception("tg history failed")
+        raise HTTPException(status_code=502, detail="Could not load this chat")
+
+
+@app.post("/api/tg/send")
+async def tg_send(request: Request, authorization: str | None = Header(default=None)):
+    d = require_dispatcher(authorization)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    chat_id = body.get("chat_id")
+    text = (body.get("text") or "").strip()
+    if not chat_id or not text:
+        raise HTTPException(status_code=400, detail="chat_id and text are required")
+    acc = database.get_tg_account(d["id"])
+    if not acc:
+        raise HTTPException(status_code=400, detail="Telegram is not connected")
+    try:
+        await tgacct.send(acc["session_enc"], int(chat_id), text)
+        return {"ok": True}
+    except Exception:
+        logger.exception("tg send failed")
+        raise HTTPException(status_code=502, detail="Could not send the message")
 
 
 if __name__ == "__main__":

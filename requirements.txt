@@ -7,3 +7,5 @@ python-multipart>=0.0.9
 httpx>=0.27.0
 reportlab>=4.0.0
 psycopg2-binary>=2.9.9
+telethon>=1.36
+cryptography>=42.0

@@ -581,7 +581,17 @@
 
     /* ── Telegram Page ── */
     #page-telegram { padding: 0 !important; overflow: hidden; height: calc(100vh - 56px); }
-    #page-telegram.active { display: flex !important; }
+    #page-telegram.active { display: flex !important; flex-direction: column; }
+    .tg-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--card); }
+    .tg-tab { padding: 7px 16px; border: none; background: none; cursor: pointer; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 0.85rem; color: var(--text-muted); border-radius: 6px; }
+    .tg-tab.active { color: var(--primary); background: var(--primary-light); }
+    .tg-panes { flex: 1; overflow: hidden; }
+    .tg-pane { height: 100%; }
+    #tgm-root { height: 100%; }
+    .tg-msg-in { align-self: flex-start; background: var(--card-inner); color: var(--text); border-bottom-left-radius: 4px; }
+    .tg-msg-meta { font-size: 0.68rem; opacity: 0.6; margin-bottom: 2px; }
+    .tgm-connect { max-width: 420px; margin: 40px auto; padding: 24px; text-align: center; }
+    .tgm-connect .field { text-align: left; margin-bottom: 12px; }
     #tg-layout { display: flex; height: 100%; overflow: hidden; }
     #tg-groups-col { width: 210px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--card-inner); }
     #tg-groups-header { padding: 14px 15px 12px; border-bottom: 1px solid var(--border); font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 1rem; letter-spacing: 0.5px; text-transform: uppercase; }
@@ -1425,32 +1435,43 @@
 
       <!-- ── Telegram ── -->
       <div class="page" id="page-telegram">
-        <div id="tg-layout">
-          <div id="tg-groups-col">
-            <div id="tg-groups-header">
-              <span>Telegram</span>
+        <div class="tg-tabs">
+          <button class="tg-tab active" data-tgtab="bot" type="button">Bot</button>
+          <button class="tg-tab" data-tgtab="mine" type="button">My Telegram</button>
+        </div>
+        <div class="tg-panes">
+          <div id="tg-pane-bot" class="tg-pane">
+            <div id="tg-layout">
+              <div id="tg-groups-col">
+                <div id="tg-groups-header">
+                  <span>Driver groups</span>
+                </div>
+                <div id="tg-group-list"></div>
+              </div>
+              <div id="tg-chat-col">
+                <div id="tg-placeholder">
+                  <div style="font-size:2.5rem;margin-bottom:12px;">💬</div>
+                  <div style="font-weight:600;margin-bottom:6px;">Select a group</div>
+                  <div style="font-size:0.83rem;">Choose a driver group to send messages</div>
+                </div>
+                <div id="tg-chat-area" style="display:none;flex-direction:column;height:100%;">
+                  <div id="tg-chat-header">
+                    <div id="tg-avatar-big"></div>
+                    <span id="tg-chat-title"></span>
+                  </div>
+                  <div id="tg-messages"></div>
+                  <div id="tg-input-row">
+                    <textarea id="tg-msg-input" placeholder="Write a message..." rows="1"></textarea>
+                    <button id="tg-send-btn">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div id="tg-group-list"></div>
           </div>
-          <div id="tg-chat-col">
-            <div id="tg-placeholder">
-              <div style="font-size:2.5rem;margin-bottom:12px;">💬</div>
-              <div style="font-weight:600;margin-bottom:6px;">Select a group</div>
-              <div style="font-size:0.83rem;">Choose a driver group to send messages</div>
-            </div>
-            <div id="tg-chat-area" style="display:none;flex-direction:column;height:100%;">
-              <div id="tg-chat-header">
-                <div id="tg-avatar-big"></div>
-                <span id="tg-chat-title"></span>
-              </div>
-              <div id="tg-messages"></div>
-              <div id="tg-input-row">
-                <textarea id="tg-msg-input" placeholder="Write a message..." rows="1"></textarea>
-                <button id="tg-send-btn">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
-              </div>
-            </div>
+          <div id="tg-pane-mine" class="tg-pane" style="display:none;">
+            <div id="tgm-root"></div>
           </div>
         </div>
       </div>
@@ -2136,8 +2157,10 @@ Rate: {{total_rate_usd}}
       if (page === 'analytics') loadAnalyticsPage();
       if (page === 'map')       loadMapPage();
       if (page === 'trucks')    loadTrucksPage();
-      if (page === 'telegram')  loadTgGroups();
+      if (page === 'telegram')  loadTelegramSection();
       if (page === 'kpi')       loadKpiPage();
+      // Stop Telegram (My Telegram) polling when leaving the Telegram page.
+      if (page !== 'telegram') { try { _stopTgmPolls(); } catch {} }
       // Auto-refresh the mailbox only while it's the active page.
       if (_mailboxPollTimer) { clearInterval(_mailboxPollTimer); _mailboxPollTimer = null; }
       if (page === 'mailbox') {
@@ -6490,6 +6513,242 @@ Rate: {{total_rate_usd}}
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTgMessage(); }
     });
     document.getElementById('tg-send-btn').addEventListener('click', sendTgMessage);
+
+    // ── Telegram section: Bot | My Telegram ───────────────────────────────
+    let _tgTab = 'bot';
+    let _tgmPoll = null, _tgQrPoll = null, _tgLoginId = null, _tgmActiveChat = null, _tgmDialogs = [];
+
+    function _stopTgmPolls() {
+      if (_tgmPoll) { clearInterval(_tgmPoll); _tgmPoll = null; }
+      if (_tgQrPoll) { clearInterval(_tgQrPoll); _tgQrPoll = null; }
+    }
+    function loadTelegramSection() { switchTgTab(_tgTab); }
+    function switchTgTab(tab) {
+      _tgTab = tab;
+      document.querySelectorAll('.tg-tab').forEach(b => b.classList.toggle('active', b.dataset.tgtab === tab));
+      document.getElementById('tg-pane-bot').style.display = tab === 'bot' ? '' : 'none';
+      document.getElementById('tg-pane-mine').style.display = tab === 'mine' ? '' : 'none';
+      _stopTgmPolls();
+      if (tab === 'bot') loadTgGroups();
+      else loadMyTelegram();
+    }
+    document.querySelectorAll('.tg-tab').forEach(b => b.addEventListener('click', () => switchTgTab(b.dataset.tgtab)));
+
+    function _ensureQrLib() {
+      return new Promise(resolve => {
+        if (window.QRCode) return resolve();
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@master/qrcode.min.js';
+        s.onload = () => resolve(); s.onerror = () => resolve();
+        document.head.appendChild(s);
+      });
+    }
+
+    async function loadMyTelegram() {
+      _stopTgmPolls();
+      const root = document.getElementById('tgm-root');
+      root.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Loading…</div>';
+      let st;
+      try { st = await fetch('/api/tg/status', { headers: authH() }).then(r => r.json()); }
+      catch { root.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Failed to load</div>'; return; }
+      if (!st.configured) {
+        root.innerHTML = `<div class="tgm-connect card"><div style="font-size:2rem;margin-bottom:10px;">📱</div>
+          <div style="font-weight:700;margin-bottom:6px;">My Telegram</div>
+          <div style="font-size:0.85rem;color:var(--text-muted);">Real Telegram isn't configured on the server yet (TG_API_ID / TG_API_HASH).</div></div>`;
+        return;
+      }
+      if (!st.connected) { renderTgConnect(); return; }
+      renderMyTgChat(st.account);
+    }
+
+    function renderTgConnect() {
+      const root = document.getElementById('tgm-root');
+      root.innerHTML = `<div class="tgm-connect card">
+        <div style="font-size:2rem;margin-bottom:8px;">📱</div>
+        <div style="font-weight:700;margin-bottom:4px;">Connect your Telegram</div>
+        <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:18px;">See and reply to your real Telegram chats inside the platform.</div>
+        <div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px;">
+          <button class="btn-blue" id="tgm-qr-btn">Scan QR code</button>
+          <button class="btn-outline" id="tgm-phone-btn">Use phone number</button>
+        </div>
+        <div id="tgm-connect-body"></div>
+      </div>`;
+      document.getElementById('tgm-qr-btn').onclick = startTgQr;
+      document.getElementById('tgm-phone-btn').onclick = renderTgPhoneForm;
+    }
+
+    async function startTgQr() {
+      const body = document.getElementById('tgm-connect-body');
+      body.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">Generating QR…</div>';
+      let res;
+      try { res = await fetch('/api/tg/login/qr/start', { method: 'POST', headers: authH() }).then(r => r.json()); }
+      catch { body.innerHTML = '<div style="color:#ef4444;">Could not start. Try again.</div>'; return; }
+      if (!res.login_id) { body.innerHTML = `<div style="color:#ef4444;">${esc(res.detail || 'Failed')}</div>`; return; }
+      _tgLoginId = res.login_id;
+      body.innerHTML = `<div id="tgm-qr" style="display:flex;justify-content:center;padding:10px;background:#fff;border-radius:10px;width:fit-content;margin:0 auto;"></div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:10px;">Telegram → Settings → Devices → Link Desktop Device → scan. (2FA accounts: use phone login.)</div>`;
+      await _ensureQrLib();
+      try { new QRCode(document.getElementById('tgm-qr'), { text: res.qr_url, width: 200, height: 200 }); }
+      catch { document.getElementById('tgm-qr').textContent = res.qr_url; }
+      if (_tgQrPoll) clearInterval(_tgQrPoll);
+      _tgQrPoll = setInterval(async () => {
+        try {
+          const p = await fetch('/api/tg/login/qr/poll?login_id=' + encodeURIComponent(_tgLoginId), { headers: authH() }).then(r => r.json());
+          if (p.status === 'ok') { _stopTgmPolls(); toast('Telegram connected', 'success'); loadMyTelegram(); }
+        } catch {}
+      }, 3000);
+    }
+
+    function renderTgPhoneForm() {
+      const body = document.getElementById('tgm-connect-body');
+      body.innerHTML = `<div class="field"><label>Phone (with country code)</label><input id="tgm-phone" type="tel" placeholder="+1 555 123 4567"/></div>
+        <button class="btn-blue" id="tgm-phone-send" style="width:100%;">Send code</button>
+        <div id="tgm-phone-step" style="margin-top:12px;"></div>`;
+      document.getElementById('tgm-phone-send').onclick = tgPhoneSendCode;
+    }
+    async function tgPhoneSendCode() {
+      const phone = document.getElementById('tgm-phone').value.trim();
+      if (!phone) return;
+      const btn = document.getElementById('tgm-phone-send'); btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const r = await fetch('/api/tg/login/phone/start', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+        const res = await r.json();
+        if (!r.ok) { toast(res.detail || 'Failed', 'error'); return; }
+        _tgLoginId = res.login_id;
+        document.getElementById('tgm-phone-step').innerHTML = `<div class="field"><label>Code from Telegram</label><input id="tgm-code" inputmode="numeric" placeholder="12345"/></div>
+          <button class="btn-blue" id="tgm-code-btn" style="width:100%;">Verify</button>`;
+        document.getElementById('tgm-code-btn').onclick = tgPhoneVerifyCode;
+        document.getElementById('tgm-code').focus();
+      } catch { toast('Could not send code', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Send code'; }
+    }
+    async function tgPhoneVerifyCode() {
+      const code = document.getElementById('tgm-code').value.trim();
+      if (!code) return;
+      const btn = document.getElementById('tgm-code-btn'); btn.disabled = true; btn.textContent = 'Verifying…';
+      try {
+        const r = await fetch('/api/tg/login/phone/code', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ login_id: _tgLoginId, code }) });
+        const res = await r.json();
+        if (!r.ok) { toast(res.detail || 'Invalid code', 'error'); return; }
+        if (res.status === '2fa') {
+          document.getElementById('tgm-phone-step').innerHTML = `<div class="field"><label>2FA password</label><div class="pwd-wrap"><input id="tgm-pass" type="password" placeholder="Your Telegram password"/><button type="button" class="pwd-toggle" data-target="tgm-pass">👁</button></div></div>
+            <button class="btn-blue" id="tgm-pass-btn" style="width:100%;">Sign in</button>`;
+          document.getElementById('tgm-pass-btn').onclick = tgPhonePassword;
+          document.getElementById('tgm-pass').focus();
+          return;
+        }
+        toast('Telegram connected', 'success'); loadMyTelegram();
+      } catch { toast('Verification failed', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Verify'; }
+    }
+    async function tgPhonePassword() {
+      const password = document.getElementById('tgm-pass').value;
+      if (!password) return;
+      const btn = document.getElementById('tgm-pass-btn'); btn.disabled = true; btn.textContent = 'Signing in…';
+      try {
+        const r = await fetch('/api/tg/login/phone/password', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ login_id: _tgLoginId, password }) });
+        const res = await r.json();
+        if (!r.ok) { toast(res.detail || 'Wrong password', 'error'); return; }
+        toast('Telegram connected', 'success'); loadMyTelegram();
+      } catch { toast('Sign-in failed', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Sign in'; }
+    }
+
+    function renderMyTgChat(account) {
+      const root = document.getElementById('tgm-root');
+      root.innerHTML = `<div id="tg-layout">
+        <div id="tg-groups-col">
+          <div id="tg-groups-header" style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(account?.name || 'My Telegram')}</span>
+            <button class="btn-outline" style="padding:3px 8px;font-size:0.7rem;flex-shrink:0;" onclick="disconnectMyTg()">Logout</button>
+          </div>
+          <div id="tgm-dialogs" style="flex:1;overflow-y:auto;padding:4px 0;"><div style="padding:14px;color:var(--text-muted);font-size:0.82rem;">Loading…</div></div>
+        </div>
+        <div id="tg-chat-col">
+          <div id="tgm-placeholder" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-muted);font-size:0.88rem;text-align:center;">
+            <div style="font-size:2.5rem;margin-bottom:12px;">💬</div><div>Select a chat</div>
+          </div>
+          <div id="tgm-chat-area" style="display:none;flex-direction:column;height:100%;">
+            <div id="tg-chat-header"><div id="tgm-avatar-big" class="tg-avatar"></div><span id="tgm-chat-title"></span></div>
+            <div id="tgm-messages" style="flex:1;overflow-y:auto;padding:14px 17px;display:flex;flex-direction:column;gap:7px;background:var(--bg);"></div>
+            <div id="tg-input-row">
+              <textarea id="tgm-input" placeholder="Write a message..." rows="1"></textarea>
+              <button id="tgm-send" style="width:38px;height:38px;border-radius:50%;border:none;background:var(--primary);color:#fff;cursor:pointer;flex-shrink:0;font-size:1.1rem;">→</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+      document.getElementById('tgm-send').onclick = sendMyTgMessage;
+      document.getElementById('tgm-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMyTgMessage(); } });
+      loadTgDialogs();
+    }
+
+    async function loadTgDialogs() {
+      const list = document.getElementById('tgm-dialogs');
+      if (!list) return;
+      try {
+        const d = await fetch('/api/tg/dialogs', { headers: authH() }).then(r => r.json());
+        _tgmDialogs = d.dialogs || [];
+      } catch { list.innerHTML = '<div style="padding:14px;color:#ef4444;font-size:0.82rem;">Could not load chats. Try reconnecting.</div>'; return; }
+      list.innerHTML = _tgmDialogs.map(c => `<div class="tg-group-item ${_tgmActiveChat === c.chat_id ? 'active' : ''}" onclick="openTgChat(${c.chat_id})">
+        <div class="tg-avatar">${esc(((c.title || '?')[0] || '?').toUpperCase())}</div>
+        <div style="overflow:hidden;flex:1;">
+          <div class="tg-group-name">${esc(c.title || 'Chat')} ${c.unread ? `<span style="background:var(--primary);color:#fff;border-radius:10px;padding:0 6px;font-size:0.65rem;">${c.unread}</span>` : ''}</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.last_text || '')}</div>
+        </div>
+      </div>`).join('') || '<div style="padding:14px;color:var(--text-muted);font-size:0.82rem;">No chats</div>';
+    }
+
+    async function openTgChat(chatId) {
+      _tgmActiveChat = chatId;
+      const c = _tgmDialogs.find(x => x.chat_id === chatId);
+      loadTgDialogs();
+      document.getElementById('tgm-placeholder').style.display = 'none';
+      document.getElementById('tgm-chat-area').style.display = 'flex';
+      document.getElementById('tgm-chat-title').textContent = c?.title || '';
+      document.getElementById('tgm-avatar-big').textContent = ((c?.title || '?')[0] || '?').toUpperCase();
+      document.getElementById('tgm-messages').innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;margin:auto;">Loading…</div>';
+      await refreshTgMessages();
+      document.getElementById('tgm-input').focus();
+      if (_tgmPoll) clearInterval(_tgmPoll);
+      _tgmPoll = setInterval(refreshTgMessages, 20000);
+    }
+
+    async function refreshTgMessages() {
+      if (!_tgmActiveChat) return;
+      let msgs = [];
+      try { msgs = (await fetch('/api/tg/history?chat_id=' + _tgmActiveChat, { headers: authH() }).then(r => r.json())).messages || []; }
+      catch { return; }
+      const box = document.getElementById('tgm-messages');
+      if (!box) return;
+      const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+      box.innerHTML = msgs.map(m => `<div class="tg-msg ${m.out ? 'tg-msg-out' : 'tg-msg-in'}">${(!m.out && m.sender) ? `<div class="tg-msg-meta">${esc(m.sender)}</div>` : ''}${esc(m.text || '')}</div>`).join('')
+        || '<div style="color:var(--text-muted);font-size:0.82rem;margin:auto;">No messages</div>';
+      if (atBottom) box.scrollTop = box.scrollHeight;
+    }
+
+    async function sendMyTgMessage() {
+      const input = document.getElementById('tgm-input');
+      const text = input.value.trim();
+      if (!text || !_tgmActiveChat) return;
+      const btn = document.getElementById('tgm-send'); btn.disabled = true;
+      try {
+        const r = await fetch('/api/tg/send', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: _tgmActiveChat, text }) });
+        if (!r.ok) throw new Error((await r.json()).detail || 'Failed');
+        input.value = '';
+        await refreshTgMessages();
+      } catch (e) { toast(e.message || 'Could not send', 'error'); }
+      finally { btn.disabled = false; }
+    }
+
+    async function disconnectMyTg() {
+      if (!await confirmModal('Disconnect your Telegram account?')) return;
+      _stopTgmPolls();
+      try { await fetch('/api/tg/disconnect', { method: 'POST', headers: authH() }); } catch {}
+      _tgmActiveChat = null;
+      toast('Telegram disconnected', 'success');
+      loadMyTelegram();
+    }
 
     // ── Init ──────────────────────────────────────────────────────────────
     initUser().then(() => {

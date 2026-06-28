@@ -2460,41 +2460,42 @@ Rate: {{total_rate_usd}}
         + `<div class="empty-desc" style="margin-top:4px;color:var(--text-muted);font-size:0.86rem;">This module is on the SimpleTrucking roadmap — coming next.</div>`
         + `${btn}</div></div>`;
     }
-    // ── Per-user navigation customization (show/hide + reorder per section) ──
+    // ── Per-user navigation customization (show/hide + reorder + move across sections) ──
     const _NAV_SKIP = ['kpi', 'users', 'admin', '__customize'];
-    let _NAV_DEFAULT_ORDER = [];
+    let _NAV_DEFAULT_LAYOUT = {};
     function _navPrefsHidden() { try { return new Set(JSON.parse(localStorage.getItem('st_nav_hidden') || '[]')); } catch { return new Set(); } }
-    function _navOrder() { try { return JSON.parse(localStorage.getItem('st_nav_order') || '[]'); } catch { return []; } }
-    function _reorderNav(order) {
-      if (!order || !order.length) return;
-      const idx = {}; order.forEach((p, i) => { idx[p] = i; });
+    function _navLayout() { try { return JSON.parse(localStorage.getItem('st_nav_layout') || 'null'); } catch { return null; } }
+    function applyNavLayout(layout) {
+      if (!layout) return;
       const nav = document.querySelector('.sidebar-nav');
-      [...nav.querySelectorAll('.nav-label')].forEach(label => {
-        const items = []; let n = label.nextElementSibling;
-        while (n && !n.classList.contains('nav-label')) { if (n.classList.contains('nav-item')) items.push(n); n = n.nextElementSibling; }
-        let after = label.nextElementSibling;
-        while (after && !after.classList.contains('nav-label')) after = after.nextElementSibling;
-        const sorted = items.slice().sort((a, b) => ((a.dataset.page in idx ? idx[a.dataset.page] : 9999) - (b.dataset.page in idx ? idx[b.dataset.page] : 9999)));
-        items.forEach(it => it.remove());
-        sorted.forEach(it => nav.insertBefore(it, after));
+      const elByPage = {};
+      nav.querySelectorAll('.nav-item').forEach(b => { if (b.dataset.page) elByPage[b.dataset.page] = b; });
+      // Move each section's items to sit right after its label, in saved order.
+      nav.querySelectorAll('.nav-label').forEach(label => {
+        const pages = layout[label.textContent.trim()];
+        if (!pages) return;
+        let ref = label;
+        pages.forEach(p => { const el = elByPage[p]; if (el && !_NAV_SKIP.includes(p)) { ref.after(el); ref = el; } });
       });
+      // Keep role-gated items + Customize pinned at the very end.
+      _NAV_SKIP.forEach(p => { const el = elByPage[p]; if (el) nav.appendChild(el); });
     }
     function applyNavPrefs() {
-      _reorderNav(_navOrder());
+      applyNavLayout(_navLayout());
       const hidden = _navPrefsHidden();
       document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => {
         const p = b.dataset.page;
         if (!p || _NAV_SKIP.includes(p)) return;
         b.classList.toggle('nav-pref-hidden', hidden.has(p));
       });
-      // Hide a section label when it has items but none are visible.
+      // Hide a section label when it has no visible items.
       document.querySelectorAll('.sidebar-nav .nav-label').forEach(label => {
-        let n = label.nextElementSibling, items = 0, visible = 0;
+        let n = label.nextElementSibling, visible = 0;
         while (n && !n.classList.contains('nav-label')) {
-          if (n.classList.contains('nav-item')) { items++; if (!n.classList.contains('nav-pref-hidden') && !n.hasAttribute('hidden')) visible++; }
+          if (n.classList.contains('nav-item') && !n.classList.contains('nav-pref-hidden') && !n.hasAttribute('hidden')) visible++;
           n = n.nextElementSibling;
         }
-        label.style.display = (items > 0 && visible === 0) ? 'none' : '';
+        label.style.display = visible === 0 ? 'none' : '';
       });
     }
     function _navDragAfter(container, y) {
@@ -2515,43 +2516,47 @@ Rate: {{total_rate_usd}}
         }
       });
       const row = (it) => `<div class="nav-cust-row" draggable="true" data-page="${esc(it.page)}"><span class="nav-cust-handle">⠿</span><input type="checkbox" data-page="${esc(it.page)}" ${hidden.has(it.page) ? '' : 'checked'} style="accent-color:var(--primary);width:16px;height:16px;flex-shrink:0;"><span class="nav-cust-label">${esc(it.label)}</span></div>`;
-      const body = groups.filter(g => g.items.length).map(g => `<div style="margin-bottom:12px;"><div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:4px;">${esc(g.name)}</div><div class="nav-cust-group">${g.items.map(row).join('')}</div></div>`).join('');
+      const body = groups.map(g => `<div class="nav-cust-block" data-section="${esc(g.name)}" style="margin-bottom:12px;"><div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:4px;">${esc(g.name)}</div><div class="nav-cust-group" style="min-height:8px;">${g.items.map(row).join('')}</div></div>`).join('');
       const ov = document.createElement('div');
       ov.className = 'overlay'; ov.id = 'nav-customizer'; ov.style.display = 'flex';
       ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
       ov.innerHTML = `<div class="modal" style="max-width:460px;" role="dialog" aria-modal="true">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><h2 style="font-size:1.1rem;font-weight:800;">Customize navigation</h2><button onclick="document.getElementById('nav-customizer').remove()" style="background:none;border:none;font-size:1.2rem;color:var(--text-muted);cursor:pointer;line-height:1;">&times;</button></div>
-        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;">Toggle sections on/off, and drag <span style="font-family:monospace;">⠿</span> to reorder them — saved just for you.</p>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;">Toggle items on/off, and drag <span style="font-family:monospace;">⠿</span> to reorder them or move them between sections — saved just for you.</p>
         <div id="nav-cust-body" style="max-height:52vh;overflow-y:auto;">${body}</div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;"><button class="btn-outline" onclick="resetNavCustomizer()">Reset</button><button class="btn-blue" onclick="saveNavCustomizer()">Save</button></div>
       </div>`;
       document.body.appendChild(ov);
       const bodyEl = ov.querySelector('#nav-cust-body');
-      let dragEl = null, dragGroup = null;
+      let dragEl = null;
       bodyEl.querySelectorAll('.nav-cust-row').forEach(r => {
-        r.addEventListener('dragstart', () => { dragEl = r; dragGroup = r.parentElement; r.classList.add('dragging'); });
-        r.addEventListener('dragend', () => { r.classList.remove('dragging'); dragEl = null; dragGroup = null; });
+        r.addEventListener('dragstart', () => { dragEl = r; r.classList.add('dragging'); });
+        r.addEventListener('dragend', () => { r.classList.remove('dragging'); dragEl = null; });
       });
       bodyEl.addEventListener('dragover', (e) => {
-        if (!dragEl || !dragGroup) return;
+        if (!dragEl) return;
         e.preventDefault();
-        const after = _navDragAfter(dragGroup, e.clientY);
-        if (after == null) dragGroup.appendChild(dragEl); else dragGroup.insertBefore(dragEl, after);
+        const container = e.target.closest('.nav-cust-group');
+        if (!container) return;
+        const after = _navDragAfter(container, e.clientY);
+        if (after == null) container.appendChild(dragEl); else container.insertBefore(dragEl, after);
       });
     }
     function saveNavCustomizer() {
-      const order = [];
-      document.querySelectorAll('#nav-cust-body .nav-cust-row').forEach(r => order.push(r.dataset.page));
+      const layout = {};
+      document.querySelectorAll('#nav-cust-body .nav-cust-block').forEach(block => {
+        layout[block.dataset.section] = [...block.querySelectorAll('.nav-cust-row')].map(r => r.dataset.page);
+      });
       const hidden = [];
       document.querySelectorAll('#nav-cust-body .nav-cust-row input[type=checkbox]').forEach(c => { if (!c.checked) hidden.push(c.dataset.page); });
-      try { localStorage.setItem('st_nav_order', JSON.stringify(order)); localStorage.setItem('st_nav_hidden', JSON.stringify(hidden)); } catch {}
+      try { localStorage.setItem('st_nav_layout', JSON.stringify(layout)); localStorage.setItem('st_nav_hidden', JSON.stringify(hidden)); localStorage.removeItem('st_nav_order'); } catch {}
       applyNavPrefs();
       const ov = document.getElementById('nav-customizer'); if (ov) ov.remove();
       toast('Navigation updated', 'success');
     }
     function resetNavCustomizer() {
-      try { localStorage.removeItem('st_nav_hidden'); localStorage.removeItem('st_nav_order'); } catch {}
-      _reorderNav(_NAV_DEFAULT_ORDER);
+      try { localStorage.removeItem('st_nav_hidden'); localStorage.removeItem('st_nav_layout'); localStorage.removeItem('st_nav_order'); } catch {}
+      applyNavLayout(_NAV_DEFAULT_LAYOUT);
       applyNavPrefs();
       const ov = document.getElementById('nav-customizer'); if (ov) ov.remove();
       toast('Navigation reset', 'info');
@@ -2630,7 +2635,12 @@ Rate: {{total_rate_usd}}
       });
     }
     initNavGroups();
-    _NAV_DEFAULT_ORDER = [...document.querySelectorAll('.sidebar-nav .nav-item')].map(b => b.dataset.page);
+    _NAV_DEFAULT_LAYOUT = {};
+    document.querySelectorAll('.sidebar-nav .nav-label').forEach(label => {
+      const pages = []; let n = label.nextElementSibling;
+      while (n && !n.classList.contains('nav-label')) { if (n.classList.contains('nav-item') && n.dataset.page && !_NAV_SKIP.includes(n.dataset.page)) pages.push(n.dataset.page); n = n.nextElementSibling; }
+      _NAV_DEFAULT_LAYOUT[label.textContent.trim()] = pages;
+    });
     applyNavPrefs();
     // Mirror the nav unread/alert badges onto the sidebar-footer icon row.
     function _syncFootBadges() {

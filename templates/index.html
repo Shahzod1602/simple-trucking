@@ -6953,8 +6953,8 @@ Rate: {{total_rate_usd}}
     const _MAP_STYLES = {
       satellite: { label: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr: '&copy; Esri' },
       streets:   { label: 'Streets', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attr: '&copy; OpenStreetMap', sub: 'abc' },
-      light:     { label: 'Light', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', attr: '&copy; CARTO', sub: 'abcd' },
-      dark:      { label: 'Dark', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', attr: '&copy; CARTO', sub: 'abcd' },
+      light:     { label: 'Light', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', attr: '&copy; Esri', maxNativeZoom: 16 },
+      dark:      { label: 'Dark', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', attr: '&copy; Esri', maxNativeZoom: 16 },
     };
     function setMapStyle(style) {
       if (!leafletMap) return;
@@ -6962,6 +6962,7 @@ Rate: {{total_rate_usd}}
       if (_mapTileLayer) _mapTileLayer.remove();
       const opts = { attribution: s.attr, maxZoom: 19 };
       if (s.sub) opts.subdomains = s.sub;
+      if (s.maxNativeZoom) opts.maxNativeZoom = s.maxNativeZoom;
       _mapTileLayer = L.tileLayer(s.url, opts).addTo(leafletMap);
       _mapStyle = style;
       const lbl = document.getElementById('fm-style-label'); if (lbl) lbl.textContent = s.label;

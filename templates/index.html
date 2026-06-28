@@ -172,6 +172,7 @@
       border-radius: 0 3px 3px 0;
     }
     .nav-item[hidden] { display: none; }
+    .nav-pref-hidden { display: none !important; }
     .nav-icon { font-size: 0.9rem; width: 18px; text-align: center; flex-shrink: 0; }
     .nav-search { display: flex; align-items: center; gap: 8px; margin: 4px 4px 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-inner); color: var(--text-muted); }
     .nav-search i { font-size: 0.95rem; }
@@ -911,6 +912,9 @@
       </button>
       <button class="nav-item" data-page="settings">
         <span class="nav-icon"><i class="ph ph-gear"></i></span> Settings
+      </button>
+      <button class="nav-item" data-page="__customize">
+        <span class="nav-icon"><i class="ph ph-sliders-horizontal"></i></span> Customize
       </button>
       <button class="nav-item" data-page="kpi" id="kpi-nav" hidden>
         <span class="nav-icon"><i class="ph ph-chart-line-up"></i></span> KPI Board
@@ -2450,7 +2454,66 @@ Rate: {{total_rate_usd}}
         + `<div class="empty-desc" style="margin-top:4px;color:var(--text-muted);font-size:0.86rem;">This module is on the SimpleTrucking roadmap — coming next.</div>`
         + `${btn}</div></div>`;
     }
+    // ── Per-user navigation customization (which sections show in the sidebar) ──
+    const _NAV_SKIP = ['kpi', 'users', 'admin', '__customize'];
+    function _navPrefsHidden() { try { return new Set(JSON.parse(localStorage.getItem('st_nav_hidden') || '[]')); } catch { return new Set(); } }
+    function applyNavPrefs() {
+      const hidden = _navPrefsHidden();
+      document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => {
+        const p = b.dataset.page;
+        if (!p || _NAV_SKIP.includes(p)) return;
+        b.classList.toggle('nav-pref-hidden', hidden.has(p));
+      });
+      // Hide a section label when it has items but none are visible.
+      document.querySelectorAll('.sidebar-nav .nav-label').forEach(label => {
+        let n = label.nextElementSibling, items = 0, visible = 0;
+        while (n && !n.classList.contains('nav-label')) {
+          if (n.classList.contains('nav-item')) { items++; if (!n.classList.contains('nav-pref-hidden') && !n.hasAttribute('hidden')) visible++; }
+          n = n.nextElementSibling;
+        }
+        label.style.display = (items > 0 && visible === 0) ? 'none' : '';
+      });
+    }
+    function openNavCustomizer() {
+      const hidden = _navPrefsHidden();
+      const groups = []; let cur = null;
+      document.querySelectorAll('.sidebar-nav > *').forEach(el => {
+        if (el.classList.contains('nav-label')) { cur = { name: el.textContent.trim(), items: [] }; groups.push(cur); }
+        else if (el.classList.contains('nav-item') && el.dataset.page && cur) {
+          const p = el.dataset.page;
+          if (_NAV_SKIP.includes(p)) return;
+          cur.items.push({ page: p, label: el.textContent.trim() });
+        }
+      });
+      const body = groups.filter(g => g.items.length).map(g => `<div style="margin-bottom:14px;"><div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:6px;">${esc(g.name)}</div>${g.items.map(it => `<label style="display:flex;align-items:center;gap:9px;padding:6px 4px;font-size:0.88rem;cursor:pointer;"><input type="checkbox" data-page="${esc(it.page)}" ${hidden.has(it.page) ? '' : 'checked'} style="accent-color:var(--primary);width:16px;height:16px;flex-shrink:0;"> ${esc(it.label)}</label>`).join('')}</div>`).join('');
+      const ov = document.createElement('div');
+      ov.className = 'overlay'; ov.id = 'nav-customizer'; ov.style.display = 'flex';
+      ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+      ov.innerHTML = `<div class="modal" style="max-width:460px;" role="dialog" aria-modal="true">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><h2 style="font-size:1.1rem;font-weight:800;">Customize navigation</h2><button onclick="document.getElementById('nav-customizer').remove()" style="background:none;border:none;font-size:1.2rem;color:var(--text-muted);cursor:pointer;line-height:1;">&times;</button></div>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;">Pick which sections appear in your sidebar — saved just for you.</p>
+        <div id="nav-cust-body" style="max-height:52vh;overflow-y:auto;">${body}</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;"><button class="btn-outline" onclick="resetNavCustomizer()">Reset</button><button class="btn-blue" onclick="saveNavCustomizer()">Save</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+    }
+    function saveNavCustomizer() {
+      const hidden = [];
+      document.querySelectorAll('#nav-cust-body input[type=checkbox]').forEach(c => { if (!c.checked) hidden.push(c.dataset.page); });
+      try { localStorage.setItem('st_nav_hidden', JSON.stringify(hidden)); } catch {}
+      applyNavPrefs();
+      const ov = document.getElementById('nav-customizer'); if (ov) ov.remove();
+      toast('Navigation updated', 'success');
+    }
+    function resetNavCustomizer() {
+      try { localStorage.removeItem('st_nav_hidden'); } catch {}
+      applyNavPrefs();
+      const ov = document.getElementById('nav-customizer'); if (ov) ov.remove();
+      toast('Navigation reset', 'info');
+    }
+
     function goTo(page) {
+      if (page === '__customize') { openNavCustomizer(); return; }
       if (page !== 'extract') document.body.classList.remove('extract-fs');
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
@@ -2522,6 +2585,7 @@ Rate: {{total_rate_usd}}
       });
     }
     initNavGroups();
+    applyNavPrefs();
     // Mirror the nav unread/alert badges onto the sidebar-footer icon row.
     function _syncFootBadges() {
       [['mailbox-badge','foot-mail-badge'],['alert-badge','foot-alert-badge']].forEach(([s,d]) => {

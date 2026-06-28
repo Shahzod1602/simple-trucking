@@ -92,6 +92,7 @@
     [data-theme="light"] .user-avatar { background: linear-gradient(135deg,#1f2937,#111827); }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
+    html, body { overflow-x: hidden; max-width: 100%; }
     body {
       font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg); color: var(--text);
@@ -223,7 +224,7 @@
     .btn-sidebar.danger:hover { background: rgba(239,68,68,0.1); color: #f87171; }
 
     /* ── Main ── */
-    .main { margin-left: var(--sidebar-width); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .main { margin-left: var(--sidebar-width); flex: 1; min-width: 0; min-height: 100vh; display: flex; flex-direction: column; }
     .topbar-mobile {
       display: none; align-items: center; gap: 12px;
       padding: 13px 16px; background: var(--sidebar-bg);
@@ -235,7 +236,7 @@
       font-size: 1.1rem; font-weight: 700; color: #fff;
       letter-spacing: 0.5px; text-transform: uppercase;
     }
-    .content { flex: 1; padding: 32px 36px 80px; max-width: 780px; }
+    .content { flex: 1; min-width: 0; padding: 32px 36px 80px; max-width: 780px; }
     .content.wide { max-width: none; }
     #page-extract { max-width: none; }
 
@@ -827,7 +828,8 @@
       .sidebar-overlay.open { display: block; }
       .main { margin-left: 0; }
       .topbar-mobile { display: flex; }
-      .content { padding: 18px 14px 80px; }
+      .content { padding: 18px 14px 80px; overflow-x: hidden; }
+      .page-header { flex-direction: column !important; align-items: stretch !important; gap: 12px; }
       .kpi-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
@@ -1651,6 +1653,7 @@
 
       <!-- ── Telegram ── -->
       <div class="page" id="page-telegram">
+        <div style="padding:14px 18px 0;"><h1 class="page-title" style="font-size:1.35rem;">Telegram</h1></div>
         <div class="tg-tabs">
           <button class="tg-tab active" data-tgtab="bot" type="button">Bot</button>
           <button class="tg-tab" data-tgtab="mine" type="button">My Telegram</button>
@@ -2380,6 +2383,10 @@ Rate: {{total_rate_usd}}
     function _wmRate(l){ return l.total_rate_num!=null?Number(l.total_rate_num):(parseFloat(String(l.total_rate_usd||'').replace(/[^0-9.]/g,''))||0); }
     function _wmTh(t){ return `<th style="padding:10px;text-align:left;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">${t}</th>`; }
     function _wmCard(t,v,c){ return `<div class="card" style="padding:16px;"><div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">${t}</div><div style="font-size:1.7rem;font-weight:800;color:${c||'var(--text)'};margin-top:6px;line-height:1;">${v}</div></div>`; }
+    function _human(s){ s=String(s==null?'':s); return s.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()); }
+    function _money2(n){ const x=Number(n); if(n==null||n===''||isNaN(x)) return esc(String(n==null?'':n)); return (x<0?'-$':'$')+Math.abs(x).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+    const _STATUS_COLORS={active:'#16a34a',rolling:'#16a34a',available:'#16a34a',delivered:'#16a34a',paid:'#16a34a',hired:'#16a34a',dispatched:'#d97706',in_transit:'#d97706',in_use:'#d97706',sent:'#d97706',partial:'#d97706',on_leave:'#d97706',pending:'#d97706',screening:'#d97706',interview:'#d97706',offer:'#d97706',open:'#2563eb',upcoming:'#2563eb',booked:'#2563eb',new:'#2563eb',contacted:'#2563eb',draft:'#6b7280',inactive:'#6b7280',cancelled:'#6b7280',off_duty:'#6b7280',rejected:'#6b7280',in_shop:'#dc2626',overdue:'#dc2626',unpaid:'#dc2626',stopped:'#dc2626'};
+    function _statusBadge(s){ if(s==null||s==='') return '<span style="color:var(--text-muted);">—</span>'; const c=_STATUS_COLORS[String(s).toLowerCase()]||'#6b7280'; return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:0.78rem;font-weight:600;color:${c};"><span style="width:7px;height:7px;border-radius:50%;background:${c};flex-shrink:0;"></span>${esc(_human(s))}</span>`; }
     function _wmSoon(d){ if(!d)return false; const x=new Date(d), n=new Date(); return x>=n && (x-n)/86400000<=30; }
 
     let _dispatchView = 'board';
@@ -2734,7 +2741,7 @@ Rate: {{total_rate_usd}}
       if (!token) return;
       [['mailbox-badge','foot-mail-badge'],['alert-badge','foot-alert-badge']].forEach(([s,d]) => {
         const src = document.getElementById(s), dst = document.getElementById(d);
-        if (src && dst) { dst.textContent = src.textContent; dst.style.display = src.style.display; }
+        if (src && dst) { dst.textContent = src.textContent; dst.style.display = src.style.display; try { dst.style.background = getComputedStyle(src).backgroundColor; } catch {} }
       });
     }
     setInterval(_syncFootBadges, 2000);
@@ -5487,7 +5494,7 @@ Rate: {{total_rate_usd}}
             <button class="btn-send-status" title="Send status to group" onclick="sendLoadStatus(${l.id}, this)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
-            <button class="btn-file-upload" title="Files (Ratecon / BOL / POD / Invoice)" onclick='openFilesModal(${l.id}, ${JSON.stringify(String(l.load_number || l.id))}, ${!!l.file_path})'>📁</button>
+            <button class="btn-file-upload" title="Files (Ratecon / BOL / POD / Invoice)" onclick='openFilesModal(${l.id}, ${JSON.stringify(String(l.load_number || l.id))}, ${!!l.file_path})'><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
             <select class="auto-send-select" title="Auto-send interval" onchange="setAutoSend(${l.id}, this)">
               <option value="0" ${autoVal===0?'selected':''}>⏱ Off</option>
               <option value="1" ${autoVal===1?'selected':''}>⏱ 1h</option>
@@ -6454,7 +6461,7 @@ Rate: {{total_rate_usd}}
       const statusBadge = (r) => {
         if (r.live_status === 'rolling') return '<span style="color:var(--success);font-weight:600;">● Rolling</span>';
         if (r.live_status === 'stopped') return '<span style="color:#ef4444;font-weight:600;">● Stopped</span>';
-        if (r.status) return esc(r.status);
+        if (r.status) return _statusBadge(r.status);
         return '<span style="color:var(--text-muted);">—</span>';
       };
       const cell = (v) => (v != null && v !== '') ? esc(String(v)) : '<span style="color:var(--text-muted);">—</span>';
@@ -6525,8 +6532,8 @@ Rate: {{total_rate_usd}}
       const trs = drivers.map(d => `<tr class="drv-row" data-name="${esc(String(d.name || '').toLowerCase())}">
           <td style="padding:10px;border-bottom:1px solid var(--border);font-weight:600;">${esc(d.name || '—')}</td>
           <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(d.dba)}</td>
-          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(d.status)}</td>
-          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(d.driver_type)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${_statusBadge(d.status)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(d.driver_type ? _human(d.driver_type) : "")}</td>
           <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(truckById[d.truck_id])}</td>
           <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;color:var(--text-muted);">—</td>
           <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${dateCell(d.cdl_expiry)}</td>
@@ -6571,15 +6578,26 @@ Rate: {{total_rate_usd}}
           return;
         }
         const cols = schema.listCols;
-        const headers = cols.map(c => `<th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">${esc(c.replace(/_/g,' '))}</th>`).join('');
+        const ENUM_COLS = new Set(['status','type','driver_type','ownership','stage','tx_type','priority','category']);
+        const MONEY_COLS = new Set(['amount','cost','rate','pay_rate','total_rate_usd']);
+        const refMaps = {};
+        for (const c of cols) {
+          const ref = REF_FIELDS[`${slug}.${c}`];
+          if (ref) { try { const opts = await _loadRefOptions(ref); if (opts) { refMaps[c] = {}; opts.forEach(o => { refMaps[c][o.value] = o.label; }); } } catch {} }
+        }
+        const headers = cols.map(c => `<th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">${esc(_human(c.replace(/_id$/,'')))}</th>`).join('');
         const rows = items.map(it => {
           const cells = cols.map(c => {
             let v = it[c];
-            if (v === null || v === undefined || v === '') v = '—';
-            else if (typeof v === 'boolean') v = v ? 'Yes' : 'No';
-            else if (typeof v === 'number' && (c === 'amount' || c === 'cost')) v = '$' + v.toLocaleString();
-            else if (typeof v === 'string' && v.length > 60) v = v.substring(0,60) + '…';
-            return `<td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${esc(String(v))}</td>`;
+            if (c === 'status') return `<td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${_statusBadge(v)}</td>`;
+            let disp;
+            if (v === null || v === undefined || v === '') disp = '—';
+            else if (refMaps[c]) disp = (refMaps[c][v] != null) ? refMaps[c][v] : ('#' + v);
+            else if (typeof v === 'boolean') disp = v ? 'Yes' : 'No';
+            else if (MONEY_COLS.has(c)) disp = _money2(v);
+            else if (ENUM_COLS.has(c)) disp = _human(v);
+            else { disp = String(v); if (disp.length > 60) disp = disp.substring(0,60) + '…'; }
+            return `<td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${esc(String(disp))}</td>`;
           }).join('');
           return `<tr>${cells}<td style="padding:10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">
             <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;" onclick="openEntityModal('${slug}', ${it.id})">Edit</button>

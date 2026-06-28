@@ -2270,7 +2270,7 @@ Rate: {{total_rate_usd}}
       'driver-documents':'Documents', 'safety-tasks':'Safety', groups:'Driver Groups', history:'History',
       'live-loads':'Live Loads', telegram:'Telegram', settings:'Settings', kpi:'KPI Board', users:'Users', admin:'Admin'
     };
-    const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract','dispatch','assignments','drivers','recruiting','maint-overview','invoices','statements','brokers']);
+    const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract','dispatch','assignments','drivers','recruiting','maint-overview','invoices','statements','brokers','telegram']);
     // ── SimpleTrucking functional modules (client-side aggregation over verified APIs) ──
     async function _wmLoads(){ try{ const d=await fetch('/api/loads',{headers:authH()}).then(r=>r.json()); return Array.isArray(d)?d:(d.loads||d.items||[]); }catch{ return []; } }
     async function _wmEntities(slug){ try{ const d=await fetch('/api/entities/'+slug,{headers:authH()}).then(r=>r.json()); return d.items||[]; }catch{ return []; } }

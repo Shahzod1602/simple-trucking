@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SimpleTrucking</title>
+  <title>waymark — Trucking OS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
   <style>
     /* ═══════════════════════════════════════════════════════════
-       Iron Dispatch — Design System v2
+       waymark — Design System
        Fonts: Barlow Condensed · IBM Plex Sans · IBM Plex Mono
        Palette: Deep Navy · Electric Blue · Amber Accent
        ═══════════════════════════════════════════════════════════ */
@@ -45,26 +45,26 @@
       --sidebar-border: rgba(255,255,255,0.05);
       --sidebar-text: #6e83a6;
       --sidebar-hover: rgba(255,255,255,0.04);
-      --sidebar-active-bg: rgba(245,166,35,0.07);
-      --sidebar-active-text: #f5a623;
+      --sidebar-active-bg: rgba(255,255,255,0.07);
+      --sidebar-active-text: #f4f6fb;
       --sidebar-width: 216px;
       --radius-sm: 5px;
       --radius: 8px;
       --radius-lg: 12px;
     }
     [data-theme="light"] {
-      --bg: #edf1f8;
+      --bg: #ffffff;
       --card: #ffffff;
-      --card-inner: #f5f7fb;
-      --card-shadow: 0 0 0 1px rgba(0,0,0,0.06), 0 2px 10px rgba(0,0,0,0.06);
-      --text: #0e1828;
-      --text-muted: #5a6a82;
-      --border: #dce2ef;
-      --primary: #3b72ff;
-      --primary-hover: #2b5ce0;
-      --primary-light: rgba(59,114,255,0.08);
-      --accent: #e09520;
-      --accent-light: rgba(224,149,32,0.1);
+      --card-inner: #f9fafb;
+      --card-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.05);
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e7eaf0;
+      --primary: #111827;
+      --primary-hover: #000000;
+      --primary-light: #f1f5f9;
+      --accent: #16a34a;
+      --accent-light: #f0fdf4;
       --success: #16a34a;
       --success-light: #f0fdf4;
       --error: #dc2626;
@@ -72,13 +72,24 @@
       --danger: #dc2626;
       --warning: #d97706;
       --warning-light: #fffbeb;
-      --sidebar-bg: #0d1524;
-      --sidebar-border: rgba(255,255,255,0.07);
-      --sidebar-text: #7a8faa;
-      --sidebar-hover: rgba(255,255,255,0.06);
-      --sidebar-active-bg: rgba(245,166,35,0.12);
-      --sidebar-active-text: #e09520;
+      --sidebar-bg: #ffffff;
+      --sidebar-border: #ecedf1;
+      --sidebar-text: #4b5563;
+      --sidebar-hover: #f4f5f7;
+      --sidebar-active-bg: #f1f3f5;
+      --sidebar-active-text: #0f172a;
     }
+    /* ── Light-theme component overrides (waymark) ── */
+    [data-theme="light"] body { background-image: none; background: var(--bg); }
+    [data-theme="light"] .logo-text { color: #0f172a; }
+    [data-theme="light"] .user-name { color: #0f172a; }
+    [data-theme="light"] .topbar-mobile { background: #fff; border-bottom: 1px solid var(--border); }
+    [data-theme="light"] .topbar-title, [data-theme="light"] .hamburger { color: #0f172a; }
+    [data-theme="light"] .card::before { display: none; }
+    [data-theme="light"] .kpi-card::before { display: none; }
+    [data-theme="light"] .nav-item.active::before { background: #0f172a; }
+    [data-theme="dark"] .nav-item.active::before { background: #e8edf6; }
+    [data-theme="light"] .user-avatar { background: linear-gradient(135deg,#1f2937,#111827); }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
     body {
@@ -111,9 +122,9 @@
     }
     .logo-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
     .logo-text {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 1.05rem; font-weight: 700; color: #fff;
-      letter-spacing: 0.5px; text-transform: uppercase;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 1.25rem; font-weight: 800; color: #fff;
+      letter-spacing: -0.4px; text-transform: none;
     }
 
     .sidebar-nav { flex: 1; padding: 10px 8px; display: flex; flex-direction: column; gap: 1px; overflow-y: auto; min-height: 0; }
@@ -137,8 +148,8 @@
     .nav-label.collapsed::after { transform: rotate(-45deg); }
     .nav-item.nav-collapsed-hide { display: none; }
     .nav-item {
-      display: flex; align-items: center; gap: 9px;
-      padding: 8px 9px; border-radius: 6px; border: none;
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 8px; border: none;
       background: none; color: var(--sidebar-text);
       font-family: 'IBM Plex Sans', sans-serif;
       font-size: 0.84rem; font-weight: 500; cursor: pointer;
@@ -159,6 +170,11 @@
     }
     .nav-item[hidden] { display: none; }
     .nav-icon { font-size: 0.9rem; width: 18px; text-align: center; flex-shrink: 0; }
+    .nav-search { display: flex; align-items: center; gap: 8px; margin: 4px 4px 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-inner); color: var(--text-muted); }
+    .nav-search i { font-size: 0.95rem; }
+    .nav-search input { flex: 1; border: none; background: none; outline: none; color: var(--text); font-family: 'IBM Plex Sans', sans-serif; font-size: 0.83rem; min-width: 0; }
+    .nav-search input::placeholder { color: var(--text-muted); }
+    .nav-search kbd { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
 
     .sidebar-footer { padding: 8px 8px 12px; border-top: 1px solid var(--sidebar-border); display: flex; flex-direction: column; gap: 1px; }
     .user-card { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 6px; margin-bottom: 2px; }
@@ -212,9 +228,9 @@
 
     .page-header { margin-bottom: 28px; }
     .page-title {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 2rem; font-weight: 700; color: var(--text);
-      letter-spacing: 0.5px; text-transform: uppercase; line-height: 1;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 1.9rem; font-weight: 800; color: var(--text);
+      letter-spacing: -0.5px; text-transform: none; line-height: 1.1;
     }
     .page-subtitle { font-size: 0.84rem; color: var(--text-muted); margin-top: 6px; }
 
@@ -433,9 +449,9 @@
     .empty-icon { font-size: 2.5rem; margin-bottom: 14px; line-height: 1; color: var(--text-muted); }
     .empty-icon i { font-size: 2.5rem; }
     .empty-title {
-      font-family: 'Barlow Condensed', sans-serif;
-      font-size: 1.2rem; font-weight: 700; color: var(--text); margin-bottom: 6px;
-      text-transform: uppercase; letter-spacing: 0.5px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 1.05rem; font-weight: 700; color: var(--text); margin-bottom: 6px;
+      text-transform: none; letter-spacing: -0.2px;
     }
     .empty-desc { font-size: 0.86rem; color: var(--text-muted); line-height: 1.6; }
     .steps { margin-top: 20px; text-align: left; background: var(--card-inner); border-radius: var(--radius); border: 1px solid var(--border); padding: 14px; }
@@ -771,101 +787,110 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="logo-mark">
-        <div class="logo-icon">
-          <img src="/static/logo.png" alt="SimpleTrucking logo" />
-        </div>
-        <div class="logo-text">SimpleTrucking</div>
+        <div class="logo-text">waymark</div>
       </div>
     </div>
     <nav class="sidebar-nav">
-      <div class="nav-label">Overview</div>
+      <div class="nav-search"><i class="ph ph-magnifying-glass"></i><input type="text" placeholder="Search…" /><kbd>⌘K</kbd></div>
+      <div class="nav-label">Operations</div>
       <button class="nav-item active" data-page="dashboard">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span> Dashboard
+        <span class="nav-icon"><i class="ph ph-squares-four"></i></span> Dashboard
       </button>
+      <button class="nav-item" data-page="dispatch">
+        <span class="nav-icon"><i class="ph ph-kanban"></i></span> Dispatch
+      </button>
+      <button class="nav-item" data-page="loads">
+        <span class="nav-icon"><i class="ph ph-package"></i></span> Loads
+        <span class="nav-badge" id="alert-badge" style="display:none;"></span>
+      </button>
+      <button class="nav-item" data-page="assignments">
+        <span class="nav-icon"><i class="ph ph-arrows-left-right"></i></span> Assignments
+      </button>
+      <div class="nav-label">Assets</div>
+      <button class="nav-item" data-page="map">
+        <span class="nav-icon"><i class="ph ph-map-trifold"></i></span> Fleet Map
+      </button>
+      <button class="nav-item" data-page="trucks">
+        <span class="nav-icon"><i class="ph ph-truck"></i></span> Trucks
+      </button>
+      <button class="nav-item" data-page="trailers">
+        <span class="nav-icon"><i class="ph ph-truck-trailer"></i></span> Trailers
+      </button>
+      <button class="nav-item" data-page="drivers">
+        <span class="nav-icon"><i class="ph ph-steering-wheel"></i></span> Drivers
+      </button>
+      <button class="nav-item" data-page="recruiting">
+        <span class="nav-icon"><i class="ph ph-user-plus"></i></span> Recruiting
+      </button>
+      <div class="nav-label">Maintenance</div>
+      <button class="nav-item" data-page="maint-overview">
+        <span class="nav-icon"><i class="ph ph-gauge"></i></span> Overview
+      </button>
+      <button class="nav-item" data-page="work-orders">
+        <span class="nav-icon"><i class="ph ph-wrench"></i></span> Work Orders
+      </button>
+      <button class="nav-item" data-page="invoices">
+        <span class="nav-icon"><i class="ph ph-file-text"></i></span> Invoices
+      </button>
+      <button class="nav-item" data-page="vendors">
+        <span class="nav-icon"><i class="ph ph-storefront"></i></span> Vendors
+      </button>
+      <div class="nav-label">Financial</div>
+      <button class="nav-item" data-page="transactions">
+        <span class="nav-icon"><i class="ph ph-arrows-clockwise"></i></span> Transactions
+      </button>
+      <button class="nav-item" data-page="statements">
+        <span class="nav-icon"><i class="ph ph-receipt"></i></span> Statements
+      </button>
+      <button class="nav-item" data-page="analytics">
+        <span class="nav-icon"><i class="ph ph-chart-bar"></i></span> Analytics
+      </button>
+      <button class="nav-item" data-page="bills">
+        <span class="nav-icon"><i class="ph ph-file"></i></span> Bills
+      </button>
+      <button class="nav-item" data-page="brokers">
+        <span class="nav-icon"><i class="ph ph-buildings"></i></span> Brokers
+      </button>
+      <div class="nav-label">Workspace</div>
       <button class="nav-item" data-page="mailbox">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span> Mailbox
+        <span class="nav-icon"><i class="ph ph-envelope-simple"></i></span> Mailbox
         <span class="nav-badge" id="mailbox-badge" style="display:none;"></span>
       </button>
       <button class="nav-item" data-page="extract">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Extract
+        <span class="nav-icon"><i class="ph ph-lightning"></i></span> Extract
       </button>
-
-      <div class="nav-label">Load Management</div>
-      <button class="nav-item" data-page="loads">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></span> All Loads
-        <span class="nav-badge" id="alert-badge" style="display:none;"></span>
-      </button>
-      <button class="nav-item" data-page="live-loads">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg></span> Live Loads
-      </button>
-      <button class="nav-item" data-page="map">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg></span> Dispatch Map
-      </button>
-      <button class="nav-item" data-page="history">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span> History
-      </button>
-
-      <div class="nav-label">Customer Mgmt</div>
       <button class="nav-item" data-page="customers">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> Customers
-      </button>
-      <button class="nav-item" data-page="vendors">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> Vendors
+        <span class="nav-icon"><i class="ph ph-users-three"></i></span> Customers
       </button>
       <button class="nav-item" data-page="locations">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span> Locations
-      </button>
-
-      <div class="nav-label">Fleet Mgmt</div>
-      <button class="nav-item" data-page="trucks">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></span> Trucks
-      </button>
-      <button class="nav-item" data-page="trailers">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="1"/><circle cx="7" cy="20" r="2"/><circle cx="17" cy="20" r="2"/></svg></span> Trailers
-      </button>
-      <button class="nav-item" data-page="work-orders">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span> Work Orders
-      </button>
-
-      <div class="nav-label">HR / Safety</div>
-      <button class="nav-item" data-page="groups">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Drivers
+        <span class="nav-icon"><i class="ph ph-map-pin"></i></span> Locations
       </button>
       <button class="nav-item" data-page="driver-documents">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span> Documents
+        <span class="nav-icon"><i class="ph ph-identification-card"></i></span> Documents
       </button>
       <button class="nav-item" data-page="safety-tasks">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> Safety Tasks
+        <span class="nav-icon"><i class="ph ph-shield-check"></i></span> Safety
       </button>
-
-      <div class="nav-label">Accounting</div>
-      <button class="nav-item" data-page="analytics">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span> Analytics
+      <button class="nav-item" data-page="groups">
+        <span class="nav-icon"><i class="ph ph-chats-circle"></i></span> Driver Groups
       </button>
-      <button class="nav-item" data-page="bills">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg></span> Bills
+      <button class="nav-item" data-page="history">
+        <span class="nav-icon"><i class="ph ph-clock-counter-clockwise"></i></span> History
       </button>
-      <button class="nav-item" data-page="transactions">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span> Transactions
-      </button>
-
-      <div class="nav-label">Account</div>
       <button class="nav-item" data-page="telegram">
-        <span class="nav-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22 11 13 2 9 22 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </span> Telegram
+        <span class="nav-icon"><i class="ph ph-telegram-logo"></i></span> Telegram
       </button>
       <button class="nav-item" data-page="settings">
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Settings
+        <span class="nav-icon"><i class="ph ph-gear"></i></span> Settings
       </button>
       <button class="nav-item" data-page="kpi" id="kpi-nav" hidden>
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span> KPI Board
+        <span class="nav-icon"><i class="ph ph-chart-line-up"></i></span> KPI Board
       </button>
       <button class="nav-item" data-page="users" id="users-nav" hidden>
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Users
+        <span class="nav-icon"><i class="ph ph-user-gear"></i></span> Users
       </button>
       <button class="nav-item" data-page="admin" id="admin-nav" hidden>
-        <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> Admin
+        <span class="nav-icon"><i class="ph ph-shield"></i></span> Admin
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -886,6 +911,68 @@
     </div>
 
     <div class="content">
+
+      <!-- ── waymark stub pages (fast-follow modules) ── -->
+      <div class="page" id="page-dispatch"></div>
+      <!-- ── Assignments ── -->
+      <div class="page" id="page-assignments">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Assignments</h1>
+            <p class="page-subtitle">Driver ↔ truck ↔ trailer pairings</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('assignments')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('assignments')">+ Create Assignment</button>
+          </div>
+        </div>
+        <div id="page-assignments-content"></div>
+      </div>
+      <!-- ── Drivers ── -->
+      <div class="page" id="page-drivers">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Drivers</h1>
+            <p class="page-subtitle">Compliance · HOS · CDL</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('drivers')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('drivers')">+ Add Driver</button>
+          </div>
+        </div>
+        <div id="page-drivers-content"></div>
+      </div>
+      <!-- ── Recruiting ── -->
+      <div class="page" id="page-recruiting">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Recruiting</h1>
+            <p class="page-subtitle">Driver hiring pipeline</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('recruiting')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('recruiting')">+ Add Lead</button>
+          </div>
+        </div>
+        <div id="page-recruiting-content"></div>
+      </div>
+      <div class="page" id="page-maint-overview"></div>
+      <!-- ── Invoices ── -->
+      <div class="page" id="page-invoices">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1 class="page-title">Invoices</h1>
+            <p class="page-subtitle">Customer billing (AR)</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('invoices')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('invoices')">+ New Invoice</button>
+          </div>
+        </div>
+        <div id="page-invoices-content"></div>
+      </div>
+      <div class="page" id="page-statements"></div>
+      <div class="page" id="page-brokers"></div>
 
       <!-- ── Extract ── -->
       <div class="page" id="page-extract">
@@ -1458,12 +1545,15 @@
       <div class="page" id="page-trucks">
         <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div>
-            <h1 class="page-title">My Trucks</h1>
-            <p class="page-subtitle">Fleet units from ELD with real-time info</p>
+            <h1 class="page-title">Trucks</h1>
+            <p class="page-subtitle">Power units in your fleet</p>
           </div>
-          <button class="btn-outline" onclick="loadTrucksPage()">↺ Refresh</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-outline" onclick="loadEntityPage('trucks')">↺ Refresh</button>
+            <button class="btn-blue" onclick="openEntityModal('trucks')">+ Add Truck</button>
+          </div>
         </div>
-        <div id="trucks-content"></div>
+        <div id="page-trucks-content"></div>
       </div>
 
       <!-- ── Telegram ── -->
@@ -2102,7 +2192,7 @@ Rate: {{total_rate_usd}}
     });
 
     // ── Theme ─────────────────────────────────────────────────────────────
-    let isDark = localStorage.getItem('st_theme') !== 'light';
+    let isDark = localStorage.getItem('st_theme') === 'dark';
     function applyTheme() {
       document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
       const svgEl = document.getElementById('theme-icon-svg');
@@ -2172,15 +2262,115 @@ Rate: {{total_rate_usd}}
 
     // ── Navigation ────────────────────────────────────────────────────────
     const pageTitles = {
-      dashboard:'Dashboard', mailbox:'Mailbox', extract:'Extract',
-      loads:'All Loads', 'live-loads':'Live Loads', map:'Dispatch Map', history:'History',
-      customers:'Customers', vendors:'Vendors', locations:'Locations',
-      trucks:'Trucks', trailers:'Trailers', 'work-orders':'Work Orders',
-      groups:'Drivers', 'driver-documents':'Documents', 'safety-tasks':'Safety',
-      analytics:'Analytics', bills:'Bills', transactions:'Transactions',
-      telegram:'Telegram', settings:'Settings', kpi:'KPI Board', users:'Users', admin:'Admin'
+      dashboard:'Dashboard', dispatch:'Dispatch', loads:'Loads', assignments:'Assignments',
+      map:'Fleet Map', trucks:'Trucks', trailers:'Trailers', drivers:'Drivers', recruiting:'Recruiting',
+      'maint-overview':'Maintenance', 'work-orders':'Work Orders', invoices:'Invoices', vendors:'Vendors',
+      transactions:'Transactions', statements:'Statements', analytics:'Analytics', bills:'Bills', brokers:'Brokers',
+      mailbox:'Mailbox', extract:'Extract', customers:'Customers', locations:'Locations',
+      'driver-documents':'Documents', 'safety-tasks':'Safety', groups:'Driver Groups', history:'History',
+      'live-loads':'Live Loads', telegram:'Telegram', settings:'Settings', kpi:'KPI Board', users:'Users', admin:'Admin'
     };
-    const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract']);
+    const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract','dispatch','assignments','drivers','recruiting','maint-overview','invoices','statements','brokers']);
+    // ── waymark functional modules (client-side aggregation over verified APIs) ──
+    async function _wmLoads(){ try{ const d=await fetch('/api/loads',{headers:authH()}).then(r=>r.json()); return Array.isArray(d)?d:(d.loads||d.items||[]); }catch{ return []; } }
+    async function _wmEntities(slug){ try{ const d=await fetch('/api/entities/'+slug,{headers:authH()}).then(r=>r.json()); return d.items||[]; }catch{ return []; } }
+    function _wmMoney(n){ return '$'+Math.round(Number(n)||0).toLocaleString(); }
+    function _wmRate(l){ return l.total_rate_num!=null?Number(l.total_rate_num):(parseFloat(String(l.total_rate_usd||'').replace(/[^0-9.]/g,''))||0); }
+    function _wmTh(t){ return `<th style="padding:10px;text-align:left;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">${t}</th>`; }
+    function _wmCard(t,v,c){ return `<div class="card" style="padding:16px;"><div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">${t}</div><div style="font-size:1.7rem;font-weight:800;color:${c||'var(--text)'};margin-top:6px;line-height:1;">${v}</div></div>`; }
+    function _wmSoon(d){ if(!d)return false; const x=new Date(d), n=new Date(); return x>=n && (x-n)/86400000<=30; }
+
+    async function renderDispatch(){
+      const el=document.getElementById('page-dispatch'); if(!el)return;
+      el.innerHTML='<div class="page-header"><h1 class="page-title">Dispatch</h1><p class="page-subtitle">Loading…</p></div>';
+      const loads=await _wmLoads();
+      const cols=[['upcoming','Booked'],['dispatched','In Transit'],['delivered','Delivered']];
+      const board=cols.map(([st,label])=>{
+        const items=loads.filter(l=>(l.status||'upcoming')===st);
+        const cards=items.map(l=>`<div class="card" style="padding:12px;margin-bottom:8px;">
+           <div style="font-weight:700;font-size:0.9rem;">${esc(l.load_number||('Load '+l.id))}</div>
+           <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">${esc(l.origin_state||'?')} → ${esc(l.destination_state||'?')}</div>
+           ${l.broker_name?`<div style="font-size:0.8rem;color:var(--text-muted);">${esc(l.broker_name)}</div>`:''}
+           <div style="font-weight:700;color:var(--success);margin-top:4px;">${_wmMoney(_wmRate(l))}</div></div>`).join('')
+           ||'<div style="color:var(--text-muted);font-size:0.82rem;padding:8px;">No loads</div>';
+        return `<div style="flex:1;min-width:240px;"><div style="font-weight:700;text-transform:uppercase;font-size:0.72rem;color:var(--text-muted);letter-spacing:0.05em;margin-bottom:10px;">${label} · ${items.length}</div>${cards}</div>`;
+      }).join('');
+      el.innerHTML=`<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;"><div><h1 class="page-title">Dispatch</h1><p class="page-subtitle">Live pipeline of every load</p></div><button class="btn-blue" onclick="goTo('extract')">+ Add Load</button></div>
+        <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">${board}</div>`;
+    }
+
+    async function renderBrokers(){
+      const el=document.getElementById('page-brokers'); if(!el)return;
+      el.innerHTML='<div class="page-header"><h1 class="page-title">Broker Scorecards</h1><p class="page-subtitle">Loading…</p></div>';
+      const loads=await _wmLoads(); const m={};
+      loads.forEach(l=>{const b=(l.broker_name||'').trim(); if(!b)return; const e=m[b]||(m[b]={loads:0,rev:0,deliv:0}); e.loads++; e.rev+=_wmRate(l); if((l.status||'')==='delivered')e.deliv++;});
+      const ranked=Object.entries(m).sort((a,b)=>b[1].rev-a[1].rev);
+      const rows=ranked.map(([b,e],i)=>`<tr>
+         <td style="padding:10px;border-bottom:1px solid var(--border);">${i+1}</td>
+         <td style="padding:10px;border-bottom:1px solid var(--border);font-weight:600;">${esc(b)}</td>
+         <td style="padding:10px;border-bottom:1px solid var(--border);">${e.loads}</td>
+         <td style="padding:10px;border-bottom:1px solid var(--border);color:var(--success);font-weight:600;">${_wmMoney(e.rev)}</td>
+         <td style="padding:10px;border-bottom:1px solid var(--border);">${e.loads?Math.round(e.deliv/e.loads*100):0}%</td></tr>`).join('');
+      el.innerHTML=`<div class="page-header"><h1 class="page-title">Broker Scorecards</h1><p class="page-subtitle">Your brokers ranked by revenue</p></div>`+
+        (rows?`<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--surface-2);">${_wmTh('#')}${_wmTh('Broker')}${_wmTh('Loads')}${_wmTh('Revenue')}${_wmTh('On&nbsp;Time')}</tr></thead><tbody>${rows}</tbody></table></div>`
+        :'<div class="card" style="padding:48px;text-align:center;color:var(--text-muted);">No broker activity yet — add loads with a broker.</div>');
+    }
+
+    async function renderMaintOverview(){
+      const el=document.getElementById('page-maint-overview'); if(!el)return;
+      el.innerHTML='<div class="page-header"><h1 class="page-title">Maintenance Overview</h1><p class="page-subtitle">Loading…</p></div>';
+      const [wos,drivers]=await Promise.all([_wmEntities('work-orders'),_wmEntities('drivers')]);
+      const open=wos.filter(w=>['open','in_progress'].includes(w.status||'open')).length;
+      const cost=wos.reduce((s,w)=>s+(Number(w.cost)||0),0);
+      const cdl=drivers.filter(d=>_wmSoon(d.cdl_expiry)).length;
+      const med=drivers.filter(d=>_wmSoon(d.medical_expiry)).length;
+      el.innerHTML=`<div class="page-header"><h1 class="page-title">Maintenance Overview</h1><p class="page-subtitle">Work orders & compliance at a glance</p></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px;">
+        ${_wmCard('Open Work Orders',open,open?'#d97706':null)}
+        ${_wmCard('Maintenance Cost',_wmMoney(cost))}
+        ${_wmCard('CDL Expiring (30d)',cdl,cdl?'#dc2626':null)}
+        ${_wmCard('Medical Expiring (30d)',med,med?'#dc2626':null)}</div>
+        <div style="display:flex;gap:8px;"><button class="btn-blue" onclick="goTo('work-orders')">Work Orders</button><button class="btn-outline" onclick="goTo('vendors')">Vendors</button></div>`;
+    }
+
+    async function renderStatements(){
+      const el=document.getElementById('page-statements'); if(!el)return;
+      el.innerHTML='<div class="page-header"><h1 class="page-title">Driver Statements</h1><p class="page-subtitle">Loading…</p></div>';
+      const [loads,drivers]=await Promise.all([_wmLoads(),_wmEntities('drivers')]);
+      const rows=drivers.map(dr=>{
+        const dl=loads.filter(l=>(l.driver_name||'')===dr.name && (l.status||'')==='delivered');
+        const gross=dl.reduce((s,l)=>s+_wmRate(l),0);
+        const pct=dr.pay_type==='percentage'&&dr.pay_rate?Number(dr.pay_rate):null;
+        const net=pct!=null?gross*pct/100:gross;
+        return `<tr><td style="padding:10px;border-bottom:1px solid var(--border);font-weight:600;">${esc(dr.name)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);">${dl.length}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);color:var(--success);font-weight:600;">${_wmMoney(gross)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);">${pct!=null?pct+'%':'—'}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-weight:700;">${_wmMoney(net)}</td></tr>`;
+      }).join('');
+      el.innerHTML=`<div class="page-header"><h1 class="page-title">Driver Statements</h1><p class="page-subtitle">Per-driver settlement (delivered loads)</p></div>`+
+        (drivers.length?`<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--surface-2);">${_wmTh('Driver')}${_wmTh('Loads')}${_wmTh('Gross')}${_wmTh('Pay&nbsp;%')}${_wmTh('Net')}</tr></thead><tbody>${rows}</tbody></table></div>`
+        :'<div class="card" style="padding:48px;text-align:center;color:var(--text-muted);">Add drivers (Assets → Drivers) to see settlements.</div>');
+    }
+
+    // ── waymark stub modules (empty-state placeholders, wired for fast-follow) ──
+    const STUB_PAGES = {
+      dispatch:      { icon:'kanban',            title:'Dispatch Board', sub:'Live pipeline of every truck and load.', desc:'No trucks or loads to display.', action:'Add Load' },
+      'maint-overview':{ icon:'gauge',           title:'Maintenance Overview', sub:'Maintenance and compliance at a glance.', desc:'Nothing due right now.', action:null },
+      statements:    { icon:'receipt',           title:'Driver Statements', sub:'Weekly driver settlements.', desc:'No settlements for this period.', action:null },
+      brokers:       { icon:'buildings',         title:'Broker Scorecards', sub:'Performance ranking of your brokers.', desc:'No broker activity yet.', action:null },
+    };
+    function renderStub(page) {
+      const c = STUB_PAGES[page]; const el = document.getElementById('page-' + page);
+      if (!c || !el) return;
+      const btn = c.action ? `<button class="btn-blue" style="margin-top:18px" onclick="toast('${c.title} — keyingi bosqichda (fast-follow)','info')"><i class="ph ph-plus"></i> ${c.action}</button>` : '';
+      el.innerHTML = `<div class="page-header"><h1 class="page-title">${c.title}</h1><div class="page-subtitle">${c.sub}</div></div>`
+        + `<div class="card" style="padding:72px 24px;text-align:center;"><div class="empty-state">`
+        + `<div class="empty-icon" style="font-size:2.4rem;color:var(--text-muted);"><i class="ph-thin ph-${c.icon}"></i></div>`
+        + `<div class="empty-title" style="margin-top:10px;font-weight:700;font-size:1.05rem;">${c.desc}</div>`
+        + `<div class="empty-desc" style="margin-top:4px;color:var(--text-muted);font-size:0.86rem;">This module is on the waymark roadmap — coming next.</div>`
+        + `${btn}</div></div>`;
+    }
     function goTo(page) {
       if (page !== 'extract') document.body.classList.remove('extract-fs');
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -2202,7 +2392,7 @@ Rate: {{total_rate_usd}}
       if (page === 'users')     loadUsersPage();
       if (page === 'analytics') loadAnalyticsPage();
       if (page === 'map')       loadMapPage();
-      if (page === 'trucks')    loadTrucksPage();
+      if (page === 'trucks')    loadEntityPage('trucks');
       if (page === 'telegram')  loadTelegramSection();
       if (page === 'kpi')       loadKpiPage();
       // Stop Telegram (My Telegram) polling when leaving the Telegram page.
@@ -2214,9 +2404,14 @@ Rate: {{total_rate_usd}}
         _mailboxPollTimer = setInterval(loadMailbox, 60000);
       }
       // Generic entity pages
-      if (['customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions'].includes(page)) {
+      if (['customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','drivers','assignments','recruiting','invoices'].includes(page)) {
         loadEntityPage(page);
       }
+      // waymark stub modules
+      if (page === 'dispatch') renderDispatch();
+      if (page === 'brokers') renderBrokers();
+      if (page === 'maint-overview') renderMaintOverview();
+      if (page === 'statements') renderStatements();
     }
     let _mailboxPollTimer = null;
     document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => goTo(b.dataset.page)));
@@ -2950,6 +3145,7 @@ Rate: {{total_rate_usd}}
 
     // ── Settings ──────────────────────────────────────────────────────────
     function doLogout() {
+      try { fetch('/api/logout', { method: 'POST', headers: authH() }); } catch {}
       localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(NAME_KEY);
       window.location.href = '/';
     }
@@ -5560,7 +5756,7 @@ Rate: {{total_rate_usd}}
       let html = '';
       if ((d.total_loads || 0) === 0) {
         html += `<div class="card" style="padding:18px;margin-bottom:16px;border-left:3px solid var(--primary);">
-          <div style="font-weight:700;margin-bottom:6px;">👋 Welcome to SimpleTrucking</div>
+          <div style="font-weight:700;margin-bottom:6px;">👋 Welcome to waymark</div>
           <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.5;">Get your first load in:
             <a href="#" onclick="goTo('extract');return false;" style="color:var(--primary);font-weight:600;">1) Extract a rate confirmation</a>
             → 2) Save Load → 3) Send to your Telegram group.</div>
@@ -5782,6 +5978,90 @@ Rate: {{total_rate_usd}}
           {k:'load_id', label:'Load ID', type:'number'},
         ]
       },
+      drivers: {
+        title: 'Driver',
+        listCols: ['name','status','driver_type','phone','cdl_class','cdl_expiry','medical_expiry','pay_type'],
+        fields: [
+          {k:'name', label:'Name', required:true},
+          {k:'dba', label:'DBA'},
+          {k:'status', label:'Status'},
+          {k:'driver_type', label:'Type'},
+          {k:'truck_id', label:'Truck'},
+          {k:'phone', label:'Phone'},
+          {k:'email', label:'Email', type:'email'},
+          {k:'cdl_number', label:'CDL #'},
+          {k:'cdl_class', label:'CDL Class'},
+          {k:'cdl_state', label:'CDL State'},
+          {k:'cdl_expiry', label:'CDL Expiry', type:'date'},
+          {k:'medical_expiry', label:'Medical Expiry', type:'date'},
+          {k:'pay_type', label:'Pay Type'},
+          {k:'pay_rate', label:'Pay Rate', type:'number'},
+          {k:'driver_group_id', label:'Telegram Group'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      trucks: {
+        title: 'Truck',
+        listCols: ['unit_number','status','make','model','year','ownership','odometer'],
+        fields: [
+          {k:'unit_number', label:'Unit #', required:true},
+          {k:'status', label:'Status'},
+          {k:'make', label:'Make'},
+          {k:'model', label:'Model'},
+          {k:'year', label:'Year'},
+          {k:'vin', label:'VIN'},
+          {k:'license_plate', label:'License Plate'},
+          {k:'license_state', label:'License State'},
+          {k:'ownership', label:'Ownership'},
+          {k:'odometer', label:'Odometer', type:'number'},
+          {k:'eld_unit_ref', label:'ELD Unit Ref'},
+          {k:'current_driver_id', label:'Current Driver'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      assignments: {
+        title: 'Assignment',
+        listCols: ['truck_id','driver_id','co_driver_id','trailer_id','group_name','status'],
+        fields: [
+          {k:'truck_id', label:'Truck'},
+          {k:'driver_id', label:'Driver'},
+          {k:'co_driver_id', label:'Co-Driver'},
+          {k:'trailer_id', label:'Trailer'},
+          {k:'group_name', label:'Group Name'},
+          {k:'status', label:'Status'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      recruiting: {
+        title: 'Lead',
+        listCols: ['name','stage','position','cdl_class','experience_years','phone'],
+        fields: [
+          {k:'name', label:'Name', required:true},
+          {k:'stage', label:'Stage'},
+          {k:'position', label:'Position'},
+          {k:'phone', label:'Phone'},
+          {k:'email', label:'Email', type:'email'},
+          {k:'source', label:'Source'},
+          {k:'experience_years', label:'Experience (yrs)'},
+          {k:'cdl_class', label:'CDL Class'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
+      invoices: {
+        title: 'Invoice',
+        listCols: ['invoice_number','customer_id','load_id','amount','status','issue_date','due_date'],
+        fields: [
+          {k:'invoice_number', label:'Invoice #'},
+          {k:'customer_id', label:'Customer'},
+          {k:'load_id', label:'Load'},
+          {k:'amount', label:'Amount', type:'number', required:true},
+          {k:'status', label:'Status'},
+          {k:'issue_date', label:'Issue Date', type:'date'},
+          {k:'due_date', label:'Due Date', type:'date'},
+          {k:'paid_date', label:'Paid Date', type:'date'},
+          {k:'notes', label:'Notes', type:'textarea'},
+        ]
+      },
     };
 
     async function loadEntityPage(slug) {
@@ -5851,6 +6131,15 @@ Rate: {{total_rate_usd}}
       'transactions.load_id': 'loads',
       'transactions.bill_id': 'bills',
       'mailbox.load_id': 'loads',
+      'drivers.truck_id': 'trucks',
+      'drivers.driver_group_id': 'groups',
+      'trucks.current_driver_id': 'drivers',
+      'assignments.truck_id': 'trucks',
+      'assignments.driver_id': 'drivers',
+      'assignments.co_driver_id': 'drivers',
+      'assignments.trailer_id': 'trailers',
+      'invoices.customer_id': 'customers',
+      'invoices.load_id': 'loads',
     };
     const ENUM_OPTIONS = {
       'transactions.tx_type': ['income', 'expense'],
@@ -5860,6 +6149,14 @@ Rate: {{total_rate_usd}}
       'safety-tasks.priority': ['low', 'normal', 'high', 'urgent'],
       'bills.status': ['unpaid', 'paid', 'partial', 'overdue'],
       'trailers.status': ['available', 'in_use', 'maintenance', 'out_of_service'],
+      'drivers.status': ['active', 'on_leave', 'inactive'],
+      'drivers.driver_type': ['company', 'owner_operator'],
+      'drivers.pay_type': ['mileage', 'percentage', 'salary'],
+      'trucks.status': ['active', 'inactive', 'in_shop'],
+      'trucks.ownership': ['company', 'lease', 'owner_operator'],
+      'assignments.status': ['active', 'inactive'],
+      'invoices.status': ['draft', 'sent', 'paid'],
+      'recruiting.stage': ['new', 'contacted', 'screening', 'interview', 'offer', 'hired', 'rejected'],
     };
 
     async function _loadRefOptions(ref) {

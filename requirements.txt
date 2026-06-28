@@ -9,3 +9,4 @@ reportlab>=4.0.0
 psycopg2-binary>=2.9.9
 telethon>=1.36
 cryptography>=42.0
+argon2-cffi>=23.1

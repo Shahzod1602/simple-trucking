@@ -5,7 +5,8 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ratecon
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ratecon_secret}
+      # No insecure default — must be provided via .env (deploy fails fast otherwise).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ratecon
     command:
       - "postgres"
@@ -31,7 +32,7 @@ services:
     restart: always
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://ratecon:${POSTGRES_PASSWORD:-ratecon_secret}@db:5432/ratecon
+      DATABASE_URL: postgresql://ratecon:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/ratecon
     ports:
       - "8002:8000"
     volumes:
@@ -39,6 +40,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      # App is healthy only when /api/health returns 200 (DB reachable).
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health',timeout=3).status==200 else 1)\""]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 25s
     dns:
       - 8.8.8.8
       - 8.8.4.4

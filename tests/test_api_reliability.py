@@ -1,6 +1,6 @@
 import os
-import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -14,21 +14,35 @@ class ApiReliabilityTests(unittest.TestCase):
     def setUpClass(cls):
         os.environ["DISABLE_BOT_POLLER"] = "1"
         os.environ["DISABLE_TRUCK_PREFETCH"] = "1"
-        cls._tmp = tempfile.TemporaryDirectory()
-        database.DB_PATH = os.path.join(cls._tmp.name, "test.db")
+        # Tests run against the configured Postgres (database.py is PG-only).
+        # Use a unique suffix per run + delete the company in teardown so the
+        # suite is idempotent and leaves no rows behind.
         database.init_db()
-
-        company = database.create_company("Test Co")
+        database.run_migrations()
+        cls.suffix = uuid.uuid4().hex[:8]
+        cls.user_email = f"usera-{cls.suffix}@testco.local"
+        cls.company = database.create_company(f"Test Co {cls.suffix}")
         cls.admin = database.create_company_user(
-            company["id"], "Admin", "admin@testco.local", "secret123", role="admin"
+            cls.company["id"], "Admin", f"admin-{cls.suffix}@testco.local", "secret123", role="admin"
         )
-        cls.auth = {"Authorization": f"Bearer {cls.admin['token']}"}
+        # Auth now uses expiring server-side sessions, not the legacy
+        # dispatchers.token column.
+        cls.session_token = database.create_session(cls.admin["id"])
+        cls.auth = {"Authorization": f"Bearer {cls.session_token}"}
         cls.client = TestClient(app_module.app)
 
     @classmethod
     def tearDownClass(cls):
         cls.client.close()
-        cls._tmp.cleanup()
+        # Remove everything this run created. dispatchers.company_id is ON DELETE
+        # SET NULL, so delete the dispatchers explicitly first (sessions cascade
+        # from the dispatcher), then the company.
+        try:
+            with database.get_conn() as conn:
+                conn.execute("DELETE FROM dispatchers WHERE company_id = %s", (cls.company["id"],))
+                conn.execute("DELETE FROM companies WHERE id = %s", (cls.company["id"],))
+        except Exception:
+            pass
 
     def test_health_endpoint(self):
         r = self.client.get("/api/health")
@@ -41,7 +55,7 @@ class ApiReliabilityTests(unittest.TestCase):
         r = self.client.post(
             "/api/company/users",
             headers=self.auth,
-            json={"name": "User A", "email": "usera@testco.local", "password": "secret123"},
+            json={"name": "User A", "email": self.user_email, "password": "secret123"},
         )
         self.assertEqual(r.status_code, 200)
 
@@ -63,6 +77,32 @@ class ApiReliabilityTests(unittest.TestCase):
                 self.assertEqual(ok.status_code, 200)
             limited = self.client.get("/api/map/locations", headers=self.auth)
             self.assertEqual(limited.status_code, 429)
+
+    def test_legacy_token_rejected(self):
+        # The old never-expiring dispatchers.token must no longer authenticate.
+        bad = {"Authorization": f"Bearer {self.admin['token']}"}
+        r = self.client.get("/api/me", headers=bad)
+        self.assertEqual(r.status_code, 401)
+
+    def test_logout_revokes_session(self):
+        tok = database.create_session(self.admin["id"])
+        h = {"Authorization": f"Bearer {tok}"}
+        self.assertEqual(self.client.get("/api/me", headers=h).status_code, 200)
+        self.assertEqual(self.client.post("/api/logout", headers=h).status_code, 200)
+        self.assertEqual(self.client.get("/api/me", headers=h).status_code, 401)
+
+    def test_password_hashed_with_argon2(self):
+        d = database.get_dispatcher_by_id(self.admin["id"])
+        self.assertTrue(d["password_hash"].startswith("$argon2"))
+        self.assertTrue(database.verify_password("secret123", d["password_hash"]))
+
+    def test_register_rejects_short_password(self):
+        # Short password is rejected (400) before any company/user is created.
+        r = self.client.post(
+            "/api/register",
+            json={"company_name": "X Co", "name": "X", "email": f"x-{self.suffix}@x.local", "password": "short"},
+        )
+        self.assertEqual(r.status_code, 400)
 
 
 if __name__ == "__main__":

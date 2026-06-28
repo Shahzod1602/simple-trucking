@@ -19,6 +19,7 @@ jobs:
           script: |
             set -e
             cd /opt/simple-trucking
+            PREV_COMMIT="$(git rev-parse HEAD || true)"
             # Pull over SSH using the repo's read-only deploy key.
             # ~/.ssh/config defines the `github-simpletrucking` alias →
             # HostName github.com + IdentityFile ~/.ssh/github_simpletrucking.
@@ -61,4 +62,19 @@ jobs:
               ATTEMPT=$((ATTEMPT + 1))
               sleep 2
             done
+            echo "=== Smoke test: /api/health ==="
+            OK=0
+            for i in $(seq 1 20); do
+              CODE="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8002/api/health || true)"
+              if [ "$CODE" = "200" ]; then OK=1; echo "health OK"; break; fi
+              sleep 3
+            done
+            if [ "$OK" != "1" ]; then
+              echo "Smoke test FAILED — rolling back to $PREV_COMMIT"
+              if [ -n "$PREV_COMMIT" ]; then
+                git reset --hard "$PREV_COMMIT"
+                docker compose up --build -d || true
+              fi
+              exit 1
+            fi
             docker image prune -f

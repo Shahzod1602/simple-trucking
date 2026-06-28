@@ -6270,8 +6270,73 @@ Rate: {{total_rate_usd}}
       el.innerHTML = statsBar + searchBar + `<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--surface-2);">${th('Unit #')}${th('Status')}${th('Location')}${th('Odometer')}${th('Mileage-Based')}${th('Date-Based')}${th('Recent Notes')}<th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
     }
 
+    // ── Drivers: rich roster (stats + compliance columns) ──
+    function _drvExpSoon(d) { if (!d) return false; const x = new Date(d), n = new Date(); return x <= new Date(n.getTime() + 30 * 86400000); }
+    function _drvPay(r) {
+      if (!r.pay_type) return null;
+      const rate = r.pay_rate;
+      if (r.pay_type === 'mileage') return (rate != null && rate !== '') ? '$' + rate + '/mi' : 'Mileage';
+      if (r.pay_type === 'percentage') return (rate != null && rate !== '') ? rate + '%' : 'Percentage';
+      if (r.pay_type === 'salary') return (rate != null && rate !== '') ? '$' + Number(rate).toLocaleString() : 'Salary';
+      return r.pay_type;
+    }
+    function _drvFilter() {
+      const q = (document.getElementById('drv-search').value || '').toLowerCase();
+      document.querySelectorAll('#page-drivers-content .drv-row').forEach(tr => { tr.style.display = tr.dataset.name.includes(q) ? '' : 'none'; });
+    }
+    async function renderDriversPage() {
+      const el = document.getElementById('page-drivers-content');
+      if (!el) return;
+      if (!token) { el.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-lock"></i></div><div class="empty-title">Sign in required</div></div>'; return; }
+      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading…</div>';
+      const [dRes, tRes] = await Promise.allSettled([
+        fetch('/api/entities/drivers', { headers: authH() }).then(r => r.json()),
+        fetch('/api/entities/trucks', { headers: authH() }).then(r => r.json()),
+      ]);
+      const drivers = dRes.status === 'fulfilled' ? (dRes.value.items || []) : [];
+      const trucks = tRes.status === 'fulfilled' ? (tRes.value.items || []) : [];
+      _entityItems['drivers'] = drivers;
+      const truckById = {}; trucks.forEach(t => { truckById[t.id] = t.unit_number; });
+      const total = drivers.length;
+      const active = drivers.filter(d => d.status === 'active').length;
+      const onLeave = drivers.filter(d => d.status === 'on_leave').length;
+      const inactive = drivers.filter(d => d.status === 'inactive').length;
+      const cdlExp = drivers.filter(d => _drvExpSoon(d.cdl_expiry)).length;
+      const medExp = drivers.filter(d => _drvExpSoon(d.medical_expiry)).length;
+      const stat = (label, val, color) => `<div style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-muted);"><span>${label}</span><strong style="color:${color || 'var(--text)'};">${val}</strong></div>`;
+      const statsBar = `<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-bottom:16px;">${stat('Total', total)}${stat('Active', active, 'var(--success)')}${stat('On Leave', onLeave)}${stat('Inactive', inactive)}${stat('CDL Expiring', cdlExp, cdlExp ? '#dc2626' : null)}${stat('Medical Expiring', medExp, medExp ? '#dc2626' : null)}</div>`;
+      const searchBar = `<div style="display:flex;justify-content:flex-end;margin-bottom:12px;"><input id="drv-search" type="text" placeholder="Search drivers…" oninput="_drvFilter()" style="width:280px;max-width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:var(--card-inner);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:0.85rem;outline:none;"></div>`;
+      if (!drivers.length) {
+        el.innerHTML = statsBar + searchBar + `<div class="card" style="padding:56px;text-align:center;"><div class="empty-icon" style="font-size:2.2rem;color:var(--text-muted);"><i class="ph-thin ph-users-three"></i></div><div class="empty-title" style="margin-top:8px;">No drivers found.</div><div class="empty-desc" style="color:var(--text-muted);margin-top:4px;">Add your first driver to get started.</div></div>`;
+        return;
+      }
+      const th = (t) => `<th style="padding:10px;text-align:left;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">${t}</th>`;
+      const cell = (v) => (v != null && v !== '') ? esc(String(v)) : '<span style="color:var(--text-muted);">—</span>';
+      const dateCell = (d) => { if (!d) return '<span style="color:var(--text-muted);">—</span>'; return `<span style="${_drvExpSoon(d) ? 'color:#dc2626;font-weight:600;' : ''}">${esc(String(d))}</span>`; };
+      const avail = (d) => d.status === 'active' ? 'Available' : (d.status === 'on_leave' ? 'On leave' : (d.status === 'inactive' ? 'Inactive' : '—'));
+      const trs = drivers.map(d => `<tr class="drv-row" data-name="${esc(String(d.name || '').toLowerCase())}">
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-weight:600;">${esc(d.name || '—')}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(d.dba)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(d.status)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(d.driver_type)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(truckById[d.truck_id])}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;color:var(--text-muted);">—</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${dateCell(d.cdl_expiry)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${dateCell(d.medical_expiry)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(avail(d))}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(_drvPay(d))}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(d.phone)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">
+            <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;" onclick="openEntityModal('drivers', ${d.id})">Edit</button>
+            <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;color:#ef4444;" onclick="deleteEntity('drivers', ${d.id})">Delete</button>
+          </td>
+        </tr>`).join('');
+      el.innerHTML = statsBar + searchBar + `<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--surface-2);">${th('Name')}${th('DBA')}${th('Status')}${th('Type')}${th('Truck')}${th('HOS')}${th('CDL Exp')}${th('Medical Exp')}${th('Availability')}${th('Pay')}${th('Phone')}<th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+    }
+
     async function loadEntityPage(slug) {
       if (slug === 'trucks') return renderTrucksPage();
+      if (slug === 'drivers') return renderDriversPage();
       const schema = ENTITY_SCHEMAS[slug];
       if (!schema) return;
       const containerId = `page-${slug}-content`;

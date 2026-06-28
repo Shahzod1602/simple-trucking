@@ -767,7 +767,7 @@
     .nr-badge.free { background: rgba(34,197,94,0.15); color: #16a34a; }
     .nr-badge.busy { background: rgba(239,68,68,0.15); color: #dc2626; }
     @media (max-width: 860px) { .map-layout { flex-direction: column; } #nearby-panel { width: auto; height: auto; max-height: 360px; } }
-    /* ── Fleet Map (full-bleed premium) ── */
+    /* ── Dispatch Map (full-bleed premium) ── */
     .content:has(> #page-map.active) { padding: 0; max-width: none; }
     #page-map { padding: 0 !important; position: relative; overflow: hidden; height: 100vh; }
     #page-map #map-container { position: absolute; inset: 0; height: 100%; width: 100%; border: none; border-radius: 0; }
@@ -850,7 +850,7 @@
       </button>
       <div class="nav-label">Assets</div>
       <button class="nav-item" data-page="map">
-        <span class="nav-icon"><i class="ph ph-map-trifold"></i></span> Fleet Map
+        <span class="nav-icon"><i class="ph ph-map-trifold"></i></span> Dispatch Map
       </button>
       <button class="nav-item" data-page="trucks">
         <span class="nav-icon"><i class="ph ph-truck"></i></span> Trucks
@@ -2355,7 +2355,7 @@ Rate: {{total_rate_usd}}
     // ── Navigation ────────────────────────────────────────────────────────
     const pageTitles = {
       dashboard:'Dashboard', dispatch:'Dispatch', loads:'Loads', assignments:'Assignments',
-      map:'Fleet Map', trucks:'Trucks', trailers:'Trailers', drivers:'Drivers', recruiting:'Recruiting',
+      map:'Dispatch Map', trucks:'Trucks', trailers:'Trailers', drivers:'Drivers', recruiting:'Recruiting',
       'maint-overview':'Maintenance', 'work-orders':'Work Orders', invoices:'Invoices', vendors:'Vendors',
       transactions:'Transactions', statements:'Statements', analytics:'Analytics', bills:'Bills', brokers:'Brokers',
       mailbox:'Mailbox', extract:'Extract', customers:'Customers', locations:'Locations',
@@ -6518,7 +6518,7 @@ Rate: {{total_rate_usd}}
     let nearbyTargetMarker = null;
     let nearbyRadiusCircle = null;
 
-    // ── Fleet Map: style switcher + Trucks/Trailers mode (full-bleed) ──
+    // ── Dispatch Map: style switcher + Trucks/Trailers mode (full-bleed) ──
     let _mapTileLayer = null, _mapStyle = 'satellite', _fleetMode = 'trucks';
     const _MAP_STYLES = {
       satellite: { label: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr: '&copy; Esri' },

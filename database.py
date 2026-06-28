@@ -840,30 +840,45 @@ def purge_expired_sessions() -> int:
 # ── Migration runner (versioned DDL in migrations/*.sql) ──────────────────────
 
 _MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
+_MIGRATION_LOCK_KEY = 911000  # serialize migration runs across workers/hosts
 
 
 def run_migrations() -> list[str]:
     """Apply *.sql files in migrations/ not yet recorded in schema_migrations.
+    Serialized with a blocking Postgres advisory lock so concurrent uvicorn
+    workers (or hosts) don't race: one applies, the rest block then skip.
     Each migration runs in its own transaction. Safe to re-run (idempotent)."""
     if not os.path.isdir(_MIGRATIONS_DIR):
         return []
     files = sorted(f for f in os.listdir(_MIGRATIONS_DIR) if f.endswith(".sql"))
-    with get_conn() as conn:
-        conn.execute("SELECT name FROM schema_migrations")
-        applied = {r["name"] for r in conn.fetchall()}
+    lock_conn = psycopg2.connect(DATABASE_URL)
+    lock_conn.autocommit = True
+    lcur = lock_conn.cursor()
+    lcur.execute("SELECT pg_advisory_lock(%s)", (_MIGRATION_LOCK_KEY,))  # blocks
     done: list[str] = []
-    for fn in files:
-        if fn in applied:
-            continue
-        sql = open(os.path.join(_MIGRATIONS_DIR, fn), encoding="utf-8").read()
+    try:
         with get_conn() as conn:
-            conn.execute(sql)
-            conn.execute(
-                "INSERT INTO schema_migrations (name, applied_at) VALUES (%s, %s)",
-                (fn, datetime.now(timezone.utc)),
-            )
-        done.append(fn)
-        print(f"[migration] applied {fn}", flush=True)
+            conn.execute("SELECT name FROM schema_migrations")
+            applied = {r["name"] for r in conn.fetchall()}
+        for fn in files:
+            if fn in applied:
+                continue
+            sql = open(os.path.join(_MIGRATIONS_DIR, fn), encoding="utf-8").read()
+            with get_conn() as conn:
+                conn.execute(sql)
+                conn.execute(
+                    "INSERT INTO schema_migrations (name, applied_at) VALUES (%s, %s) "
+                    "ON CONFLICT (name) DO NOTHING",
+                    (fn, datetime.now(timezone.utc)),
+                )
+            done.append(fn)
+            print(f"[migration] applied {fn}", flush=True)
+    finally:
+        try:
+            lcur.execute("SELECT pg_advisory_unlock(%s)", (_MIGRATION_LOCK_KEY,))
+        except Exception:
+            pass
+        lock_conn.close()
     return done
 
 

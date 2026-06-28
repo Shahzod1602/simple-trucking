@@ -1323,6 +1323,39 @@
         height: 26px;
       }
     }
+    html, body { overflow-x: hidden; max-width: 100%; }
+    /* ── MOBILE NAV ── */
+    .nav-burger { display: none; flex-direction: column; gap: 5px; background: none; border: none; cursor: pointer; padding: 8px; flex-shrink: 0; }
+    .nav-burger span { width: 24px; height: 2px; background: var(--text); border-radius: 2px; transition: transform 0.25s, opacity 0.2s; }
+    .nav-burger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-burger.open span:nth-child(2) { opacity: 0; }
+    .nav-burger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    .mobile-menu {
+      position: fixed; top: 66px; left: 0; right: 0; z-index: 10009;
+      background: var(--card); backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      flex-direction: column; padding: 10px 6% 18px; gap: 2px;
+      display: none; transform: translateY(-8px); opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    html.light .mobile-menu { background: var(--card); }
+    .mobile-menu.open { display: flex; transform: translateY(0); opacity: 1; }
+    .mobile-menu a { color: var(--text); text-decoration: none; padding: 13px 8px; font-size: 1rem; font-weight: 600; border-radius: 8px; }
+    .mobile-menu a:active { background: rgba(127,127,127,0.12); }
+    .mobile-menu .mm-ghost { border: 1px solid var(--border); text-align: center; margin-top: 10px; }
+    .mobile-menu .mm-primary { background: var(--primary); color: #fff; text-align: center; margin-top: 8px; }
+    @media (max-width: 768px) {
+      nav { padding: 0 5%; }
+      .nav-cta .btn-ghost, .nav-cta .btn-primary { display: none; }
+      .nav-burger { display: flex; }
+      .nav-logo { font-size: 1rem; gap: 8px; }
+      .nav-logo .logo-icon { width: 36px; height: 28px; }
+    }
+    @media (max-width: 480px) {
+      .hero-left h1 { font-size: 3rem; }
+      .section-title { font-size: 2.2rem; }
+      .intro-copy { font-size: clamp(1.7rem, 9vw, 2.6rem); }
+    }
   </style>
 </head>
 <body>
@@ -1360,7 +1393,16 @@
       <a href="/login" class="btn-ghost">Log in</a>
       <a href="mailto:ceo@simpletrucking.online?subject=Demo Request" class="btn-primary">Get started free</a>
     </div>
+    <button class="nav-burger" id="navBurger" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
   </nav>
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How it works</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#about">About</a>
+    <a href="/login" class="mm-ghost">Log in</a>
+    <a href="mailto:ceo@simpletrucking.online?subject=Demo Request" class="mm-primary">Get started free</a>
+  </div>
 
   <!-- HERO -->
   <section class="hero">
@@ -2102,5 +2144,16 @@
     }
   </script>
 
+<script>
+  (function () {
+    var b = document.getElementById('navBurger'), m = document.getElementById('mobileMenu');
+    if (!b || !m) return;
+    function close() { m.classList.remove('open'); b.classList.remove('open'); b.setAttribute('aria-expanded', 'false'); }
+    b.addEventListener('click', function () {
+      var open = m.classList.toggle('open'); b.classList.toggle('open', open); b.setAttribute('aria-expanded', String(open));
+    });
+    m.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', close); });
+  })();
+</script>
 </body>
 </html>

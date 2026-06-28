@@ -6193,7 +6193,85 @@ Rate: {{total_rate_usd}}
       },
     };
 
+    // ── Trucks: asset records merged with live ELD units (importable) ──
+    async function importEldTruck(unit) {
+      try {
+        await fetch('/api/entities/trucks', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ unit_number: unit, status: 'active', ownership: 'company', eld_unit_ref: unit }) });
+        toast('Imported ' + unit + ' from ELD', 'success');
+        renderTrucksPage();
+      } catch { toast('Import failed', 'error'); }
+    }
+    function _trkFilter() {
+      const q = (document.getElementById('trk-search').value || '').toLowerCase();
+      document.querySelectorAll('#page-trucks-content .trk-row').forEach(tr => { tr.style.display = tr.dataset.unit.includes(q) ? '' : 'none'; });
+    }
+    async function renderTrucksPage() {
+      const el = document.getElementById('page-trucks-content');
+      if (!el) return;
+      if (!token) { el.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="ph-thin ph-lock"></i></div><div class="empty-title">Sign in required</div></div>'; return; }
+      el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Loading…</div>';
+      const [aRes, eRes] = await Promise.allSettled([
+        fetch('/api/entities/trucks', { headers: authH() }).then(r => r.json()),
+        fetch('/api/trucks', { headers: authH() }).then(r => r.json()),
+      ]);
+      const assets = aRes.status === 'fulfilled' ? (aRes.value.items || []) : [];
+      const eld = eRes.status === 'fulfilled' ? (eRes.value.trucks || []) : [];
+      _entityItems['trucks'] = assets;
+      const byUnit = {};
+      assets.forEach(a => { const k = String(a.unit_number || '').trim().toUpperCase(); if (k) byUnit[k] = Object.assign({ _source: 'asset' }, a); });
+      eld.forEach(t => {
+        const k = String(t.truck_number || '').trim().toUpperCase(); if (!k) return;
+        const live = {
+          location: (t.lat != null && t.lon != null) ? `${t.lat.toFixed(3)}, ${t.lon.toFixed(3)}` : null,
+          live_status: t.speed_mph == null ? null : (t.speed_mph > 3 ? 'rolling' : 'stopped'),
+          driver_name: t.driver ? t.driver.name : null,
+        };
+        if (byUnit[k]) Object.assign(byUnit[k], live);
+        else byUnit[k] = Object.assign({ unit_number: t.truck_number, _source: 'eld' }, live);
+      });
+      const rows = Object.values(byUnit);
+      const total = rows.length;
+      const active = rows.filter(r => r.status === 'active' || (!r.status && r.live_status === 'rolling')).length;
+      const inactive = rows.filter(r => r.status === 'inactive' || r.status === 'in_shop').length;
+      const nonCompany = rows.filter(r => r.ownership && r.ownership !== 'company').length;
+      const stat = (label, val, color) => `<div style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-muted);"><span>${label}</span><strong style="color:${color || 'var(--text)'};">${val}</strong></div>`;
+      const statsBar = `<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-bottom:16px;">${stat('Total', total)}${stat('Active', active, 'var(--success)')}${stat('Inactive', inactive)}${stat('Maint Due Soon', 0)}${stat('Maint Overdue', 0)}${stat('Non-Company', nonCompany)}</div>`;
+      const searchBar = `<div style="display:flex;justify-content:flex-end;margin-bottom:12px;"><input id="trk-search" type="text" placeholder="Search trucks…" oninput="_trkFilter()" style="width:280px;max-width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:var(--card-inner);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:0.85rem;outline:none;"></div>`;
+      if (!rows.length) {
+        el.innerHTML = statsBar + searchBar + `<div class="card" style="padding:56px;text-align:center;"><div class="empty-icon" style="font-size:2.2rem;color:var(--text-muted);"><i class="ph-thin ph-truck"></i></div><div class="empty-title" style="margin-top:8px;">No trucks found.</div><div class="empty-desc" style="color:var(--text-muted);margin-top:4px;">Add your first truck, or connect ELD in Settings to auto-import.</div></div>`;
+        return;
+      }
+      const th = (t) => `<th style="padding:10px;text-align:left;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">${t}</th>`;
+      const statusBadge = (r) => {
+        if (r.live_status === 'rolling') return '<span style="color:var(--success);font-weight:600;">● Rolling</span>';
+        if (r.live_status === 'stopped') return '<span style="color:#ef4444;font-weight:600;">● Stopped</span>';
+        if (r.status) return esc(r.status);
+        return '<span style="color:var(--text-muted);">—</span>';
+      };
+      const cell = (v) => (v != null && v !== '') ? esc(String(v)) : '<span style="color:var(--text-muted);">—</span>';
+      const trs = rows.map(r => {
+        const actions = r._source === 'eld'
+          ? `<button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;" onclick="importEldTruck('${esc(r.unit_number)}')">+ Import</button>`
+          : `<button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;" onclick="openEntityModal('trucks', ${r.id})">Edit</button> <button class="btn-outline" style="padding:4px 10px;font-size:0.75rem;color:#ef4444;" onclick="deleteEntity('trucks', ${r.id})">Delete</button>`;
+        const eldTag = r._source === 'eld' ? ' <span style="font-size:0.62rem;background:var(--primary-light);color:var(--primary);padding:1px 5px;border-radius:4px;vertical-align:middle;">ELD</span>' : '';
+        const odo = (r.odometer != null && r.odometer !== '') ? Number(r.odometer).toLocaleString() + ' mi' : null;
+        return `<tr class="trk-row" data-unit="${esc(String(r.unit_number || '').toLowerCase())}">
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-weight:600;">${esc(r.unit_number || '—')}${eldTag}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${statusBadge(r)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(r.location)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(odo)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;color:var(--text-muted);">—</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;color:var(--text-muted);">—</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${cell(r.notes)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">${actions}</td>
+        </tr>`;
+      }).join('');
+      el.innerHTML = statsBar + searchBar + `<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--surface-2);">${th('Unit #')}${th('Status')}${th('Location')}${th('Odometer')}${th('Mileage-Based')}${th('Date-Based')}${th('Recent Notes')}<th></th></tr></thead><tbody>${trs}</tbody></table></div>`;
+    }
+
     async function loadEntityPage(slug) {
+      if (slug === 'trucks') return renderTrucksPage();
       const schema = ENTITY_SCHEMAS[slug];
       if (!schema) return;
       const containerId = `page-${slug}-content`;

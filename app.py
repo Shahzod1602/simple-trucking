@@ -2938,7 +2938,7 @@ async def api_create_entity(slug: str, request: Request, authorization: str | No
         row = database.create_entity(table, company_id, body)
     except Exception as exc:
         logger.warning("Create %s failed: %s", table, exc)
-        raise HTTPException(status_code=400, detail=f"Could not create record: {exc}")
+        raise HTTPException(status_code=400, detail="Could not save — please check the fields and try again.")
     _audit_event(dispatcher, f"{table}.create", table, str(row.get("id")))
     return row
 

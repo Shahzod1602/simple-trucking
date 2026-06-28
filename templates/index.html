@@ -173,6 +173,8 @@
     }
     .nav-item[hidden] { display: none; }
     .nav-pref-hidden { display: none !important; }
+    .nav-search-hide { display: none !important; }
+    .nav-search-show { display: flex !important; }
     .nav-cust-group { display: flex; flex-direction: column; gap: 1px; }
     .nav-cust-row { display: flex; align-items: center; gap: 9px; padding: 7px 6px; border-radius: 8px; font-size: 0.88rem; }
     .nav-cust-row:hover { background: var(--card-inner); }
@@ -840,7 +842,7 @@
       </div>
     </div>
     <nav class="sidebar-nav">
-      <div class="nav-search"><i class="ph ph-magnifying-glass"></i><input type="text" placeholder="Search…" /><kbd>⌘K</kbd></div>
+      <div class="nav-search"><i class="ph ph-magnifying-glass"></i><input type="text" id="nav-search-input" placeholder="Search…" oninput="_navSearch(this.value)" onkeydown="if(event.key==='Escape'){this.value='';_navSearch('');this.blur();}" /><kbd>⌘K</kbd></div>
       <div class="nav-label">Operations</div>
       <button class="nav-item active" data-page="dashboard">
         <span class="nav-icon"><i class="ph ph-squares-four"></i></span> Dashboard
@@ -886,6 +888,15 @@
       </button>
       <button class="nav-item" data-page="brokers">
         <span class="nav-icon"><i class="ph ph-buildings"></i></span> Brokers
+      </button>
+      <button class="nav-item" data-page="invoices">
+        <span class="nav-icon"><i class="ph ph-file-text"></i></span> Invoices
+      </button>
+      <button class="nav-item" data-page="vendors">
+        <span class="nav-icon"><i class="ph ph-storefront"></i></span> Vendors
+      </button>
+      <button class="nav-item" data-page="work-orders">
+        <span class="nav-icon"><i class="ph ph-wrench"></i></span> Work Orders
       </button>
       <div class="nav-label">Workspace</div>
       <button class="nav-item" data-page="mailbox">
@@ -947,6 +958,9 @@
         </button>
         <button class="foot-icon" title="Settings" aria-label="Settings" onclick="goTo('settings')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="foot-icon" title="Customize navigation" aria-label="Customize navigation" onclick="openNavCustomizer()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
         </button>
         <button class="foot-icon" title="Notifications" aria-label="Notifications" onclick="showNotifications()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -1016,7 +1030,6 @@
         </div>
         <div id="page-recruiting-content"></div>
       </div>
-      <div class="page" id="page-maint-overview"></div>
       <!-- ── Invoices ── -->
       <div class="page" id="page-invoices">
         <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -2353,13 +2366,13 @@ Rate: {{total_rate_usd}}
     const pageTitles = {
       dashboard:'Dashboard', dispatch:'Dispatch', loads:'Loads', assignments:'Assignments',
       map:'Dispatch Map', trucks:'Trucks', trailers:'Trailers', drivers:'Drivers', recruiting:'Recruiting',
-      'maint-overview':'Maintenance', 'work-orders':'Work Orders', invoices:'Invoices', vendors:'Vendors',
+      'work-orders':'Work Orders', invoices:'Invoices', vendors:'Vendors',
       transactions:'Transactions', statements:'Statements', analytics:'Analytics', bills:'Bills', brokers:'Brokers',
       mailbox:'Mailbox', extract:'Extract', customers:'Customers', locations:'Locations',
       'driver-documents':'Documents', 'safety-tasks':'Safety', groups:'Driver Groups', history:'History',
       'live-loads':'Live Loads', telegram:'Telegram', settings:'Settings', kpi:'KPI Board', users:'Users', admin:'Admin'
     };
-    const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract','dispatch','assignments','drivers','recruiting','maint-overview','invoices','statements','brokers','telegram']);
+    const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract','dispatch','assignments','drivers','recruiting','invoices','statements','brokers','telegram']);
     // ── SimpleTrucking functional modules (client-side aggregation over verified APIs) ──
     async function _wmLoads(){ try{ const d=await fetch('/api/loads',{headers:authH()}).then(r=>r.json()); return Array.isArray(d)?d:(d.loads||d.items||[]); }catch{ return []; } }
     async function _wmEntities(slug){ try{ const d=await fetch('/api/entities/'+slug,{headers:authH()}).then(r=>r.json()); return d.items||[]; }catch{ return []; } }
@@ -2392,14 +2405,14 @@ Rate: {{total_rate_usd}}
     async function _dispatchTimelineHTML(loads) {
       const [trucks, drivers] = await Promise.all([_wmEntities('trucks'), _wmEntities('drivers')]);
       const truckById = {}; trucks.forEach(t => { truckById[t.id] = t; });
-      const driverTruck = {}; drivers.forEach(d => { if (d.truck_id && truckById[d.truck_id]) driverTruck[String(d.name || '').toLowerCase()] = truckById[d.truck_id].unit_number; });
+      const truckByGroup = {}; drivers.forEach(d => { if (d.driver_group_id && d.truck_id && truckById[d.truck_id]) truckByGroup[d.driver_group_id] = truckById[d.truck_id].unit_number; });
       const DAY = 86400000, days = 7;
       const now = new Date(); const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2);
       const total = days * DAY; const pct = (t) => ((t - start) / total) * 100;
       const parse = (s) => { if (!s) return null; const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
       const rows = {}; const ensure = (u) => rows[u] || (rows[u] = { unit: u, loads: [], rev: 0, loc: '' });
       trucks.forEach(t => { const r = ensure(t.unit_number); r.loc = t.location || ''; });
-      loads.forEach(l => { let u = driverTruck[String(l.driver_name || '').toLowerCase()] || (l.driver_name ? l.driver_name : 'Unassigned'); const r = ensure(u); r.loads.push(l); r.rev += _wmRate(l); });
+      loads.forEach(l => { let u = (l.group_id != null && truckByGroup[l.group_id]) || l.driver_name || 'Unassigned'; const r = ensure(u); r.loads.push(l); r.rev += _wmRate(l); });
       const rowList = Object.values(rows).filter(r => r.loads.length || trucks.find(t => t.unit_number === r.unit))
         .sort((a, b) => (a.unit === 'Unassigned' ? 1 : 0) - (b.unit === 'Unassigned' ? 1 : 0) || b.rev - a.rev);
       const sc = (st) => { st = String(st || '').toLowerCase(); if (st === 'delivered') return '#22c55e'; if (st === 'dispatched' || st === 'in_transit') return '#f5a623'; return '#4585ff'; };
@@ -2444,7 +2457,9 @@ Rate: {{total_rate_usd}}
       el.innerHTML = '<div class="page-header"><h1 class="page-title">Dispatch</h1><p class="page-subtitle">Loading…</p></div>';
       const loads = await _wmLoads();
       const header = `<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;"><div><h1 class="page-title">Dispatch Board</h1><p class="page-subtitle">Live pipeline of every load</p></div><div style="display:flex;align-items:center;">${_dispatchToggle()}<button class="btn-blue" onclick="goTo('extract')">+ Add Load</button></div></div>`;
-      el.innerHTML = header + (_dispatchView === 'timeline' ? await _dispatchTimelineHTML(loads) : _dispatchBoardHTML(loads));
+      const main = _dispatchView === 'timeline' ? await _dispatchTimelineHTML(loads) : _dispatchBoardHTML(loads);
+      const note = _dispatchView === 'timeline' ? '<div style="font-size:0.78rem;color:var(--text-muted);margin-top:10px;">Bars use load pickup &#8594; delivery dates. Loads without dates, or trucks not linked to a driver group, show under their group name or &#8220;Unassigned&#8221; &#8212; set Drivers &#8594; Telegram Group + Truck to map them.</div>' : '';
+      el.innerHTML = header + main + note;
     }
 
     async function renderBrokers(){
@@ -2485,20 +2500,32 @@ Rate: {{total_rate_usd}}
       const el=document.getElementById('page-statements'); if(!el)return;
       el.innerHTML='<div class="page-header"><h1 class="page-title">Driver Statements</h1><p class="page-subtitle">Loading…</p></div>';
       const [loads,drivers]=await Promise.all([_wmLoads(),_wmEntities('drivers')]);
-      const rows=drivers.map(dr=>{
-        const dl=loads.filter(l=>(l.driver_name||'')===dr.name && (l.status||'')==='delivered');
-        const gross=dl.reduce((s,l)=>s+_wmRate(l),0);
-        const pct=dr.pay_type==='percentage'&&dr.pay_rate?Number(dr.pay_rate):null;
-        const net=pct!=null?gross*pct/100:gross;
-        return `<tr><td style="padding:10px;border-bottom:1px solid var(--border);font-weight:600;">${esc(dr.name)}</td>
-          <td style="padding:10px;border-bottom:1px solid var(--border);">${dl.length}</td>
-          <td style="padding:10px;border-bottom:1px solid var(--border);color:var(--success);font-weight:600;">${_wmMoney(gross)}</td>
-          <td style="padding:10px;border-bottom:1px solid var(--border);">${pct!=null?pct+'%':'—'}</td>
-          <td style="padding:10px;border-bottom:1px solid var(--border);font-weight:700;">${_wmMoney(net)}</td></tr>`;
+      const drvByGroup={}; drivers.forEach(d=>{ if(d.driver_group_id) drvByGroup[d.driver_group_id]=d; });
+      // Loads link to a driver GROUP (load.group_id / load.driver_name = group name); settle per group.
+      const groups={};
+      loads.filter(l=>(l.status||'')==='delivered').forEach(l=>{
+        const key=l.group_id!=null?('g'+l.group_id):(l.driver_name||'Unassigned');
+        const g=groups[key]||(groups[key]={label:l.driver_name||'Unassigned', gid:l.group_id, loads:0, gross:0, miles:0});
+        g.loads++; g.gross+=_wmRate(l); g.miles+=(l.miles_num!=null?Number(l.miles_num):(parseFloat(String(l.miles||'').replace(/[^0-9.]/g,''))||0));
+      });
+      const list=Object.values(groups).sort((a,b)=>b.gross-a.gross);
+      const rows=list.map(g=>{
+        const dr=g.gid!=null?drvByGroup[g.gid]:null;
+        let payLabel='<span style="color:var(--text-muted);">—</span>', net=null;
+        if(dr&&dr.pay_type){ const rate=(dr.pay_rate!=null&&dr.pay_rate!=='')?Number(dr.pay_rate):null;
+          if(dr.pay_type==='percentage'&&rate!=null){ payLabel=rate+'%'; net=g.gross*rate/100; }
+          else if(dr.pay_type==='mileage'&&rate!=null){ payLabel='$'+rate+'/mi'; net=g.miles*rate; }
+          else if(dr.pay_type==='salary'){ payLabel='Salary'; }
+        }
+        return `<tr><td style="padding:10px;border-bottom:1px solid var(--border);font-weight:600;">${esc(g.label)}${dr?'':' <span style=\'font-size:0.62rem;color:var(--text-muted);\'>(no driver linked)</span>'}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);">${g.loads}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);color:var(--success);font-weight:600;">${_wmMoney(g.gross)}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);">${payLabel}</td>
+          <td style="padding:10px;border-bottom:1px solid var(--border);font-weight:700;">${net!=null?_wmMoney(net):'<span style=\'color:var(--text-muted);\'>—</span>'}</td></tr>`;
       }).join('');
-      el.innerHTML=`<div class="page-header"><h1 class="page-title">Driver Statements</h1><p class="page-subtitle">Per-driver settlement (delivered loads)</p></div>`+
-        (drivers.length?`<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--surface-2);">${_wmTh('Driver')}${_wmTh('Loads')}${_wmTh('Gross')}${_wmTh('Pay&nbsp;%')}${_wmTh('Net')}</tr></thead><tbody>${rows}</tbody></table></div>`
-        :'<div class="card" style="padding:48px;text-align:center;color:var(--text-muted);">Add drivers (Assets → Drivers) to see settlements.</div>');
+      el.innerHTML=`<div class="page-header"><h1 class="page-title">Driver Statements</h1><p class="page-subtitle">Settlement by driver group · delivered loads</p></div>`+
+        (list.length?`<div class="card" style="padding:0;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><thead><tr style="background:var(--surface-2);">${_wmTh('Driver / Group')}${_wmTh('Loads')}${_wmTh('Gross')}${_wmTh('Pay')}${_wmTh('Net')}</tr></thead><tbody>${rows}</tbody></table></div><div style="font-size:0.78rem;color:var(--text-muted);margin-top:10px;">Net is computed when a driver is linked to the group with a pay type (Drivers → edit → Telegram Group + Pay). Salary/unlinked show “—”.</div>`
+        :'<div class="card" style="padding:48px;text-align:center;color:var(--text-muted);">No delivered loads yet — settlements appear once loads are delivered.</div>');
     }
 
     // ── SimpleTrucking stub modules (empty-state placeholders, wired for fast-follow) ──
@@ -2545,6 +2572,7 @@ Rate: {{total_rate_usd}}
       document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => {
         const p = b.dataset.page;
         if (!p || _NAV_SKIP.includes(p)) return;
+        if (p === 'dashboard') { b.classList.remove('nav-pref-hidden'); return; }
         b.classList.toggle('nav-pref-hidden', hidden.has(p));
       });
       // Hide a section label when it has no visible items.
@@ -2574,7 +2602,7 @@ Rate: {{total_rate_usd}}
           cur.items.push({ page: p, label: el.textContent.trim() });
         }
       });
-      const row = (it) => `<div class="nav-cust-row" draggable="true" data-page="${esc(it.page)}"><span class="nav-cust-handle">⠿</span><input type="checkbox" data-page="${esc(it.page)}" ${hidden.has(it.page) ? '' : 'checked'} style="accent-color:var(--primary);width:16px;height:16px;flex-shrink:0;"><span class="nav-cust-label">${esc(it.label)}</span></div>`;
+      const row = (it) => `<div class="nav-cust-row" draggable="true" data-page="${esc(it.page)}"><span class="nav-cust-handle">⠿</span><input type="checkbox" data-page="${esc(it.page)}" ${it.page === 'dashboard' ? 'checked disabled' : (hidden.has(it.page) ? '' : 'checked')} style="accent-color:var(--primary);width:16px;height:16px;flex-shrink:0;"><span class="nav-cust-label">${esc(it.label)}</span></div>`;
       const body = groups.map(g => `<div class="nav-cust-block" data-section="${esc(g.name)}" style="margin-bottom:12px;"><div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:4px;">${esc(g.name)}</div><div class="nav-cust-group" style="min-height:8px;">${g.items.map(row).join('')}</div></div>`).join('');
       const ov = document.createElement('div');
       ov.className = 'overlay'; ov.id = 'nav-customizer'; ov.style.display = 'flex';
@@ -2650,6 +2678,7 @@ Rate: {{total_rate_usd}}
       if (page !== 'telegram') { try { _stopTgmPolls(); } catch {} }
       // Auto-refresh the mailbox only while it's the active page.
       if (_mailboxPollTimer) { clearInterval(_mailboxPollTimer); _mailboxPollTimer = null; }
+      if (page !== 'map' && typeof mapAutoRefreshTimer !== 'undefined' && mapAutoRefreshTimer) { clearInterval(mapAutoRefreshTimer); mapAutoRefreshTimer = null; }
       if (page === 'mailbox') {
         loadMailbox();
         _mailboxPollTimer = setInterval(loadMailbox, 60000);
@@ -2661,7 +2690,6 @@ Rate: {{total_rate_usd}}
       // SimpleTrucking stub modules
       if (page === 'dispatch') renderDispatch();
       if (page === 'brokers') renderBrokers();
-      if (page === 'maint-overview') renderMaintOverview();
       if (page === 'statements') renderStatements();
     }
     let _mailboxPollTimer = null;
@@ -2703,12 +2731,24 @@ Rate: {{total_rate_usd}}
     applyNavPrefs();
     // Mirror the nav unread/alert badges onto the sidebar-footer icon row.
     function _syncFootBadges() {
+      if (!token) return;
       [['mailbox-badge','foot-mail-badge'],['alert-badge','foot-alert-badge']].forEach(([s,d]) => {
         const src = document.getElementById(s), dst = document.getElementById(d);
         if (src && dst) { dst.textContent = src.textContent; dst.style.display = src.style.display; }
       });
     }
     setInterval(_syncFootBadges, 2000);
+    function _navSearch(q) {
+      q = (q || '').trim().toLowerCase();
+      const items = document.querySelectorAll('.sidebar-nav .nav-item');
+      const labels = document.querySelectorAll('.sidebar-nav .nav-label');
+      if (!q) { items.forEach(b => b.classList.remove('nav-search-hide', 'nav-search-show')); labels.forEach(l => l.classList.remove('nav-search-hide')); applyNavPrefs(); return; }
+      items.forEach(b => { if (b.hasAttribute('hidden')) return; const m = (b.textContent || '').toLowerCase().includes(q); b.classList.toggle('nav-search-hide', !m); b.classList.toggle('nav-search-show', m); });
+      labels.forEach(l => l.classList.add('nav-search-hide'));
+    }
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === 'k') { e.preventDefault(); const i = document.getElementById('nav-search-input'); if (i) { i.focus(); i.select(); } }
+    });
 
     // Resizable sidebar — drag the right edge; persisted; double-click resets.
     (function () {
@@ -3440,7 +3480,7 @@ Rate: {{total_rate_usd}}
 
     // ── Settings ──────────────────────────────────────────────────────────
     function doLogout() {
-      try { fetch('/api/logout', { method: 'POST', headers: authH() }); } catch {}
+      try { fetch('/api/logout', { method: 'POST', headers: authH(), keepalive: true }); } catch {}
       localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(NAME_KEY);
       window.location.href = '/';
     }
@@ -5543,6 +5583,7 @@ Rate: {{total_rate_usd}}
           delivery_date: _fmtDtLocal(document.getElementById('cl-delivery-date').value),
           miles: document.getElementById('cl-miles').value.trim() || null,
         };
+        if (!body.load_number && !body.total_rate_usd) { statusEl.textContent = 'Enter at least a load # or a rate.'; btn.disabled = false; btn.textContent = 'Save Load'; return; }
         const r = await fetch('/api/loads', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!r.ok) { const d = await r.json(); statusEl.textContent = d.detail || 'Error saving load'; return; }
         closeCreateLoadModal();
@@ -6362,8 +6403,9 @@ Rate: {{total_rate_usd}}
     // ── Trucks: asset records merged with live ELD units (importable) ──
     async function importEldTruck(unit) {
       try {
-        await fetch('/api/entities/trucks', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
+        const r = await fetch('/api/entities/trucks', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ unit_number: unit, status: 'active', ownership: 'company', eld_unit_ref: unit }) });
+        if (!r.ok) { toast('Import failed (already added?)', 'error'); return; }
         toast('Imported ' + unit + ' from ELD', 'success');
         renderTrucksPage();
       } catch { toast('Import failed', 'error'); }
@@ -6709,6 +6751,7 @@ Rate: {{total_rate_usd}}
           body: JSON.stringify(body),
         });
         if (!r.ok) {
+          if (r.status === 401) return;
           const err = await r.json().catch(() => ({}));
           toast(err.detail || 'Save failed', 'error');
           return;

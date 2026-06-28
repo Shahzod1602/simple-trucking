@@ -1,4 +1,4 @@
-# waymark — full TLS vhost. Enable AFTER obtaining a cert:
+# SimpleTrucking — full TLS vhost. Enable AFTER obtaining a cert:
 #   certbot certonly --webroot -w /var/www/certbot -d simpletrucking.identify.uz
 # then copy this over nginx.conf and reload nginx.
 

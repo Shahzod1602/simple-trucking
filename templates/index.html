@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>waymark — Trucking OS</title>
+  <title>SimpleTrucking</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
   <style>
     /* ═══════════════════════════════════════════════════════════
-       waymark — Design System
+       SimpleTrucking — Design System
        Fonts: Barlow Condensed · IBM Plex Sans · IBM Plex Mono
        Palette: Deep Navy · Electric Blue · Amber Accent
        ═══════════════════════════════════════════════════════════ */
@@ -79,7 +79,7 @@
       --sidebar-active-bg: #f1f3f5;
       --sidebar-active-text: #0f172a;
     }
-    /* ── Light-theme component overrides (waymark) ── */
+    /* ── Light-theme component overrides (SimpleTrucking) ── */
     [data-theme="light"] body { background-image: none; background: var(--bg); }
     [data-theme="light"] .logo-text { color: #0f172a; }
     [data-theme="light"] .user-name { color: #0f172a; }
@@ -787,7 +787,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
       <div class="logo-mark">
-        <div class="logo-text">waymark</div>
+        <div class="logo-text">SimpleTrucking</div>
       </div>
     </div>
     <nav class="sidebar-nav">
@@ -912,7 +912,7 @@
 
     <div class="content">
 
-      <!-- ── waymark stub pages (fast-follow modules) ── -->
+      <!-- ── SimpleTrucking stub pages (fast-follow modules) ── -->
       <div class="page" id="page-dispatch"></div>
       <!-- ── Assignments ── -->
       <div class="page" id="page-assignments">
@@ -2271,7 +2271,7 @@ Rate: {{total_rate_usd}}
       'live-loads':'Live Loads', telegram:'Telegram', settings:'Settings', kpi:'KPI Board', users:'Users', admin:'Admin'
     };
     const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract','dispatch','assignments','drivers','recruiting','maint-overview','invoices','statements','brokers']);
-    // ── waymark functional modules (client-side aggregation over verified APIs) ──
+    // ── SimpleTrucking functional modules (client-side aggregation over verified APIs) ──
     async function _wmLoads(){ try{ const d=await fetch('/api/loads',{headers:authH()}).then(r=>r.json()); return Array.isArray(d)?d:(d.loads||d.items||[]); }catch{ return []; } }
     async function _wmEntities(slug){ try{ const d=await fetch('/api/entities/'+slug,{headers:authH()}).then(r=>r.json()); return d.items||[]; }catch{ return []; } }
     function _wmMoney(n){ return '$'+Math.round(Number(n)||0).toLocaleString(); }
@@ -2353,7 +2353,7 @@ Rate: {{total_rate_usd}}
         :'<div class="card" style="padding:48px;text-align:center;color:var(--text-muted);">Add drivers (Assets → Drivers) to see settlements.</div>');
     }
 
-    // ── waymark stub modules (empty-state placeholders, wired for fast-follow) ──
+    // ── SimpleTrucking stub modules (empty-state placeholders, wired for fast-follow) ──
     const STUB_PAGES = {
       dispatch:      { icon:'kanban',            title:'Dispatch Board', sub:'Live pipeline of every truck and load.', desc:'No trucks or loads to display.', action:'Add Load' },
       'maint-overview':{ icon:'gauge',           title:'Maintenance Overview', sub:'Maintenance and compliance at a glance.', desc:'Nothing due right now.', action:null },
@@ -2368,7 +2368,7 @@ Rate: {{total_rate_usd}}
         + `<div class="card" style="padding:72px 24px;text-align:center;"><div class="empty-state">`
         + `<div class="empty-icon" style="font-size:2.4rem;color:var(--text-muted);"><i class="ph-thin ph-${c.icon}"></i></div>`
         + `<div class="empty-title" style="margin-top:10px;font-weight:700;font-size:1.05rem;">${c.desc}</div>`
-        + `<div class="empty-desc" style="margin-top:4px;color:var(--text-muted);font-size:0.86rem;">This module is on the waymark roadmap — coming next.</div>`
+        + `<div class="empty-desc" style="margin-top:4px;color:var(--text-muted);font-size:0.86rem;">This module is on the SimpleTrucking roadmap — coming next.</div>`
         + `${btn}</div></div>`;
     }
     function goTo(page) {
@@ -2407,7 +2407,7 @@ Rate: {{total_rate_usd}}
       if (['customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','drivers','assignments','recruiting','invoices'].includes(page)) {
         loadEntityPage(page);
       }
-      // waymark stub modules
+      // SimpleTrucking stub modules
       if (page === 'dispatch') renderDispatch();
       if (page === 'brokers') renderBrokers();
       if (page === 'maint-overview') renderMaintOverview();
@@ -5756,7 +5756,7 @@ Rate: {{total_rate_usd}}
       let html = '';
       if ((d.total_loads || 0) === 0) {
         html += `<div class="card" style="padding:18px;margin-bottom:16px;border-left:3px solid var(--primary);">
-          <div style="font-weight:700;margin-bottom:6px;">👋 Welcome to waymark</div>
+          <div style="font-weight:700;margin-bottom:6px;">👋 Welcome to SimpleTrucking</div>
           <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.5;">Get your first load in:
             <a href="#" onclick="goTo('extract');return false;" style="color:var(--primary);font-weight:600;">1) Extract a rate confirmation</a>
             → 2) Save Load → 3) Send to your Telegram group.</div>

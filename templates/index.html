@@ -109,6 +109,9 @@
       transition: transform 0.25s cubic-bezier(.4,0,.2,1);
       border-right: 1px solid var(--sidebar-border);
     }
+    .sidebar-resizer { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 60; transition: background 0.15s; }
+    .sidebar-resizer:hover, .sidebar-resizer.dragging { background: var(--primary); }
+    @media (max-width: 768px) { .sidebar-resizer { display: none; } }
     .sidebar-logo {
       padding: 18px 14px 16px;
       border-bottom: 1px solid var(--sidebar-border);
@@ -823,6 +826,7 @@
 <body>
 
   <aside class="sidebar" id="sidebar">
+    <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize · double-click to reset"></div>
     <div class="sidebar-logo">
       <div class="logo-mark">
         <div class="logo-text">SimpleTrucking</div>
@@ -2539,6 +2543,35 @@ Rate: {{total_rate_usd}}
       });
     }
     setInterval(_syncFootBadges, 2000);
+
+    // Resizable sidebar — drag the right edge; persisted; double-click resets.
+    (function () {
+      const root = document.documentElement;
+      try { const w = localStorage.getItem('st_sidebar_w'); if (w) root.style.setProperty('--sidebar-width', parseInt(w) + 'px'); } catch {}
+      const rez = document.getElementById('sidebar-resizer');
+      if (!rez) return;
+      let dragging = false;
+      const onMove = (e) => {
+        if (!dragging) return;
+        const x = e.touches ? e.touches[0].clientX : e.clientX;
+        root.style.setProperty('--sidebar-width', Math.max(180, Math.min(440, x)) + 'px');
+      };
+      const stop = () => {
+        if (!dragging) return;
+        dragging = false; rez.classList.remove('dragging');
+        document.body.style.userSelect = ''; document.body.style.cursor = '';
+        try { if (typeof leafletMap !== 'undefined' && leafletMap) leafletMap.invalidateSize(); } catch {}
+        try { localStorage.setItem('st_sidebar_w', parseInt(getComputedStyle(root).getPropertyValue('--sidebar-width'))); } catch {}
+        window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', stop);
+      };
+      rez.addEventListener('mousedown', (e) => {
+        dragging = true; rez.classList.add('dragging');
+        document.body.style.userSelect = 'none'; document.body.style.cursor = 'col-resize';
+        window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', stop);
+        e.preventDefault();
+      });
+      rez.addEventListener('dblclick', () => { root.style.setProperty('--sidebar-width', '216px'); try { localStorage.setItem('st_sidebar_w', '216'); } catch {} });
+    })();
     function closeSidebar() {
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('sb-overlay').classList.remove('open');
@@ -6527,7 +6560,12 @@ Rate: {{total_rate_usd}}
         setMapStyle(localStorage.getItem('st_map_style') || 'satellite');
         leafletMap.on('click', e => runNearbySearch({ lat: e.latlng.lat, lon: e.latlng.lng }));
       }
-      setTimeout(() => { try { leafletMap.invalidateSize(); } catch {} }, 80);
+      // Leaflet renders blank until the (just-shown) container is measured —
+      // recompute size across the page-transition/reflow several times.
+      const _fixMapSize = () => { try { leafletMap.invalidateSize(); } catch {} };
+      requestAnimationFrame(() => requestAnimationFrame(_fixMapSize));
+      setTimeout(_fixMapSize, 250);
+      setTimeout(_fixMapSize, 600);
       if (_fleetMode === 'trailers') {
         mapMarkers.forEach(m => m.remove()); mapMarkers = [];
         const st = document.getElementById('map-status'); if (st) st.textContent = '0 trailers';

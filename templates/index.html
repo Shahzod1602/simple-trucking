@@ -174,6 +174,7 @@
     }
     .nav-item[hidden] { display: none; }
     .nav-pref-hidden { display: none !important; }
+    .sa-hide { display: none !important; }
     .nav-search-hide { display: none !important; }
     .nav-search-show { display: flex !important; }
     .nav-cust-group { display: flex; flex-direction: column; gap: 1px; }
@@ -942,7 +943,7 @@
         <span class="nav-icon"><i class="ph ph-user-gear"></i></span> Users
       </button>
       <button class="nav-item" data-page="admin" id="admin-nav" hidden>
-        <span class="nav-icon"><i class="ph ph-shield"></i></span> Admin
+        <span class="nav-icon"><i class="ph ph-buildings"></i></span> Companies
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -1534,8 +1535,8 @@
       <!-- ── Admin ── -->
       <div class="page" id="page-admin">
         <div class="page-header">
-          <h1 class="page-title">Admin Panel</h1>
-          <p class="page-subtitle">Manage all dispatcher accounts</p>
+          <h1 class="page-title">Companies</h1>
+          <p class="page-subtitle">Create companies and assign each an admin</p>
         </div>
         <div id="admin-content"></div>
       </div>
@@ -2315,11 +2316,14 @@ Rate: {{total_rate_usd}}
         userName  = d.name;
         localStorage.setItem(NAME_KEY, d.name);
         renderUser();
-        document.getElementById('kpi-nav').hidden = false;
-        if (userRole === 'admin' || userRole === 'superadmin') {
-          document.getElementById('users-nav').hidden = false;
+        if (userRole !== 'superadmin') document.getElementById('kpi-nav').hidden = false;
+        if (userRole === 'admin') document.getElementById('users-nav').hidden = false;
+        if (userRole === 'superadmin') {
+          document.getElementById('admin-nav').hidden = false;
+          document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => { const p = b.dataset.page; if (p && p !== 'admin' && p !== 'settings') b.classList.add('sa-hide'); });
+          document.querySelectorAll('.sidebar-nav .nav-label').forEach(l => l.classList.add('sa-hide'));
+          goTo('admin');
         }
-        if (userRole === 'superadmin') document.getElementById('admin-nav').hidden = false;
         startAlertPolling();
         // Load ratecon template from server
         try {
@@ -2373,7 +2377,7 @@ Rate: {{total_rate_usd}}
       transactions:'Transactions', statements:'Statements', analytics:'Analytics', bills:'Bills', brokers:'Brokers',
       mailbox:'Mailbox', extract:'Extract', customers:'Customers', locations:'Locations',
       'driver-documents':'Documents', 'safety-tasks':'Safety', groups:'Driver Groups', history:'History',
-      'live-loads':'Live Loads', telegram:'Telegram', settings:'Settings', kpi:'KPI Board', users:'Users', admin:'Admin'
+      'live-loads':'Live Loads', telegram:'Telegram', settings:'Settings', kpi:'KPI Board', users:'Users', admin:'Companies'
     };
     const widePages = new Set(['dashboard','mailbox','loads','live-loads','analytics','map','trucks','kpi','customers','vendors','locations','trailers','work-orders','driver-documents','safety-tasks','bills','transactions','extract','dispatch','assignments','drivers','recruiting','invoices','statements','brokers','telegram']);
     // ── SimpleTrucking functional modules (client-side aggregation over verified APIs) ──
@@ -5065,44 +5069,100 @@ Rate: {{total_rate_usd}}
       } catch(e) { toast(e.message,'error'); }
     }
 
+    let _companiesCache = [];
     async function loadAdmin() {
       const el = document.getElementById('admin-content');
       el.innerHTML = '<div class="spinner visible" style="margin-top:0;">Loading...</div>';
       try {
-        const dispatchers = await fetch('/api/admin/dispatchers', { headers: authH() }).then(r => r.json());
-        renderAdmin(dispatchers);
+        const r = await fetch('/api/superadmin/companies', { headers: authH() });
+        const data = await r.json();
+        _companiesCache = Array.isArray(data) ? data : (data.companies || []);
+        renderCompaniesAdmin();
       } catch { el.innerHTML = '<div class="error-box">Failed to load</div>'; }
     }
 
-    function renderAdmin(dispatchers) {
+    function renderCompaniesAdmin() {
       const el = document.getElementById('admin-content');
+      const companies = _companiesCache;
+      const rows = companies.map(c => `
+        <div class="card" style="padding:16px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;">
+          <div style="min-width:0;">
+            <div style="font-weight:700;font-size:1rem;">${esc(c.name)}</div>
+            <div style="font-size:0.8rem;margin-top:3px;">${c.admin_email ? `<span style="color:var(--text-muted);">Admin:</span> ${esc(c.admin_name || '—')} · ${esc(c.admin_email)}` : '<span style="color:var(--warning);font-weight:600;">No admin assigned</span>'}</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-top:5px;display:flex;gap:14px;flex-wrap:wrap;">
+              <span>${c.user_count || 0} user${(c.user_count||0)!==1?'s':''}</span><span>${c.load_count || 0} load${(c.load_count||0)!==1?'s':''}</span><span style="color:var(--success);">${_wmMoney(c.revenue || 0)}</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="btn-outline" style="font-size:0.78rem;" onclick="assignCompanyAdmin(${c.id})">${c.admin_email ? 'Re-assign admin' : '+ Assign admin'}</button>
+            <button class="btn-outline" style="font-size:0.78rem;color:#ef4444;" onclick="deleteCompany(${c.id})">Delete</button>
+          </div>
+        </div>`).join('') || '<div class="card" style="padding:40px;text-align:center;color:var(--text-muted);">No companies yet — create one above.</div>';
       el.innerHTML = `
         <div class="card settings-section" style="margin-bottom:16px;">
+          <div class="settings-title">Create company</div>
+          <div class="field"><label>Company name</label><input type="text" id="new-company-name" placeholder="Acme Logistics LLC" /></div>
+          <button class="btn-blue" onclick="createCompany()" style="margin-top:6px;">+ Create company</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span class="count-label">${companies.length} compan${companies.length!==1?'ies':'y'}</span>
+          <button class="btn-outline" onclick="loadAdmin()">↻ Refresh</button>
+        </div>
+        ${rows}
+        <div class="card settings-section" style="margin-top:16px;">
           <div class="settings-title">Google Maps API</div>
-          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:16px;">Global API key used by all users for geocoding and ETA calculations.</p>
-          <div class="err-banner" id="gmaps-err"></div>
-          <div class="ok-banner" id="gmaps-ok"></div>
-          <div class="field">
-            <label>API Key</label>
-            <input type="password" id="gmaps-apikey" placeholder="AIza..." autocomplete="new-password" />
-          </div>
+          <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:12px;">Global key for geocoding & ETA (used by every company).</p>
+          <div class="err-banner" id="gmaps-err"></div><div class="ok-banner" id="gmaps-ok"></div>
+          <div class="field"><label>API Key</label><input type="password" id="gmaps-apikey" placeholder="AIza..." autocomplete="new-password" /></div>
           <div id="gmaps-current" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;display:none;"></div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-            <button class="btn-blue" id="gmaps-save-btn">Save API Key</button>
-            <button class="btn-outline" id="gmaps-del-btn" style="display:none;">Remove Key</button>
-          </div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-          <span class="count-label">${dispatchers.length} dispatcher${dispatchers.length!==1?'s':''}</span>
-          <button class="btn-outline" id="admin-refresh">↻ Refresh</button>
-        </div>
-        <div class="dispatcher-list" id="disp-list"></div>`;
+          <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn-blue" id="gmaps-save-btn">Save API Key</button><button class="btn-outline" id="gmaps-del-btn" style="display:none;">Remove Key</button></div>
+        </div>`;
       loadGmapsConfig();
-      document.getElementById('admin-refresh').addEventListener('click', loadAdmin);
       document.getElementById('gmaps-save-btn').addEventListener('click', saveGmapsKey);
       document.getElementById('gmaps-del-btn').addEventListener('click', deleteGmapsKey);
-      const list = document.getElementById('disp-list');
-      dispatchers.forEach(d => list.appendChild(makeDispCard(d)));
+    }
+
+    async function createCompany() {
+      const inp = document.getElementById('new-company-name');
+      const name = inp.value.trim();
+      if (!name) { toast('Enter a company name', 'error'); return; }
+      const r = await fetch('/api/superadmin/companies', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      if (!r.ok) { toast('Could not create company', 'error'); return; }
+      inp.value = ''; toast('Company created', 'success'); loadAdmin();
+    }
+    async function deleteCompany(id) {
+      const c = _companiesCache.find(x => x.id === id) || {};
+      if (!await confirmModal(`Delete company "${c.name || id}"? This removes its admin, users, loads and data.`)) return;
+      const r = await fetch(`/api/superadmin/companies/${id}`, { method: 'DELETE', headers: authH() });
+      if (!r.ok) { toast('Delete failed', 'error'); return; }
+      toast('Company deleted'); loadAdmin();
+    }
+    function _genPass() { const c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'; let s = ''; for (let i = 0; i < 12; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
+    function assignCompanyAdmin(id) {
+      const c = _companiesCache.find(x => x.id === id) || {};
+      const ov = document.createElement('div'); ov.className = 'overlay'; ov.id = 'assign-admin-modal'; ov.style.display = 'flex';
+      ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+      ov.innerHTML = `<div class="modal" style="max-width:420px;" role="dialog" aria-modal="true">
+        <h2 style="font-size:1.1rem;font-weight:800;margin-bottom:4px;">Assign admin</h2>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:14px;">For <b>${esc(c.name || '')}</b>. They will manage this company's users and data.</p>
+        <div class="field"><label>Name</label><input type="text" id="aa-name" placeholder="Full name"></div>
+        <div class="field"><label>Email</label><input type="email" id="aa-email" placeholder="admin@company.com"></div>
+        <div class="field"><label>Temporary password</label><input type="text" id="aa-pass" value="${_genPass()}"></div>
+        <div id="aa-err" style="color:#dc2626;font-size:0.8rem;min-height:16px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;"><button class="btn-outline" onclick="document.getElementById('assign-admin-modal').remove()">Cancel</button><button class="btn-blue" onclick="submitAssignAdmin(${id})">Create admin</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+    }
+    async function submitAssignAdmin(id) {
+      const name = document.getElementById('aa-name').value.trim();
+      const email = document.getElementById('aa-email').value.trim();
+      const password = document.getElementById('aa-pass').value;
+      const err = document.getElementById('aa-err');
+      if (!name || !email.includes('@') || password.length < 8) { err.textContent = 'Name, a valid email, and an 8+ character password are required.'; return; }
+      const r = await fetch(`/api/superadmin/companies/${id}/assign-admin`, { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password }) });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); err.textContent = d.detail || 'Failed to assign admin'; return; }
+      const ov = document.getElementById('assign-admin-modal'); if (ov) ov.remove();
+      toast('Admin created — share the password securely', 'success'); loadAdmin();
     }
 
     function makeDispCard(d) {

@@ -2369,23 +2369,82 @@ Rate: {{total_rate_usd}}
     function _wmCard(t,v,c){ return `<div class="card" style="padding:16px;"><div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">${t}</div><div style="font-size:1.7rem;font-weight:800;color:${c||'var(--text)'};margin-top:6px;line-height:1;">${v}</div></div>`; }
     function _wmSoon(d){ if(!d)return false; const x=new Date(d), n=new Date(); return x>=n && (x-n)/86400000<=30; }
 
-    async function renderDispatch(){
-      const el=document.getElementById('page-dispatch'); if(!el)return;
-      el.innerHTML='<div class="page-header"><h1 class="page-title">Dispatch</h1><p class="page-subtitle">Loading…</p></div>';
-      const loads=await _wmLoads();
-      const cols=[['upcoming','Booked'],['dispatched','In Transit'],['delivered','Delivered']];
-      const board=cols.map(([st,label])=>{
-        const items=loads.filter(l=>(l.status||'upcoming')===st);
-        const cards=items.map(l=>`<div class="card" style="padding:12px;margin-bottom:8px;">
-           <div style="font-weight:700;font-size:0.9rem;">${esc(l.load_number||('Load '+l.id))}</div>
-           <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">${esc(l.origin_state||'?')} → ${esc(l.destination_state||'?')}</div>
-           ${l.broker_name?`<div style="font-size:0.8rem;color:var(--text-muted);">${esc(l.broker_name)}</div>`:''}
+    let _dispatchView = 'board';
+    function setDispatchView(v) { _dispatchView = v; renderDispatch(); }
+    function _dispatchToggle() {
+      return `<div style="display:inline-flex;background:var(--card-inner);border:1px solid var(--border);border-radius:9px;padding:2px;margin-right:8px;">` +
+        ['board', 'timeline'].map(v => `<button onclick="setDispatchView('${v}')" style="border:none;background:${_dispatchView === v ? 'var(--card)' : 'transparent'};color:var(--text);font-weight:600;font-size:0.82rem;padding:5px 14px;border-radius:7px;cursor:pointer;${_dispatchView === v ? 'box-shadow:0 1px 2px rgba(0,0,0,0.12);' : ''}">${v === 'board' ? 'Board' : 'Timeline'}</button>`).join('') + `</div>`;
+    }
+    function _dispatchBoardHTML(loads) {
+      const cols = [['upcoming', 'Booked'], ['dispatched', 'In Transit'], ['delivered', 'Delivered']];
+      const board = cols.map(([st, label]) => {
+        const items = loads.filter(l => (l.status || 'upcoming') === st);
+        const cards = items.map(l => `<div class="card" style="padding:12px;margin-bottom:8px;">
+           <div style="font-weight:700;font-size:0.9rem;">${esc(l.load_number || ('Load ' + l.id))}</div>
+           <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">${esc(l.origin_state || '?')} → ${esc(l.destination_state || '?')}</div>
+           ${l.broker_name ? `<div style="font-size:0.8rem;color:var(--text-muted);">${esc(l.broker_name)}</div>` : ''}
            <div style="font-weight:700;color:var(--success);margin-top:4px;">${_wmMoney(_wmRate(l))}</div></div>`).join('')
-           ||'<div style="color:var(--text-muted);font-size:0.82rem;padding:8px;">No loads</div>';
+          || '<div style="color:var(--text-muted);font-size:0.82rem;padding:8px;">No loads</div>';
         return `<div style="flex:1;min-width:240px;"><div style="font-weight:700;text-transform:uppercase;font-size:0.72rem;color:var(--text-muted);letter-spacing:0.05em;margin-bottom:10px;">${label} · ${items.length}</div>${cards}</div>`;
       }).join('');
-      el.innerHTML=`<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;"><div><h1 class="page-title">Dispatch</h1><p class="page-subtitle">Live pipeline of every load</p></div><button class="btn-blue" onclick="goTo('extract')">+ Add Load</button></div>
-        <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">${board}</div>`;
+      return `<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">${board}</div>`;
+    }
+    async function _dispatchTimelineHTML(loads) {
+      const [trucks, drivers] = await Promise.all([_wmEntities('trucks'), _wmEntities('drivers')]);
+      const truckById = {}; trucks.forEach(t => { truckById[t.id] = t; });
+      const driverTruck = {}; drivers.forEach(d => { if (d.truck_id && truckById[d.truck_id]) driverTruck[String(d.name || '').toLowerCase()] = truckById[d.truck_id].unit_number; });
+      const DAY = 86400000, days = 7;
+      const now = new Date(); const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2);
+      const total = days * DAY; const pct = (t) => ((t - start) / total) * 100;
+      const parse = (s) => { if (!s) return null; const d = new Date(s); return isNaN(d.getTime()) ? null : d; };
+      const rows = {}; const ensure = (u) => rows[u] || (rows[u] = { unit: u, loads: [], rev: 0, loc: '' });
+      trucks.forEach(t => { const r = ensure(t.unit_number); r.loc = t.location || ''; });
+      loads.forEach(l => { let u = driverTruck[String(l.driver_name || '').toLowerCase()] || (l.driver_name ? l.driver_name : 'Unassigned'); const r = ensure(u); r.loads.push(l); r.rev += _wmRate(l); });
+      const rowList = Object.values(rows).filter(r => r.loads.length || trucks.find(t => t.unit_number === r.unit))
+        .sort((a, b) => (a.unit === 'Unassigned' ? 1 : 0) - (b.unit === 'Unassigned' ? 1 : 0) || b.rev - a.rev);
+      const sc = (st) => { st = String(st || '').toLowerCase(); if (st === 'delivered') return '#22c55e'; if (st === 'dispatched' || st === 'in_transit') return '#f5a623'; return '#4585ff'; };
+      const dayHdr = []; for (let i = 0; i < days; i++) { const d = new Date(start.getTime() + i * DAY); dayHdr.push(`<div style="flex:1;text-align:center;padding:9px 0;font-size:0.76rem;color:var(--text-muted);border-left:1px solid var(--border);">${d.toLocaleDateString(undefined, { weekday: 'short' })} ${d.getDate()}</div>`); }
+      const grid = Array.from({ length: days }, (_, i) => `<div style="position:absolute;top:0;bottom:0;left:${(i / days) * 100}%;width:1px;background:var(--border);"></div>`).join('');
+      const nowPct = pct(now.getTime());
+      const nowLine = (nowPct >= 0 && nowPct <= 100) ? `<div style="position:absolute;top:0;bottom:0;left:${nowPct}%;width:2px;background:#ef4444;z-index:4;"></div>` : '';
+      const LBL = 190;
+      const rowsHTML = rowList.map(r => {
+        const bars = r.loads.map(l => {
+          const s = parse(l.pickup_date); if (!s) return '';
+          let e = parse(l.delivery_date) || new Date(s.getTime() + DAY); if (e <= s) e = new Date(s.getTime() + DAY);
+          let left = pct(s.getTime()), right = pct(e.getTime());
+          if (right <= 0 || left >= 100) return '';
+          left = Math.max(0, left); right = Math.min(100, right); const w = Math.max(5, right - left);
+          const c = sc(l.status);
+          return `<div title="${esc(l.load_number || '')} · ${esc(l.origin_state || '')}→${esc(l.destination_state || '')}" onclick="goTo('loads')" style="position:absolute;top:12px;height:38px;left:${left}%;width:${w}%;background:${c}22;border:1px solid ${c};border-left:3px solid ${c};border-radius:7px;padding:4px 8px;overflow:hidden;display:flex;flex-direction:column;justify-content:center;cursor:pointer;box-sizing:border-box;">
+            <div style="font-weight:700;font-size:0.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(l.load_number || ('LD-' + l.id))}</div>
+            <div style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(l.origin_state || '?')} → ${esc(l.destination_state || '?')}</div></div>`;
+        }).join('');
+        return `<div style="display:flex;border-bottom:1px solid var(--border);min-height:64px;">
+          <div style="width:${LBL}px;flex-shrink:0;padding:11px 12px;border-right:1px solid var(--border);">
+            <div style="font-weight:700;font-size:0.92rem;">${esc(r.unit)}</div>
+            ${r.loc ? `<div style="font-size:0.74rem;color:var(--text-muted);">${esc(r.loc)}</div>` : ''}
+            ${r.rev ? `<div style="font-size:0.78rem;color:var(--success);font-weight:600;margin-top:2px;">${_wmMoney(r.rev)}</div>` : ''}
+          </div>
+          <div style="flex:1;position:relative;min-width:0;">${grid}${nowLine}${bars}</div>
+        </div>`;
+      }).join('');
+      if (!rowList.length) return '<div class="card" style="padding:48px;text-align:center;color:var(--text-muted);">No trucks or loads to display.</div>';
+      return `<div style="overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card);">
+        <div style="min-width:780px;">
+          <div style="display:flex;border-bottom:1px solid var(--border);position:relative;">
+            <div style="width:${LBL}px;flex-shrink:0;"></div>
+            <div style="flex:1;display:flex;position:relative;">${dayHdr}${(nowPct >= 0 && nowPct <= 100) ? `<div style="position:absolute;top:2px;left:${nowPct}%;transform:translateX(-50%);background:#ef4444;color:#fff;font-size:0.62rem;font-weight:700;padding:1px 6px;border-radius:4px;z-index:5;">NOW</div>` : ''}</div>
+          </div>
+          ${rowsHTML}
+        </div></div>`;
+    }
+    async function renderDispatch() {
+      const el = document.getElementById('page-dispatch'); if (!el) return;
+      el.innerHTML = '<div class="page-header"><h1 class="page-title">Dispatch</h1><p class="page-subtitle">Loading…</p></div>';
+      const loads = await _wmLoads();
+      const header = `<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;"><div><h1 class="page-title">Dispatch Board</h1><p class="page-subtitle">Live pipeline of every load</p></div><div style="display:flex;align-items:center;">${_dispatchToggle()}<button class="btn-blue" onclick="goTo('extract')">+ Add Load</button></div></div>`;
+      el.innerHTML = header + (_dispatchView === 'timeline' ? await _dispatchTimelineHTML(loads) : _dispatchBoardHTML(loads));
     }
 
     async function renderBrokers(){

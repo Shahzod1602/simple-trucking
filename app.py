@@ -36,10 +36,16 @@ UPLOADS_DIR = Path("uploads")
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 
+# Advisory-lock keys for singleton background workers (one worker/host each).
+_BOT_LOCK_KEY = 911001
+_EMAIL_LOCK_KEY = 911002
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _truck_prefetch_task, _email_poller_task
     database.init_db()
+    database.run_migrations()
     database.ensure_superadmin(
         os.getenv("SUPER_ADMIN_EMAIL", ""),
         os.getenv("SUPER_ADMIN_PASSWORD", ""),
@@ -48,24 +54,17 @@ async def lifespan(app: FastAPI):
     bot_enabled = os.getenv("DISABLE_BOT_POLLER", "0") != "1"
     prefetch_enabled = os.getenv("DISABLE_TRUCK_PREFETCH", "0") != "1"
     email_enabled = os.getenv("DISABLE_EMAIL_POLLER", "0") != "1" and relay.configured
+    # Singleton background tasks: only ONE worker/host runs each, guarded by
+    # Postgres advisory locks (survives restarts + works across hosts, unlike
+    # the previous /tmp file locks).
     if bot_enabled:
-        # Only one worker should run bot poller (use file lock)
-        import fcntl
-        try:
-            _bot_lock_fd = open("/tmp/bot_poller.lock", "w")
-            fcntl.flock(_bot_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if database.acquire_advisory_lock(_BOT_LOCK_KEY):
             bot_poller.start()
-        except (IOError, OSError):
-            pass  # another worker holds the lock
+        else:
+            bot_enabled = False  # another worker holds the lock
     if email_enabled:
-        # Only one worker should poll Relay for inbound email (file lock).
-        import fcntl
-        try:
-            _email_lock_fd = open("/tmp/email_poller.lock", "w")
-            fcntl.flock(_email_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if database.acquire_advisory_lock(_EMAIL_LOCK_KEY):
             _email_poller_task = asyncio.create_task(_email_poller_loop())
-        except (IOError, OSError):
-            pass  # another worker holds the lock
     if prefetch_enabled:
         _truck_prefetch_task = asyncio.create_task(_prefetch_trucks_loop())
     yield
@@ -291,9 +290,9 @@ def require_dispatcher(authorization: str | None) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authentication required")
     token = authorization.removeprefix("Bearer ").strip()
-    dispatcher = database.get_dispatcher_by_token(token)
+    dispatcher = database.get_dispatcher_by_session(token)
     if not dispatcher:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
     return dispatcher
 
 
@@ -483,15 +482,16 @@ async def api_register(body: RegisterBody):
         raise HTTPException(status_code=400, detail="Your name is required")
     if not EMAIL_RE.match(email):
         raise HTTPException(status_code=400, detail="Enter a valid email (e.g. you@company.com)")
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     if database.get_dispatcher_by_email(email):
         raise HTTPException(status_code=409, detail="This email is already registered")
     company = database.create_company(company_name)
     dispatcher = database.create_company_user(
         company["id"], name, email, body.password, role="admin"
     )
-    return {"token": dispatcher["token"], "name": dispatcher["name"], "role": dispatcher["role"]}
+    token = database.create_session(dispatcher["id"])
+    return {"token": token, "name": dispatcher["name"], "role": dispatcher["role"]}
 
 
 @app.post("/api/login")
@@ -514,7 +514,13 @@ async def api_login(request: Request, body: LoginBody):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     _clear_attempts(ip)
-    return {"token": dispatcher["token"], "name": dispatcher["name"], "role": dispatcher["role"]}
+    if database.password_needs_rehash(dispatcher.get("password_hash") or ""):
+        try:
+            database.update_password(dispatcher["id"], body.password)
+        except Exception:
+            pass
+    token = database.create_session(dispatcher["id"])
+    return {"token": token, "name": dispatcher["name"], "role": dispatcher["role"]}
 
 
 @app.get("/api/me")
@@ -577,9 +583,19 @@ async def api_change_password(
         raise HTTPException(status_code=400, detail="No password set")
     if not database.verify_password(body.current_password, dispatcher["password_hash"]):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
-    if len(body.new_password) < 6:
-        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
     database.update_password(dispatcher["id"], body.new_password)
+    # Rotate: revoke every other session for this account, keep the current one.
+    database.delete_other_sessions(dispatcher["id"], authorization.removeprefix("Bearer ").strip())
+    return {"ok": True}
+
+
+@app.post("/api/logout")
+async def api_logout(authorization: str | None = Header(default=None)):
+    """Revoke the current session server-side."""
+    if authorization and authorization.startswith("Bearer "):
+        database.delete_session(authorization.removeprefix("Bearer ").strip())
     return {"ok": True}
 
 
@@ -669,6 +685,7 @@ async def api_admin_reset_password(
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     ok = database.update_password(target_id, body.new_password)
+    database.delete_sessions_for_dispatcher(target_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Dispatcher not found")
     return {"ok": True}
@@ -837,6 +854,7 @@ async def api_superadmin_reset_user_pw(
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     ok = database.update_password(target_id, body.new_password)
+    database.delete_sessions_for_dispatcher(target_id)
     if not ok:
         raise HTTPException(status_code=404, detail="User not found")
     return {"ok": True}
@@ -949,6 +967,7 @@ async def api_company_reset_password(
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     database.update_password(target_id, body.new_password)
+    database.delete_sessions_for_dispatcher(target_id)
     return {"ok": True}
 
 
@@ -2863,6 +2882,11 @@ _ENTITY_ROUTES = {
     "transactions": "transactions",
     "work-orders": "work_orders",
     "mailbox": "mailbox_messages",
+    "trucks": "trucks",
+    "drivers": "drivers",
+    "assignments": "assignments",
+    "recruiting": "recruiting_leads",
+    "invoices": "invoices",
 }
 
 

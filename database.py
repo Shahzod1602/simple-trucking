@@ -11,6 +11,7 @@ from decimal import ROUND_HALF_UP, Decimal
 import psycopg2
 import psycopg2.extras
 import psycopg2.pool
+from argon2 import PasswordHasher
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
@@ -538,17 +539,38 @@ def get_conn():
 
 # ── Password ──────────────────────────────────────────────────────────────────
 
+_ph = PasswordHasher()
+
+
 def hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
-    return f"{salt}:{h.hex()}"
+    """Hash with Argon2id (current). Legacy PBKDF2 hashes still verify below and
+    are transparently upgraded on next login."""
+    return _ph.hash(password)
 
 
 def verify_password(password: str, stored: str) -> bool:
+    if not stored:
+        return False
+    if stored.startswith("$argon2"):
+        try:
+            return _ph.verify(stored, password)
+        except Exception:
+            return False
+    # Legacy PBKDF2 ("salt:hexhash") — accepted, then rehashed to Argon2 on login.
     try:
         salt, h = stored.split(":", 1)
         h2 = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
         return secrets.compare_digest(h2.hex(), h)
+    except Exception:
+        return False
+
+
+def password_needs_rehash(stored: str) -> bool:
+    """True when the stored hash is legacy or below current Argon2 parameters."""
+    if not stored or not stored.startswith("$argon2"):
+        return True
+    try:
+        return _ph.check_needs_rehash(stored)
     except Exception:
         return False
 
@@ -754,6 +776,121 @@ def delete_dispatcher(dispatcher_id: int) -> bool:
     with get_conn() as conn:
         conn.execute("DELETE FROM dispatchers WHERE id = %s", (dispatcher_id,))
         return conn.rowcount > 0
+
+
+# ── Sessions (expiring, revocable bearer tokens) ──────────────────────────────
+
+SESSION_TTL_DAYS = 30
+
+
+def create_session(dispatcher_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO sessions (token, dispatcher_id, created_at, last_used_at, expires_at) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (token, dispatcher_id, now, now, now + timedelta(days=SESSION_TTL_DAYS)),
+        )
+    return token
+
+
+def get_dispatcher_by_session(token: str) -> dict | None:
+    """Resolve an active, unexpired session to its dispatcher and bump last_used."""
+    if not token:
+        return None
+    now = datetime.now(timezone.utc)
+    with get_conn() as conn:
+        conn.execute(
+            "SELECT d.* FROM sessions s JOIN dispatchers d ON d.id = s.dispatcher_id "
+            "WHERE s.token = %s AND s.expires_at > %s AND d.is_active = TRUE",
+            (token, now),
+        )
+        row = conn.fetchone()
+        if not row:
+            return None
+        conn.execute("UPDATE sessions SET last_used_at = %s WHERE token = %s", (now, token))
+        return dict(row)
+
+
+def delete_session(token: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sessions WHERE token = %s", (token,))
+
+
+def delete_sessions_for_dispatcher(dispatcher_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sessions WHERE dispatcher_id = %s", (dispatcher_id,))
+
+
+def delete_other_sessions(dispatcher_id: int, keep_token: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM sessions WHERE dispatcher_id = %s AND token <> %s",
+            (dispatcher_id, keep_token),
+        )
+
+
+def purge_expired_sessions() -> int:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at < %s", (datetime.now(timezone.utc),))
+        return conn.rowcount
+
+
+# ── Migration runner (versioned DDL in migrations/*.sql) ──────────────────────
+
+_MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
+
+
+def run_migrations() -> list[str]:
+    """Apply *.sql files in migrations/ not yet recorded in schema_migrations.
+    Each migration runs in its own transaction. Safe to re-run (idempotent)."""
+    if not os.path.isdir(_MIGRATIONS_DIR):
+        return []
+    files = sorted(f for f in os.listdir(_MIGRATIONS_DIR) if f.endswith(".sql"))
+    with get_conn() as conn:
+        conn.execute("SELECT name FROM schema_migrations")
+        applied = {r["name"] for r in conn.fetchall()}
+    done: list[str] = []
+    for fn in files:
+        if fn in applied:
+            continue
+        sql = open(os.path.join(_MIGRATIONS_DIR, fn), encoding="utf-8").read()
+        with get_conn() as conn:
+            conn.execute(sql)
+            conn.execute(
+                "INSERT INTO schema_migrations (name, applied_at) VALUES (%s, %s)",
+                (fn, datetime.now(timezone.utc)),
+            )
+        done.append(fn)
+        print(f"[migration] applied {fn}", flush=True)
+    return done
+
+
+# ── Cross-worker singleton locks (Postgres advisory locks) ────────────────────
+
+_advisory_lock_conns: list = []  # held open to keep the locks
+
+
+def acquire_advisory_lock(key: int) -> bool:
+    """Try to grab a session-level advisory lock on a dedicated connection.
+    Returns True if acquired; the connection is kept open for the process
+    lifetime so the lock is held (auto-released when the process exits).
+    Ensures only ONE worker/host runs a singleton background task — works
+    across restarts and hosts, unlike a /tmp file lock."""
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute("SELECT pg_try_advisory_lock(%s)", (key,))
+        got = bool(cur.fetchone()[0])
+        if got:
+            _advisory_lock_conns.append(conn)
+        else:
+            conn.close()
+        return got
+    except Exception:
+        return False
 
 
 # ── ELD configs ───────────────────────────────────────────────────────────────
@@ -1839,12 +1976,26 @@ _ENTITY_COLUMNS = {
                     "description"],
     "mailbox_messages": ["dispatcher_id", "source", "from_addr", "to_addr", "subject",
                          "body", "load_id", "is_read", "attachment_path", "received_at"],
+    "trucks": ["unit_number", "status", "make", "model", "year", "vin", "license_plate",
+               "license_state", "ownership", "odometer", "eld_unit_ref",
+               "current_driver_id", "notes"],
+    "drivers": ["name", "dba", "status", "driver_type", "truck_id", "phone", "email",
+                "cdl_number", "cdl_class", "cdl_state", "cdl_expiry", "medical_expiry",
+                "pay_type", "pay_rate", "driver_group_id", "notes"],
+    "assignments": ["truck_id", "driver_id", "co_driver_id", "trailer_id", "group_name",
+                    "status", "notes"],
+    "recruiting_leads": ["name", "phone", "email", "source", "stage", "experience_years",
+                         "cdl_class", "notes", "position"],
+    "invoices": ["invoice_number", "customer_id", "load_id", "amount", "status",
+                 "issue_date", "due_date", "paid_date", "notes"],
 }
 
 
 def _filter_fields(table: str, data: dict) -> dict:
     allowed = set(_ENTITY_COLUMNS.get(table, []))
-    return {k: v for k, v in data.items() if k in allowed}
+    # Coerce empty strings to NULL so blank optional date/number inputs don't break
+    # typed columns (e.g. cdl_expiry DATE, pay_rate NUMERIC).
+    return {k: (None if v == "" else v) for k, v in data.items() if k in allowed}
 
 
 def list_entities(table: str, company_id: int, limit: int = 500) -> list[dict]:

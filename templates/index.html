@@ -1892,6 +1892,15 @@
     </div>
   </div>
 
+  <!-- Attachment lightbox (images + PDFs) -->
+  <div class="overlay" id="att-lightbox" style="display:none;z-index:10060;background:rgba(0,0,0,0.9);align-items:center;justify-content:center;" onclick="if(event.target===this)closeAttLightbox()">
+    <div style="position:absolute;top:14px;right:16px;left:16px;display:flex;gap:12px;align-items:center;justify-content:space-between;">
+      <span id="att-lightbox-cap" style="color:#fff;font-size:0.85rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      <button class="btn-outline" style="color:#fff;border-color:rgba(255,255,255,0.45);flex-shrink:0;" onclick="closeAttLightbox()">&#10005; Close</button>
+    </div>
+    <div id="att-lightbox-body" style="display:flex;align-items:center;justify-content:center;"></div>
+  </div>
+
   <!-- Confirm modal (replaces native confirm()) -->
   <div class="overlay" id="confirm-modal" style="display:none;">
     <div class="modal" style="max-width:420px;" role="dialog" aria-modal="true">
@@ -3715,14 +3724,35 @@ Rate: {{total_rate_usd}}
           .then(() => { it.is_read = true; refreshUnreadBadge(); }).catch(() => {});
       }
       const canReply = !!it.account_id;
-      const attHtml = atts.length ? `<div style="margin:12px 0;">${atts.map(a => {
-        const fname = (a.filename || 'attachment').replace(/'/g, '');
-        const isPdf = a.mimeType === 'application/pdf' || fname.toLowerCase().endsWith('.pdf');
-        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.82rem;">
-          📎 <a href="#" onclick="downloadAttachment(${id},'${esc(a.id)}','${esc(fname)}');return false;">${esc(a.filename || 'attachment')}</a>
-          ${isPdf ? `<button class="btn-outline" style="padding:2px 8px;font-size:0.72rem;" onclick="extractAttachment(${id},'${esc(a.id)}')">Extract</button>` : ''}
-        </div>`;
-      }).join('')}</div>` : '';
+      const attHtml = atts.length ? `<div style="margin:12px 0;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);font-weight:700;">${atts.length} attachment${atts.length>1?'s':''}</div>
+        ${atts.map(a => {
+          const fn = (a.filename || 'attachment').replace(/'/g, '');
+          const aid = esc(String(a.id));
+          const isImg = _attIsImage(a);
+          const isPdf = (a.mimeType||a.contentType||'') === 'application/pdf' || fn.toLowerCase().endsWith('.pdf');
+          const dlBtn = `<button class="btn-outline" style="padding:3px 9px;font-size:0.72rem;" onclick="downloadAttachment(${id},'${aid}','${esc(fn)}')">Download</button>`;
+          const extBtn = (isPdf||isImg) ? `<button class="btn-outline" style="padding:3px 9px;font-size:0.72rem;" onclick="extractAttachment(${id},'${aid}')">Extract</button>` : '';
+          if (isImg) {
+            return `<div style="display:flex;gap:10px;align-items:center;">
+              <img class="att-thumb" data-att="${aid}" alt="${esc(fn)}" title="Click to open" onclick="viewAttachment(${id},'${aid}','${esc(fn)}',false)" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;flex-shrink:0;">
+              <div style="min-width:0;flex:1;">
+                <div style="font-size:0.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.filename || 'image')}</div>
+                <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;">
+                  <button class="btn-outline" style="padding:3px 9px;font-size:0.72rem;" onclick="viewAttachment(${id},'${aid}','${esc(fn)}',false)">Open</button>
+                  ${dlBtn}${extBtn}
+                </div>
+              </div>
+            </div>`;
+          }
+          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+            <span style="font-size:1.25rem;flex-shrink:0;">${isPdf ? '\uD83D\uDCC4' : '\uD83D\uDCCE'}</span>
+            <div style="flex:1;min-width:0;font-size:0.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.filename || 'attachment')}</div>
+            ${isPdf ? `<button class="btn-outline" style="padding:3px 9px;font-size:0.72rem;" onclick="viewAttachment(${id},'${aid}','${esc(fn)}',true)">Open</button>` : ''}
+            ${dlBtn}${extBtn}
+          </div>`;
+        }).join('')}
+      </div>` : '';
       document.getElementById('mailbox-modal-body').innerHTML = `
         <div style="font-weight:700;font-size:1rem;margin-bottom:4px;">${esc(it.subject || '(no subject)')}</div>
         <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:2px;">From: ${esc(it.from_addr || '—')}</div>
@@ -3735,9 +3765,55 @@ Rate: {{total_rate_usd}}
           <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button class="btn-blue" onclick="sendReply(${id})">Send Reply</button></div>
         </div>` : '<div style="font-size:0.78rem;color:var(--text-muted);margin-top:12px;">Replying is available for connected mailbox emails.</div>'}`;
       document.getElementById('mailbox-modal').style.display = 'flex';
+      _renderAttThumbs(id);
     }
 
-    function closeMailboxModal() { document.getElementById('mailbox-modal').style.display = 'none'; }
+    let _attLbUrl = null;
+    function _attIsImage(a) {
+      const mt = (a.mimeType || a.contentType || a.content_type || '').toLowerCase();
+      if (mt.startsWith('image/')) return true;
+      return /\.(png|jpe?g|gif|webp|bmp|heic)$/i.test(a.filename || '');
+    }
+    async function _renderAttThumbs(msgId) {
+      const thumbs = document.querySelectorAll('#mailbox-modal-body img.att-thumb[data-att]');
+      for (const img of thumbs) {
+        try {
+          const r = await fetch(`/api/mailbox/${msgId}/attachments/${encodeURIComponent(img.dataset.att)}`, { headers: authH() });
+          if (!r.ok) continue;
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          img.src = url; img.dataset.objurl = url;
+        } catch {}
+      }
+    }
+    async function viewAttachment(msgId, attId, filename, isPdf) {
+      const lb = document.getElementById('att-lightbox');
+      const body = document.getElementById('att-lightbox-body');
+      document.getElementById('att-lightbox-cap').textContent = filename || '';
+      body.innerHTML = '<div style="color:#fff;padding:40px;">Loading\u2026</div>';
+      lb.style.display = 'flex';
+      try {
+        const r = await fetch(`/api/mailbox/${msgId}/attachments/${encodeURIComponent(attId)}`, { headers: authH() });
+        if (!r.ok) throw new Error();
+        const blob = await r.blob();
+        if (_attLbUrl) URL.revokeObjectURL(_attLbUrl);
+        _attLbUrl = URL.createObjectURL(blob);
+        if (isPdf || blob.type === 'application/pdf') {
+          body.innerHTML = `<iframe src="${_attLbUrl}" style="width:92vw;height:86vh;border:none;border-radius:8px;background:#fff;"></iframe>`;
+        } else {
+          body.innerHTML = `<img src="${_attLbUrl}" alt="${esc(filename || '')}" style="max-width:92vw;max-height:86vh;border-radius:8px;box-shadow:0 12px 48px rgba(0,0,0,0.5);">`;
+        }
+      } catch { body.innerHTML = '<div style="color:#fff;padding:40px;">Could not open this attachment.</div>'; }
+    }
+    function closeAttLightbox() {
+      document.getElementById('att-lightbox').style.display = 'none';
+      document.getElementById('att-lightbox-body').innerHTML = '';
+      if (_attLbUrl) { URL.revokeObjectURL(_attLbUrl); _attLbUrl = null; }
+    }
+    function closeMailboxModal() {
+      document.querySelectorAll('#mailbox-modal-body img[data-objurl]').forEach(im => { try { URL.revokeObjectURL(im.dataset.objurl); } catch {} });
+      document.getElementById('mailbox-modal').style.display = 'none';
+    }
 
     async function downloadAttachment(msgId, attId, filename) {
       try {

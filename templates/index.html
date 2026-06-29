@@ -2662,6 +2662,7 @@ Rate: {{total_rate_usd}}
 
     function goTo(page) {
       if (page === '__customize') { openNavCustomizer(); return; }
+      try { localStorage.setItem('st_page', page); } catch {}
       if (page !== 'extract') document.body.classList.remove('extract-fs');
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
@@ -7704,9 +7705,13 @@ Rate: {{total_rate_usd}}
     // ── Init ──────────────────────────────────────────────────────────────
     initUser().then(() => {
       if (token) {
-        // Land on dashboard for signed-in users so the wide layout activates
+        if (userRole === 'superadmin') return; // initUser already routed to Companies
         document.querySelector('.content').classList.add('wide');
-        loadDashboardPage();
+        const saved = (function () { try { return localStorage.getItem('st_page'); } catch { return null; } })();
+        const el = saved && document.getElementById('page-' + saved);
+        const navBtn = saved && document.querySelector('.nav-item[data-page="' + saved + '"]');
+        const blocked = navBtn && (navBtn.hidden || navBtn.classList.contains('sa-hide'));
+        goTo(el && !blocked ? saved : 'dashboard');
       }
     });
   </script>

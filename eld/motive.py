@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 import httpx
 
@@ -15,46 +16,73 @@ class MotiveClient:
 
     def get_drivers(self) -> list[dict]:
         """Returns list of active drivers: [{id, name}]"""
-        resp = httpx.get(
-            f"{BASE}/users",
-            headers=self.headers,
-            params={"role": "driver", "status": "active", "per_page": 100},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        users = resp.json().get("users", [])
-        return [
-            {"id": str(u["id"]), "name": f"{u.get('first_name', '')} {u.get('last_name', '')}".strip()}
-            for u in users
-        ]
+        result: list[dict] = []
+        per_page = 100
+        page_no = 1
+        # M11: loop page_no so fleets with >100 drivers are not capped at the
+        # first page; cap pages to avoid an infinite loop.
+        for _ in range(50):
+            resp = httpx.get(
+                f"{BASE}/users",
+                headers=self.headers,
+                params={"role": "driver", "status": "active", "per_page": per_page, "page_no": page_no},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            users = resp.json().get("users", [])
+            result.extend(
+                {"id": str(u["id"]), "name": f"{u.get('first_name', '')} {u.get('last_name', '')}".strip()}
+                for u in users
+            )
+            if len(users) < per_page:
+                break
+            page_no += 1
+        return result
 
     def get_trucks(self) -> list[dict]:
         """Returns list of trucks with driver assignment and real-time location."""
-        resp = httpx.get(
-            f"{BASE}/vehicles/current_locations",
-            headers=self.headers,
-            timeout=10,
-        )
-        resp.raise_for_status()
-        vehicles = resp.json().get("vehicles", [])
         result = []
-        for v in vehicles:
-            loc = v.get("current_location") or {}
-            driver = v.get("current_driver") or {}
-            truck = v.get("vehicle") or {}
-            speed_kmh = loc.get("speed") or 0
-            driver_name = f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip()
-            result.append({
-                "id": str(truck.get("id", "")),
-                "truck_number": truck.get("number") or truck.get("name") or str(truck.get("id", "")),
-                "vin": truck.get("vin") or "",
-                "driver": {"id": str(driver["id"]), "name": driver_name} if driver.get("id") else None,
-                "codriver": None,
-                "lat": loc.get("lat"),
-                "lon": loc.get("lon"),
-                "speed_mph": round(speed_kmh * 0.621371, 1) if speed_kmh else None,
-                "timestamp": loc.get("recorded_at"),
-            })
+        per_page = 100
+        page_no = 1
+        # M11: page through current_locations (cap pages) so large fleets are not
+        # truncated to the first page.
+        for _ in range(50):
+            resp = httpx.get(
+                f"{BASE}/vehicles/current_locations",
+                headers=self.headers,
+                params={"per_page": per_page, "page_no": page_no},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            vehicles = data.get("vehicles", [])
+            for v in vehicles:
+                loc = v.get("current_location") or {}
+                driver = v.get("current_driver") or {}
+                truck = v.get("vehicle") or {}
+                # TODO(L9): Motive's `speed` unit is unconfirmed. We assume km/h and
+                # convert to mph; if the API actually returns mph this is wrong. Do
+                # NOT change the unit without verifying against the Motive API docs.
+                speed_kmh = loc.get("speed") or 0
+                driver_name = f"{driver.get('first_name', '')} {driver.get('last_name', '')}".strip()
+                result.append({
+                    "id": str(truck.get("id", "")),
+                    "truck_number": truck.get("number") or truck.get("name") or str(truck.get("id", "")),
+                    "vin": truck.get("vin") or "",
+                    "driver": {"id": str(driver["id"]), "name": driver_name} if driver.get("id") else None,
+                    "codriver": None,
+                    "lat": loc.get("lat"),
+                    "lon": loc.get("lon"),
+                    "speed_mph": round(speed_kmh * 0.621371, 1) if speed_kmh else None,
+                    "timestamp": loc.get("recorded_at"),
+                })
+            # M11: follow pagination only when the API reports more pages, so an
+            # unpaginated full-fleet response is not re-requested (no duplicates).
+            pagination = data.get("pagination") or {}
+            total = pagination.get("total")
+            if total is None or page_no * per_page >= total:
+                break
+            page_no += 1
         return result
 
     def get_driver_location(self, driver_id: str) -> dict | None:
@@ -73,6 +101,9 @@ class MotiveClient:
                 lat = loc.get("lat")
                 lon = loc.get("lon")
                 if lat is not None and lon is not None:
+                    # TODO(L9): Motive's `speed` unit is unconfirmed. We assume km/h
+                    # and convert to mph; do NOT change the unit without verifying
+                    # against the Motive API docs.
                     speed_kmh = loc.get("speed") or 0
                     return {
                         "lat": lat,
@@ -156,10 +187,21 @@ class MotiveClient:
             "status": "available",
         })
 
+        # L9: sanitize miles before int() — the value may carry commas, '$' or
+        # other non-numeric text (e.g. "1,234 mi"); strip to digits/decimal point.
+        loaded_miles = None
+        miles_raw = load.get("miles")
+        if miles_raw:
+            cleaned = re.sub(r"[^0-9.]", "", str(miles_raw))
+            try:
+                loaded_miles = int(float(cleaned)) if cleaned else None
+            except ValueError:
+                loaded_miles = None
+
         payload = {
             "vendor_id": load_number,
             "status": "planned",
-            "loaded_miles": int(float(load["miles"])) if load.get("miles") else None,
+            "loaded_miles": loaded_miles,
             "dispatch_stops": stops,
             "dispatch_trips": [
                 {
@@ -224,10 +266,11 @@ class MotiveClient:
         stops = sorted(dispatch.get("dispatch_stops", []), key=lambda s: s.get("number", 0))
 
         pickup_stop = next((s for s in stops if s.get("type") in ("pickup", "PU")), None)
-        delivery_stop = next(
-            (s for s in stops if s.get("type") in ("dropoff", "UL", "delivery")),
-            stops[-1] if stops else None,
-        )
+        # L9: the DELIVERY is the LAST drop stop (by stop order), not the first
+        # dropoff — multi-stop loads can have intermediate drops. `stops` is
+        # already sorted by stop number above.
+        drop_stops = [s for s in stops if s.get("type") in ("dropoff", "UL", "delivery")]
+        delivery_stop = drop_stops[-1] if drop_stops else (stops[-1] if stops else None)
 
         def _format_address(loc: dict) -> str:
             if not loc:

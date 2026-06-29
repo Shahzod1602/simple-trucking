@@ -34,7 +34,11 @@ services:
     environment:
       DATABASE_URL: postgresql://ratecon:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/ratecon
     ports:
-      - "8002:8000"
+      # Bind to loopback only: nginx proxies via the docker network name (app:8000),
+      # so this published port must NOT be reachable from outside (that would bypass
+      # nginx TLS / security headers / rate-limit). The deploy smoke test curls
+      # localhost:8002 on the host, which still works.
+      - "127.0.0.1:8002:8000"
     volumes:
       - ./uploads:/app/uploads
     depends_on:

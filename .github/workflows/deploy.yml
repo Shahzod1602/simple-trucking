@@ -1,3 +1,6 @@
+# REQUIRES: add SERVER_SSH_KEY secret (ed25519 private key) whose public key is in the
+# server's authorized_keys; you may then disable PasswordAuthentication. Until the secret
+# is added, deploys will fail.
 name: Deploy to Server
 
 on:
@@ -15,7 +18,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
             cd /opt/simple-trucking

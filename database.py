@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -35,6 +36,29 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
 def init_db():
     # Ensure the connection pool is initialized on startup
     _get_pool()
+    # L1: serialize the CREATE/ALTER DDL below with the same blocking advisory
+    # lock used by run_migrations, so concurrent uvicorn workers (or hosts)
+    # don't race the idempotent DDL on a fresh boot.
+    lock_conn = psycopg2.connect(DATABASE_URL)
+    lock_conn.autocommit = True
+    lcur = lock_conn.cursor()
+    lcur.execute("SELECT pg_advisory_lock(%s)", (_MIGRATION_LOCK_KEY,))  # blocks
+    try:
+        _init_db_ddl()
+    finally:
+        try:
+            lcur.execute("SELECT pg_advisory_unlock(%s)", (_MIGRATION_LOCK_KEY,))
+        except Exception:
+            pass
+        lock_conn.close()
+
+    super_email = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
+    super_pass = os.environ.get("SUPER_ADMIN_PASSWORD", "").strip()
+    if super_email and super_pass:
+        ensure_superadmin(super_email, super_pass)
+
+
+def _init_db_ddl():
     with get_conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -493,14 +517,22 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_kpi_lookup ON kpi_entries(company_id, dispatcher_id, week_start)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pay_tiers_company ON pay_tiers(company_id)")
 
-    super_email = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
-    super_pass = os.environ.get("SUPER_ADMIN_PASSWORD", "").strip()
-    if super_email and super_pass:
-        ensure_superadmin(super_email, super_pass)
-
 
 def ensure_superadmin(email: str, password: str):
     """Create or sync the superadmin account from env vars on every startup."""
+    # C1 + H1: never create a credential-less superadmin. A misconfigured/blank
+    # deploy must NOT end up with an account that an empty {"email","password"}
+    # login can claim. The lifespan calls this unconditionally, so the guard
+    # lives here (not only in init_db).
+    email = (email or "").strip().lower()
+    password = (password or "").strip()
+    if not (email and password):
+        print("[superadmin] WARNING: SUPER_ADMIN_EMAIL/PASSWORD missing; skipping superadmin sync", flush=True)
+        return
+    if len(password) < 12:
+        # Warn but don't block: blocking would stop a live deploy from re-syncing
+        # an already-rotated/existing superadmin. Rotation is handled out of band.
+        print("[superadmin] WARNING: SUPER_ADMIN_PASSWORD is weak (<12 chars); use a long random secret", flush=True)
     ph = hash_password(password)
     token = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -908,7 +940,82 @@ def acquire_advisory_lock(key: int) -> bool:
         return False
 
 
+# ── ELD secret encryption at rest (M5, Fernet) ────────────────────────────────
+# Key source: ELD_SECRET if set, else derived (stable) from TG_SESSION_SECRET.
+# If neither is set we fall back to PASS-THROUGH (no encryption) and warn once,
+# so the app keeps working in dev. decrypt_secret returns its input unchanged on
+# any invalid token, so legacy PLAINTEXT rows keep decrypting to themselves.
+
+_eld_fernet = None
+_eld_fernet_ready = False
+_eld_secret_warned = False
+
+
+def _get_eld_fernet():
+    global _eld_fernet, _eld_fernet_ready, _eld_secret_warned
+    if _eld_fernet_ready:
+        return _eld_fernet
+    _eld_fernet_ready = True
+    secret = (os.environ.get("ELD_SECRET", "").strip()
+              or os.environ.get("TG_SESSION_SECRET", "").strip())
+    if not secret:
+        if not _eld_secret_warned:
+            _eld_secret_warned = True
+            print("[eld-secret] WARNING: neither ELD_SECRET nor TG_SESSION_SECRET "
+                  "is set; ELD credentials are stored in PLAINTEXT at rest", flush=True)
+        _eld_fernet = None
+        return None
+    try:
+        from cryptography.fernet import Fernet
+        key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+        _eld_fernet = Fernet(key)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"[eld-secret] WARNING: could not init Fernet ({exc}); "
+              "ELD credentials are stored in PLAINTEXT at rest", flush=True)
+        _eld_fernet = None
+    return _eld_fernet
+
+
+def encrypt_secret(plaintext):
+    """Encrypt an ELD credential for storage. Pass-through when no key is set."""
+    if plaintext is None or plaintext == "":
+        return plaintext
+    f = _get_eld_fernet()
+    if f is None:
+        return plaintext
+    try:
+        return f.encrypt(str(plaintext).encode()).decode()
+    except Exception:
+        return plaintext
+
+
+def decrypt_secret(token):
+    """Decrypt a stored ELD credential. Returns the input UNCHANGED when no key
+    is set or when the value is not a valid Fernet token (legacy plaintext)."""
+    if token is None or token == "":
+        return token
+    f = _get_eld_fernet()
+    if f is None:
+        return token
+    try:
+        return f.decrypt(str(token).encode()).decode()
+    except Exception:
+        # Not a valid token for our key — assume legacy plaintext; return as-is.
+        return token
+
+
 # ── ELD configs ───────────────────────────────────────────────────────────────
+
+def _decrypt_eld_row(row: dict) -> dict:
+    """Return an eld_configs row dict with api_key/provider_token decrypted to
+    plaintext (so callers — and the response masker — see the real values)."""
+    d = dict(row)
+    if "api_key" in d:
+        d["api_key"] = decrypt_secret(d["api_key"])
+    if d.get("provider_token") is not None:
+        d["provider_token"] = decrypt_secret(d["provider_token"])
+    return d
+
 
 def get_eld_configs(dispatcher_id: int) -> list[dict]:
     with get_conn() as conn:
@@ -917,7 +1024,7 @@ def get_eld_configs(dispatcher_id: int) -> list[dict]:
         )
         rows = conn.fetchall()
         if rows:
-            return [dict(r) for r in rows]
+            return [_decrypt_eld_row(r) for r in rows]
         # fallback to company admin's configs
         conn.execute(
             """SELECT ec.* FROM eld_configs ec
@@ -927,7 +1034,7 @@ def get_eld_configs(dispatcher_id: int) -> list[dict]:
             (dispatcher_id,),
         )
         rows = conn.fetchall()
-        return [dict(r) for r in rows]
+        return [_decrypt_eld_row(r) for r in rows]
 
 
 def get_eld_config(dispatcher_id: int) -> dict | None:
@@ -937,11 +1044,14 @@ def get_eld_config(dispatcher_id: int) -> dict | None:
 
 def save_eld_config(dispatcher_id: int, provider: str, api_key: str, company: str | None = None, provider_token: str | None = None) -> dict:
     now = datetime.now(timezone.utc)
+    # M5: encrypt secrets at rest (pass-through when no key configured).
+    enc_api_key = encrypt_secret(api_key)
+    enc_provider_token = encrypt_secret(provider_token)
     with get_conn() as conn:
         conn.execute(
             """INSERT INTO eld_configs (dispatcher_id, provider, api_key, company, provider_token, updated_at)
                VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
-            (dispatcher_id, provider, api_key, company, provider_token, now),
+            (dispatcher_id, provider, enc_api_key, company, enc_provider_token, now),
         )
         row = conn.fetchone()
         return {"id": row["id"], "dispatcher_id": dispatcher_id, "provider": provider}
@@ -995,6 +1105,24 @@ def link_group(dispatcher_id: int, chat_id: int, name: str) -> dict:
         )
         any_existing = conn.fetchone()
         if any_existing:
+            # L8: refuse to silently move a chat that another company already owns;
+            # an explicit unlink is required first. Same-company re-link is fine.
+            conn.execute(
+                "SELECT company_id FROM dispatchers WHERE id = %s",
+                (any_existing["dispatcher_id"],),
+            )
+            old = conn.fetchone()
+            conn.execute(
+                "SELECT company_id FROM dispatchers WHERE id = %s",
+                (dispatcher_id,),
+            )
+            new = conn.fetchone()
+            old_company = old["company_id"] if old else None
+            new_company = new["company_id"] if new else None
+            if old_company != new_company:
+                raise ValueError(
+                    "This Telegram group is already linked to another company; unlink it there first"
+                )
             conn.execute(
                 "UPDATE driver_groups SET dispatcher_id = %s, name = %s WHERE chat_id = %s",
                 (dispatcher_id, name, chat_id),
@@ -1173,37 +1301,73 @@ def delete_tg_login(login_id: str) -> None:
 
 # ── Loads ─────────────────────────────────────────────────────────────────────
 
-def create_load(dispatcher_id: int, data: dict) -> dict:
+def create_load(dispatcher_id: int, data: dict, motive_dispatch_id: int | None = None) -> dict | None:
     now = datetime.now(timezone.utc)
-    with get_conn() as conn:
-        conn.execute(
-            """INSERT INTO loads
-               (dispatcher_id, group_id, load_number, status,
-                origin_state, destination_state, total_rate_usd, miles,
-                pickup_address, pickup_date, delivery_address, delivery_date,
-                stops_json, current_stop_index, deadhead_miles, broker_name, charge, created_at)
-               VALUES (%s, %s, %s, 'upcoming', %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, %s) RETURNING id""",
-            (
-                dispatcher_id,
-                data.get("group_id"),
-                data.get("load_number"),
-                data.get("origin_state"),
-                data.get("destination_state"),
-                data.get("total_rate_usd"),
-                data.get("miles"),
-                data.get("pickup_address"),
-                data.get("pickup_date"),
-                data.get("delivery_address"),
-                data.get("delivery_date"),
-                data.get("stops_json"),
-                data.get("deadhead_miles"),
-                data.get("broker_name"),
-                data.get("charge"),
-                now,
-            ),
-        )
-        row = conn.fetchone()
-        load_id = row["id"]
+    group_id = data.get("group_id")
+    # M3: allow the motive dispatch id to be written in the SAME insert (atomic),
+    # accepting it either as an explicit arg or inside `data`.
+    if motive_dispatch_id is None:
+        motive_dispatch_id = data.get("motive_dispatch_id")
+    try:
+        with get_conn() as conn:
+            # M1: a provided group_id must belong to the load owner's company,
+            # otherwise a foreign group's driver name / eld_driver_id could be
+            # surfaced through the read joins below.
+            if group_id is not None:
+                conn.execute(
+                    """SELECT 1 FROM driver_groups dg
+                       JOIN dispatchers d ON dg.dispatcher_id = d.id
+                       WHERE dg.id = %s
+                         AND d.company_id IS NOT DISTINCT FROM
+                             (SELECT company_id FROM dispatchers WHERE id = %s)""",
+                    (group_id, dispatcher_id),
+                )
+                if not conn.fetchone():
+                    raise ValueError("Driver group not found")
+            conn.execute(
+                """INSERT INTO loads
+                   (dispatcher_id, group_id, load_number, status,
+                    origin_state, destination_state, total_rate_usd, miles,
+                    pickup_address, pickup_date, delivery_address, delivery_date,
+                    stops_json, current_stop_index, deadhead_miles, broker_name, charge,
+                    motive_dispatch_id, created_at)
+                   VALUES (%s, %s, %s, 'upcoming', %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s) RETURNING id""",
+                (
+                    dispatcher_id,
+                    group_id,
+                    data.get("load_number"),
+                    data.get("origin_state"),
+                    data.get("destination_state"),
+                    data.get("total_rate_usd"),
+                    data.get("miles"),
+                    data.get("pickup_address"),
+                    data.get("pickup_date"),
+                    data.get("delivery_address"),
+                    data.get("delivery_date"),
+                    data.get("stops_json"),
+                    data.get("deadhead_miles"),
+                    data.get("broker_name"),
+                    data.get("charge"),
+                    motive_dispatch_id,
+                    now,
+                ),
+            )
+            row = conn.fetchone()
+            load_id = row["id"]
+    except psycopg2.IntegrityError:
+        # M3: the partial-unique on (dispatcher_id, motive_dispatch_id) fired —
+        # this dispatch was already imported (e.g. a concurrent import). Return
+        # the existing load instead of crashing.
+        if motive_dispatch_id is not None:
+            with get_conn() as conn:
+                conn.execute(
+                    "SELECT id FROM loads WHERE dispatcher_id = %s AND motive_dispatch_id = %s",
+                    (dispatcher_id, motive_dispatch_id),
+                )
+                existing = conn.fetchone()
+            if existing:
+                return get_load_by_id(existing["id"])
+        raise
     return get_load_by_id(load_id)
 
 
@@ -1214,6 +1378,9 @@ def get_load(load_id: int, company_id: int) -> dict | None:
                       d.name as dispatcher_name
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
+                    AND dg.dispatcher_id IN (
+                        SELECT id FROM dispatchers WHERE company_id IS NOT DISTINCT FROM
+                            (SELECT company_id FROM dispatchers WHERE id = l.dispatcher_id))
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
                WHERE l.id = %s AND d.company_id = %s""",
             (load_id, company_id),
@@ -1229,6 +1396,9 @@ def get_load_by_id(load_id: int) -> dict | None:
                       d.name as dispatcher_name
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
+                    AND dg.dispatcher_id IN (
+                        SELECT id FROM dispatchers WHERE company_id IS NOT DISTINCT FROM
+                            (SELECT company_id FROM dispatchers WHERE id = l.dispatcher_id))
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
                WHERE l.id = %s""",
             (load_id,),
@@ -1244,6 +1414,9 @@ def get_loads(company_id: int) -> list[dict]:
                       d.name as dispatcher_name
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
+                    AND dg.dispatcher_id IN (
+                        SELECT id FROM dispatchers WHERE company_id IS NOT DISTINCT FROM
+                            (SELECT company_id FROM dispatchers WHERE id = l.dispatcher_id))
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
                WHERE d.company_id = %s
                ORDER BY l.created_at DESC""",
@@ -1277,6 +1450,10 @@ def update_load_fields(load_id: int, company_id: int, fields: dict) -> bool:
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False
+    # M1: never let a load point at another tenant's driver group.
+    if updates.get("group_id") is not None:
+        if not get_group(updates["group_id"], company_id):
+            raise ValueError("Driver group not found")
     setters = ", ".join(f"{k} = %s" for k in updates)
     with get_conn() as conn:
         conn.execute(
@@ -1651,7 +1828,17 @@ def get_loads_for_auto_send() -> list[dict]:
                  AND dg.eld_driver_id IS NOT NULL
                  AND ec.provider IS NOT NULL"""
         )
-        return [dict(r) for r in conn.fetchall()]
+        rows = []
+        for r in conn.fetchall():
+            d = dict(r)
+            # M5: secrets are encrypted at rest; hand the auto-send/poller path
+            # the real plaintext key/token.
+            if d.get("eld_api_key") is not None:
+                d["eld_api_key"] = decrypt_secret(d["eld_api_key"])
+            if d.get("eld_provider_token") is not None:
+                d["eld_provider_token"] = decrypt_secret(d["eld_provider_token"])
+            rows.append(d)
+        return rows
 
 
 def create_audit_log(
@@ -1813,6 +2000,9 @@ def get_weekly_kpi(company_id: int, week_start: str) -> list[dict]:
                       d.name as dispatcher_name, d.id as worker_id
                FROM loads l
                LEFT JOIN driver_groups dg ON l.group_id = dg.id
+                    AND dg.dispatcher_id IN (
+                        SELECT id FROM dispatchers WHERE company_id IS NOT DISTINCT FROM
+                            (SELECT company_id FROM dispatchers WHERE id = l.dispatcher_id))
                LEFT JOIN dispatchers d ON l.dispatcher_id = d.id
                WHERE d.company_id = %s
                  AND l.status IN ('dispatched', 'delivered')
@@ -1860,29 +2050,36 @@ def upsert_kpi_comment(company_id: int, driver_group_id: int, week_start: str, c
 def add_kpi_entry(company_id: int, dispatcher_id: int, week_start: str,
                   load_id: int | None, miles: float, cost: float) -> dict:
     now = datetime.now(timezone.utc)
-    with get_conn() as conn:
-        if load_id:
-            # The load must belong to the caller's company (no cross-tenant FK).
+    try:
+        with get_conn() as conn:
+            if load_id:
+                # The load must belong to the caller's company (no cross-tenant FK).
+                conn.execute(
+                    """SELECT 1 FROM loads l JOIN dispatchers d ON l.dispatcher_id = d.id
+                       WHERE l.id = %s AND d.company_id = %s""",
+                    (load_id, company_id),
+                )
+                if not conn.fetchone():
+                    raise ValueError("Load not found")
+                # Fast, friendly dedup check (works even if the partial-unique
+                # index was skipped on a dirty DB).
+                conn.execute(
+                    "SELECT id FROM kpi_entries WHERE load_id = %s AND company_id = %s",
+                    (load_id, company_id),
+                )
+                if conn.fetchone():
+                    raise ValueError("This load is already assigned to a KPI entry")
             conn.execute(
-                """SELECT 1 FROM loads l JOIN dispatchers d ON l.dispatcher_id = d.id
-                   WHERE l.id = %s AND d.company_id = %s""",
-                (load_id, company_id),
+                """INSERT INTO kpi_entries (company_id, dispatcher_id, week_start, load_id, miles, cost, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                (company_id, dispatcher_id, week_start, load_id, miles, cost, now),
             )
-            if not conn.fetchone():
-                raise ValueError("Load not found")
-            conn.execute(
-                "SELECT id FROM kpi_entries WHERE load_id = %s AND company_id = %s",
-                (load_id, company_id),
-            )
-            if conn.fetchone():
-                raise ValueError("This load is already assigned to a KPI entry")
-        conn.execute(
-            """INSERT INTO kpi_entries (company_id, dispatcher_id, week_start, load_id, miles, cost, updated_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-            (company_id, dispatcher_id, week_start, load_id, miles, cost, now),
-        )
-        row = conn.fetchone()
-        return {"id": row["id"]}
+            row = conn.fetchone()
+            return {"id": row["id"]}
+    except psycopg2.IntegrityError:
+        # M4: a concurrent insert won the partial-unique (company_id, load_id) —
+        # surface the same friendly conflict instead of a 500.
+        raise ValueError("This load is already assigned to a KPI entry")
 
 
 def delete_kpi_entry(entry_id: int, company_id: int, dispatcher_id: int | None = None) -> bool:
@@ -2013,6 +2210,69 @@ def _filter_fields(table: str, data: dict) -> dict:
     return {k: (None if v == "" else v) for k, v in data.items() if k in allowed}
 
 
+# L11: cross-tenant FK guard. For each allowlisted entity, the columns below are
+# soft INTEGER references to another row that MUST live in the same company, so a
+# tenant can't attach its invoice/transaction/assignment to another tenant's
+# customer/load/driver/truck by guessing an id. Map: column -> referenced table.
+_ENTITY_FKS = {
+    "invoices": {"customer_id": "customers", "load_id": "loads"},
+    "transactions": {"load_id": "loads", "bill_id": "bills", "driver_group_id": "driver_groups"},
+    "drivers": {"truck_id": "trucks", "driver_group_id": "driver_groups"},
+    "trucks": {"current_driver_id": "drivers"},
+    "assignments": {"truck_id": "trucks", "driver_id": "drivers",
+                    "co_driver_id": "drivers", "trailer_id": "trailers"},
+    "bills": {"vendor_id": "vendors"},
+    "safety_tasks": {"driver_group_id": "driver_groups", "trailer_id": "trailers"},
+    "work_orders": {"trailer_id": "trailers", "vendor_id": "vendors"},
+    "driver_documents": {"driver_group_id": "driver_groups"},
+    "mailbox_messages": {"load_id": "loads", "dispatcher_id": "dispatchers"},
+}
+
+# Reference targets that own a company via dispatcher_id rather than a direct
+# company_id column.
+_FK_VIA_DISPATCHER = {"loads": "l", "driver_groups": "dg"}
+
+
+def _ref_belongs_to_company(conn, ref_table: str, ref_id, company_id: int) -> bool:
+    """True if the referenced row exists and is owned by company_id. ref_table is
+    drawn from the hardcoded map above, never user input, so it's safe to inline."""
+    if ref_table == "loads":
+        conn.execute(
+            "SELECT 1 FROM loads l JOIN dispatchers d ON l.dispatcher_id = d.id "
+            "WHERE l.id = %s AND d.company_id = %s",
+            (ref_id, company_id),
+        )
+    elif ref_table == "driver_groups":
+        conn.execute(
+            "SELECT 1 FROM driver_groups dg JOIN dispatchers d ON dg.dispatcher_id = d.id "
+            "WHERE dg.id = %s AND d.company_id = %s",
+            (ref_id, company_id),
+        )
+    elif ref_table == "dispatchers":
+        conn.execute(
+            "SELECT 1 FROM dispatchers WHERE id = %s AND company_id = %s",
+            (ref_id, company_id),
+        )
+    else:
+        conn.execute(
+            f"SELECT 1 FROM {ref_table} WHERE id = %s AND company_id = %s",
+            (ref_id, company_id),
+        )
+    return conn.fetchone() is not None
+
+
+def _validate_entity_fks(conn, table: str, fields: dict, company_id: int) -> None:
+    fks = _ENTITY_FKS.get(table)
+    if not fks:
+        return
+    for col, ref_table in fks.items():
+        ref_id = fields.get(col)
+        if ref_id is None:
+            continue
+        if not _ref_belongs_to_company(conn, ref_table, ref_id, company_id):
+            raise ValueError(f"Referenced {col} does not belong to this company")
+
+
 def list_entities(table: str, company_id: int, limit: int = 500) -> list[dict]:
     if table not in _ENTITY_COLUMNS:
         raise ValueError(f"Unknown table: {table}")
@@ -2046,6 +2306,7 @@ def create_entity(table: str, company_id: int, data: dict) -> dict:
     placeholders = ", ".join(["%s"] * len(vals))
     col_list = ", ".join(cols)
     with get_conn() as conn:
+        _validate_entity_fks(conn, table, fields, company_id)
         conn.execute(
             f"INSERT INTO {table} ({col_list}) VALUES ({placeholders}) RETURNING *",
             tuple(vals),
@@ -2062,6 +2323,7 @@ def update_entity(table: str, entity_id: int, company_id: int, data: dict) -> di
         return get_entity(table, entity_id, company_id)
     setters = ", ".join(f"{k} = %s" for k in fields.keys())
     with get_conn() as conn:
+        _validate_entity_fks(conn, table, fields, company_id)
         conn.execute(
             f"UPDATE {table} SET {setters} WHERE id = %s AND company_id = %s RETURNING *",
             (*fields.values(), entity_id, company_id),
@@ -2084,9 +2346,21 @@ def delete_entity(table: str, entity_id: int, company_id: int) -> bool:
 # ── Email accounts (Relay) + inbound email ────────────────────────────────────
 
 def create_email_account(company_id: int, relay_account_id: str, provider: str, email: str) -> dict:
-    """Link a Relay-connected mailbox to a company (idempotent on relay_account_id)."""
+    """Link a Relay-connected mailbox to a company (idempotent on relay_account_id).
+
+    H2: a relay_account_id that already belongs to a DIFFERENT company must not be
+    silently transferred (that would be a cross-tenant mailbox hijack). Same-company
+    re-link/upsert stays allowed.
+    """
     now = datetime.now(timezone.utc)
     with get_conn() as conn:
+        conn.execute(
+            "SELECT company_id FROM email_accounts WHERE relay_account_id = %s",
+            (relay_account_id,),
+        )
+        existing = conn.fetchone()
+        if existing and existing["company_id"] != company_id:
+            raise ValueError("relay account already owned by another company")
         conn.execute(
             """INSERT INTO email_accounts (company_id, relay_account_id, provider, email, is_active, created_at)
                VALUES (%s, %s, %s, %s, TRUE, %s)

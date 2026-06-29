@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import tempfile
 import time
 import collections
@@ -13,9 +14,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import psycopg2
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
@@ -39,6 +41,7 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 # Advisory-lock keys for singleton background workers (one worker/host each).
 _BOT_LOCK_KEY = 911001
 _EMAIL_LOCK_KEY = 911002
+_PREFETCH_LOCK_KEY = 911003
 
 
 @asynccontextmanager
@@ -46,10 +49,14 @@ async def lifespan(app: FastAPI):
     global _truck_prefetch_task, _email_poller_task
     database.init_db()
     database.run_migrations()
-    database.ensure_superadmin(
-        os.getenv("SUPER_ADMIN_EMAIL", ""),
-        os.getenv("SUPER_ADMIN_PASSWORD", ""),
-    )
+    # C1/H1: only seed the superadmin when BOTH credentials are explicitly
+    # provided. Without this gate a misconfigured deploy would create a
+    # passwordless superadmin (empty email + empty password). database.py
+    # self-guards too, but we must not even call it with empty creds.
+    super_email = os.getenv("SUPER_ADMIN_EMAIL", "").strip()
+    super_pass = os.getenv("SUPER_ADMIN_PASSWORD", "").strip()
+    if super_email and super_pass:
+        database.ensure_superadmin(super_email, super_pass)
     UPLOADS_DIR.mkdir(exist_ok=True)
     bot_enabled = os.getenv("DISABLE_BOT_POLLER", "0") != "1"
     prefetch_enabled = os.getenv("DISABLE_TRUCK_PREFETCH", "0") != "1"
@@ -65,8 +72,12 @@ async def lifespan(app: FastAPI):
     if email_enabled:
         if database.acquire_advisory_lock(_EMAIL_LOCK_KEY):
             _email_poller_task = asyncio.create_task(_email_poller_loop())
+    # H5: the truck-prefetch loop hammers every ELD provider once per worker and
+    # blocks the event loop with sync HTTP. Guard it with its own advisory lock
+    # so only ONE worker/host runs it (mirroring the bot/email pollers).
     if prefetch_enabled:
-        _truck_prefetch_task = asyncio.create_task(_prefetch_trucks_loop())
+        if database.acquire_advisory_lock(_PREFETCH_LOCK_KEY):
+            _truck_prefetch_task = asyncio.create_task(_prefetch_trucks_loop())
     yield
     if _truck_prefetch_task:
         _truck_prefetch_task.cancel()
@@ -104,6 +115,7 @@ _truck_cache: dict[int, dict] = {}  # {dispatcher_id: {"ts": float, "trucks": li
 _eld_call_windows: dict[tuple[int, str], deque] = {}
 _truck_prefetch_task: asyncio.Task | None = None
 _email_poller_task: asyncio.Task | None = None
+_last_session_purge: float = 0.0  # CONTRACT-5/L11: throttle periodic purge
 MAX_ATTEMPTS = 5
 BLOCK_SECS = 3 * 60  # 3 minutes
 
@@ -144,7 +156,7 @@ def _enforce_eld_rate_limit(dispatcher_id: int, endpoint_key: str):
     if len(q) >= ELD_RATE_LIMIT_MAX_CALLS:
         raise HTTPException(
             status_code=429,
-            detail=f"Too many ELD requests. Try again in {ELD_RATE_LIMIT_WINDOW_SECS} seconds.",
+            detail=f"Too many requests. Try again in {ELD_RATE_LIMIT_WINDOW_SECS} seconds.",
         )
     q.append(now)
 
@@ -189,16 +201,30 @@ def _retry_sync_call(fn, *args, retries: int = 2, base_delay: float = 0.35, **kw
 
 
 async def _prefetch_trucks_loop():
+    global _last_session_purge
     while True:
         try:
             dispatcher_ids = database.get_dispatchers_with_eld_configs()
             for dispatcher_id in dispatcher_ids:
                 try:
-                    _get_dispatcher_trucks(dispatcher_id, use_cache=False)
+                    # H5: offload the blocking ELD HTTP calls to a thread so a
+                    # slow/hung provider can't freeze this worker's event loop.
+                    await asyncio.to_thread(_get_dispatcher_trucks, dispatcher_id, use_cache=False)
                 except Exception as exc:
                     logger.warning("Truck prefetch failed for dispatcher_id=%s: %s", dispatcher_id, exc)
+                # Yield between dispatchers so in-flight requests make progress.
+                await asyncio.sleep(0)
         except Exception as exc:
             logger.warning("Truck prefetch loop error: %s", exc)
+        # CONTRACT-5 / L11: this loop is advisory-lock'd to a single worker, so
+        # it is a safe place to fold in periodic expired-session cleanup.
+        now = time.time()
+        if now - _last_session_purge > 3600:
+            _last_session_purge = now
+            try:
+                await asyncio.to_thread(database.purge_expired_sessions)
+            except Exception as exc:
+                logger.warning("purge_expired_sessions failed: %s", exc)
         await asyncio.sleep(20)
 
 
@@ -487,8 +513,9 @@ async def api_register(body: RegisterBody):
     if database.get_dispatcher_by_email(email):
         raise HTTPException(status_code=409, detail="This email is already registered")
     company = database.create_company(company_name)
-    dispatcher = database.create_company_user(
-        company["id"], name, email, body.password, role="admin"
+    # M9: Argon2 hashing is CPU-bound — run it off the event loop.
+    dispatcher = await asyncio.to_thread(
+        database.create_company_user, company["id"], name, email, body.password, "admin"
     )
     token = database.create_session(dispatcher["id"])
     return {"token": token, "name": dispatcher["name"], "role": dispatcher["role"]}
@@ -497,26 +524,34 @@ async def api_register(body: RegisterBody):
 @app.post("/api/login")
 async def api_login(request: Request, body: LoginBody):
     ip = request.client.host or "unknown"
-    secs = _check_rate_limit(ip)
+    email = body.email.strip().lower()
+    # M8: throttle on the real client IP (proxy-headers give us the true peer)
+    # AND per-account, so a single account can't be brute-forced from a pool of
+    # rotating IPs. Both counters reuse the in-memory limiter helpers.
+    acct_key = f"acct:{email}"
+    secs = max(_check_rate_limit(ip), _check_rate_limit(acct_key))
     if secs:
         raise HTTPException(
             status_code=429,
             detail=f"Too many failed attempts. Try again in {secs // 60 + 1} minutes."
         )
 
-    email = body.email.strip().lower()
     dispatcher = database.get_dispatcher_by_email(email)
     if not dispatcher or not dispatcher.get("password_hash"):
         _record_failure(ip)
+        _record_failure(acct_key)
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    if not database.verify_password(body.password, dispatcher["password_hash"]):
+    # M9: Argon2 verify is CPU-bound — run it off the event loop.
+    if not await asyncio.to_thread(database.verify_password, body.password, dispatcher["password_hash"]):
         _record_failure(ip)
+        _record_failure(acct_key)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     _clear_attempts(ip)
+    _clear_attempts(acct_key)
     if database.password_needs_rehash(dispatcher.get("password_hash") or ""):
         try:
-            database.update_password(dispatcher["id"], body.password)
+            await asyncio.to_thread(database.update_password, dispatcher["id"], body.password)
         except Exception:
             pass
     token = database.create_session(dispatcher["id"])
@@ -546,31 +581,50 @@ async def api_onboarding_status(authorization: str | None = Header(default=None)
 
 
 @app.get("/api/health")
-async def api_health():
+async def api_health(authorization: str | None = Header(default=None)):
     db_ok = True
-    db_error = None
     try:
         with database.get_conn() as conn:
             conn.execute("SELECT 1")
     except Exception as exc:
         db_ok = False
-        db_error = str(exc)
-    prefetch_running = bool(_truck_prefetch_task and not _truck_prefetch_task.done())
-    bot_enabled = os.getenv("DISABLE_BOT_POLLER", "0") != "1"
-    return {
-        "ok": db_ok,
-        "checks": {
-            "db": {"ok": db_ok, "error": db_error},
+        # L5: never echo the DB error to unauthenticated callers; log it instead.
+        logger.warning("Health check DB error: %s", exc)
+
+    # L5: detailed internals (cache sizes, poller flags, ELD counts) are recon
+    # data — only expose them to an authenticated superadmin. Anonymous callers
+    # (Docker healthcheck, LB probes) get just liveness + a timestamp.
+    is_super = False
+    if authorization:
+        try:
+            require_superadmin(authorization)
+            is_super = True
+        except HTTPException:
+            is_super = False
+
+    payload: dict = {"ok": db_ok, "ts": int(time.time())}
+    if is_super:
+        prefetch_running = bool(_truck_prefetch_task and not _truck_prefetch_task.done())
+        eld_count = None
+        try:
+            eld_count = len(database.get_dispatchers_with_eld_configs())
+        except Exception:
+            eld_count = None
+        payload["checks"] = {
+            "db": {"ok": db_ok},
             "truck_prefetch": {
                 "enabled": os.getenv("DISABLE_TRUCK_PREFETCH", "0") != "1",
                 "running": prefetch_running,
                 "cache_entries": len(_truck_cache),
             },
-            "bot_poller": {"enabled": bot_enabled},
-            "eld": {"dispatchers_configured": len(database.get_dispatchers_with_eld_configs())},
-        },
-        "ts": int(time.time()),
-    }
+            "bot_poller": {"enabled": os.getenv("DISABLE_BOT_POLLER", "0") != "1"},
+            "eld": {"dispatchers_configured": eld_count},
+        }
+
+    # M14: surface DB failure as 503 so Docker healthcheck / deploy rollback fire.
+    if not db_ok:
+        return JSONResponse(status_code=503, content=payload)
+    return payload
 
 
 @app.post("/api/change-password")
@@ -581,11 +635,11 @@ async def api_change_password(
     dispatcher = require_dispatcher(authorization)
     if not dispatcher.get("password_hash"):
         raise HTTPException(status_code=400, detail="No password set")
-    if not database.verify_password(body.current_password, dispatcher["password_hash"]):
+    if not await asyncio.to_thread(database.verify_password, body.current_password, dispatcher["password_hash"]):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
     if len(body.new_password) < 8:
         raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
-    database.update_password(dispatcher["id"], body.new_password)
+    await asyncio.to_thread(database.update_password, dispatcher["id"], body.new_password)
     # Rotate: revoke every other session for this account, keep the current one.
     database.delete_other_sessions(dispatcher["id"], authorization.removeprefix("Bearer ").strip())
     return {"ok": True}
@@ -684,7 +738,7 @@ async def api_admin_reset_password(
             raise HTTPException(status_code=404, detail="Dispatcher not found")
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
-    ok = database.update_password(target_id, body.new_password)
+    ok = await asyncio.to_thread(database.update_password, target_id, body.new_password)
     database.delete_sessions_for_dispatcher(target_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Dispatcher not found")
@@ -774,7 +828,9 @@ async def api_assign_admin(
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if database.get_dispatcher_by_email(email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    created = database.create_company_user(company_id, name, email, body.password, role="admin")
+    created = await asyncio.to_thread(
+        database.create_company_user, company_id, name, email, body.password, "admin"
+    )
     _audit_event(
         me,
         "company_admin.create",
@@ -816,7 +872,9 @@ async def api_superadmin_create_user(
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if database.get_dispatcher_by_email(email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    created = database.create_company_user(company_id, name, email, body.password, role="user")
+    created = await asyncio.to_thread(
+        database.create_company_user, company_id, name, email, body.password, "user"
+    )
     _audit_event(
         me,
         "company_user.create",
@@ -853,7 +911,7 @@ async def api_superadmin_reset_user_pw(
     require_superadmin(authorization)
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
-    ok = database.update_password(target_id, body.new_password)
+    ok = await asyncio.to_thread(database.update_password, target_id, body.new_password)
     database.delete_sessions_for_dispatcher(target_id)
     if not ok:
         raise HTTPException(status_code=404, detail="User not found")
@@ -917,7 +975,9 @@ async def api_create_company_user(
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     if database.get_dispatcher_by_email(email):
         raise HTTPException(status_code=409, detail="Email already registered")
-    created = database.create_company_user(company_id, name, email, body.password, role="user")
+    created = await asyncio.to_thread(
+        database.create_company_user, company_id, name, email, body.password, "user"
+    )
     _audit_event(
         me,
         "company_user.create",
@@ -966,7 +1026,7 @@ async def api_company_reset_password(
         raise HTTPException(status_code=404, detail="User not found in your company")
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
-    database.update_password(target_id, body.new_password)
+    await asyncio.to_thread(database.update_password, target_id, body.new_password)
     database.delete_sessions_for_dispatcher(target_id)
     return {"ok": True}
 
@@ -1289,11 +1349,12 @@ def api_motive_import_dispatch(
     authorization: str | None = Header(default=None),
 ):
     """Motive'dan bitta dispatchni RateCon'ga import qilish."""
-    dispatcher = require_dispatcher(authorization)
+    # L3: mutating ELD/Motive actions are admin-only (uses the company ELD key).
+    dispatcher = require_company_admin(authorization)
     company_id = get_company_id(dispatcher)
     _enforce_eld_rate_limit(dispatcher["id"], "motive_dispatch_import")
 
-    # Dublikat tekshirish
+    # Dublikat tekshirish (tez yo'l; haqiqiy kafolat — partial-unique index).
     existing = database.get_load_by_motive_dispatch_id(dispatch_id, company_id)
     if existing:
         raise HTTPException(status_code=409, detail=f"Bu dispatch allaqachon import qilingan (load #{existing['id']})")
@@ -1309,15 +1370,24 @@ def api_motive_import_dispatch(
     if not dispatch:
         raise HTTPException(status_code=404, detail="Dispatch not found in Motive")
 
-    # Parse va load yaratish
+    # Parse va load yaratish. M3: motive_dispatch_id bitta atomik INSERT'da
+    # o'rnatiladi; partial-unique index dublikatni rad etadi, shuning uchun
+    # check-then-act poygasi o'rniga IntegrityError'ni 'allaqachon import' deb
+    # qayta ishlaymiz.
     load_data = MotiveClient.parse_dispatch_to_load(dispatch)
     eld_driver_id = load_data.pop("eld_driver_id", None)
-    load = database.create_load(dispatcher["id"], load_data)
+    try:
+        load = database.create_load(dispatcher["id"], load_data, motive_dispatch_id=dispatch_id)
+    except psycopg2.IntegrityError:
+        existing = database.get_load_by_motive_dispatch_id(dispatch_id, company_id)
+        detail = (
+            f"Bu dispatch allaqachon import qilingan (load #{existing['id']})"
+            if existing else "Bu dispatch allaqachon import qilingan"
+        )
+        raise HTTPException(status_code=409, detail=detail)
     if not load:
         raise HTTPException(status_code=500, detail="Failed to create load")
 
-    # motive_dispatch_id saqlash
-    database.update_load_fields(load["id"], company_id, {"motive_dispatch_id": dispatch_id})
     load["motive_dispatch_id"] = dispatch_id
     return {"ok": True, "load": load, "eld_driver_id": eld_driver_id}
 
@@ -1333,7 +1403,8 @@ def api_motive_push_load(
     authorization: str | None = Header(default=None),
 ):
     """RateCon yukini Motive'ga yuborish. Haydovchi ilovada ko'radi."""
-    dispatcher = require_dispatcher(authorization)
+    # L3: mutating ELD/Motive actions are admin-only (uses the company ELD key).
+    dispatcher = require_company_admin(authorization)
     company_id = get_company_id(dispatcher)
     _enforce_eld_rate_limit(dispatcher["id"], "motive_dispatch_push")
 
@@ -1382,7 +1453,8 @@ def api_motive_sync_status(
     authorization: str | None = Header(default=None),
 ):
     """Motive va RateCon o'rtasida yuk statusini sinxronlash."""
-    dispatcher = require_dispatcher(authorization)
+    # L3: mutating ELD/Motive actions are admin-only (uses the company ELD key).
+    dispatcher = require_company_admin(authorization)
     company_id = get_company_id(dispatcher)
     _enforce_eld_rate_limit(dispatcher["id"], "motive_dispatch_sync")
 
@@ -1650,7 +1722,9 @@ def api_eta(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        # L9: don't leak upstream/internal error text to the client; log it.
+        logger.warning("ETA computation failed for group_id=%s: %s", group_id, e)
+        raise HTTPException(status_code=502, detail="Could not compute ETA right now. Please try again.")
 
 
 @app.get("/api/groups/{group_id}/driver-location")
@@ -2230,18 +2304,22 @@ async def api_analytics(authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
     company_id = get_company_id(dispatcher)
     company_filter = "dispatcher_id IN (SELECT id FROM dispatchers WHERE company_id = %s)"
+    # M7: a free-text rate/miles ('$2,500 + FSC') would crash a raw numeric CAST
+    # and 500 the whole endpoint. _rate_to_numeric tolerates such values.
+    rate_num = database._rate_to_numeric("total_rate_usd")
+    miles_num = database._rate_to_numeric("miles")
     with database.get_conn() as conn:
         conn.execute(
-            f"SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(total_rate_usd,'$',''),',','') AS DOUBLE PRECISION)), 0) AS total FROM loads WHERE {company_filter} AND status = 'delivered'",
+            f"SELECT COALESCE(SUM({rate_num}), 0) AS total FROM loads WHERE {company_filter} AND status = 'delivered'",
             (company_id,),
         )
-        total_rev = conn.fetchone()["total"]
+        total_rev = float(conn.fetchone()["total"] or 0)
 
         conn.execute(
-            f"SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(miles,'$',''),',','') AS DOUBLE PRECISION)), 0) AS total FROM loads WHERE {company_filter} AND status = 'delivered'",
+            f"SELECT COALESCE(SUM({miles_num}), 0) AS total FROM loads WHERE {company_filter} AND status = 'delivered'",
             (company_id,),
         )
-        total_miles = conn.fetchone()["total"]
+        total_miles = float(conn.fetchone()["total"] or 0)
 
         conn.execute(
             f"SELECT status, COUNT(*) as cnt FROM loads WHERE {company_filter} GROUP BY status",
@@ -2251,13 +2329,18 @@ async def api_analytics(authorization: str | None = Header(default=None)):
 
         conn.execute(
             f"""SELECT to_char(created_at, 'YYYY-MM') as month,
-                      SUM(CAST(REPLACE(REPLACE(total_rate_usd,'$',''),',','') AS DOUBLE PRECISION)) as revenue,
+                      SUM({rate_num}) as revenue,
                       COUNT(*) as loads
                FROM loads WHERE {company_filter} AND status = 'delivered'
                GROUP BY month ORDER BY month ASC LIMIT 6""",
             (company_id,),
         )
-        monthly = [dict(r) for r in conn.fetchall()]
+        monthly = []
+        for r in conn.fetchall():
+            row = dict(r)
+            if row.get("revenue") is not None:
+                row["revenue"] = float(row["revenue"])
+            monthly.append(row)
 
     return {
         "total_revenue": round(total_rev, 2),
@@ -2976,33 +3059,60 @@ async def api_delete_entity(slug: str, entity_id: int, authorization: str | None
 # A signed, short-lived state ties the OAuth round-trip back to a company. The
 # browser callback carries no Bearer token, so the company id travels inside it.
 
-def _email_state_secret() -> str:
-    return (
-        os.environ.get("RELAY_STATE_SECRET")
-        or os.environ.get("SUPER_ADMIN_PASSWORD")
-        or "ratecon-dev-state-secret"
-    )
+# H2: single-use nonces already consumed by a callback ({nonce: expiry_ts}).
+# In-memory is acceptable here — the state is short-lived and the email poller
+# is a singleton, so cross-worker replay within the TTL is a negligible risk
+# compared with the previous hardcoded-secret hijack.
+_consumed_state_nonces: dict[str, float] = {}
 
 
-def _sign_connect_state(company_id: int, dispatcher_id: int, ttl: int = 900) -> str:
+def _email_state_secret() -> str | None:
+    """H2: the OAuth state-signing key comes ONLY from RELAY_STATE_SECRET. We
+    deliberately do NOT fall back to SUPER_ADMIN_PASSWORD or any hardcoded
+    constant — a known/guessable key lets an attacker forge a state for any
+    company and hijack a mailbox. Returns None when unset (callers fail closed)."""
+    secret = os.environ.get("RELAY_STATE_SECRET")
+    return secret if secret else None
+
+
+def _sign_connect_state(company_id: int, dispatcher_id: int, ttl: int = 900) -> str | None:
+    secret = _email_state_secret()
+    if not secret:
+        return None
     exp = int(time.time()) + ttl
-    payload = f"{company_id}.{dispatcher_id}.{exp}"
-    sig = hmac.new(_email_state_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
+    nonce = secrets.token_hex(16)  # hex only → safe inside the dot-delimited state
+    payload = f"{company_id}.{dispatcher_id}.{nonce}.{exp}"
+    sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
     return f"{payload}.{sig}"
 
 
 def _verify_connect_state(state: str) -> tuple[int, int] | None:
-    parts = (state or "").split(".")
-    if len(parts) != 4:
+    secret = _email_state_secret()
+    if not secret:
         return None
-    company_id_s, dispatcher_id_s, exp_s, sig = parts
-    payload = f"{company_id_s}.{dispatcher_id_s}.{exp_s}"
-    expected = hmac.new(_email_state_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
+    parts = (state or "").split(".")
+    if len(parts) != 5:
+        return None
+    company_id_s, dispatcher_id_s, nonce, exp_s, sig = parts
+    payload = f"{company_id_s}.{dispatcher_id_s}.{nonce}.{exp_s}"
+    expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
     if not hmac.compare_digest(sig, expected):
         return None
     try:
-        if int(exp_s) < int(time.time()):
-            return None
+        exp = int(exp_s)
+    except ValueError:
+        return None
+    now = time.time()
+    if exp < now:
+        return None
+    # Prune expired consumed nonces, then enforce single-use (reject replay).
+    for n, t in list(_consumed_state_nonces.items()):
+        if t < now:
+            _consumed_state_nonces.pop(n, None)
+    if nonce in _consumed_state_nonces:
+        return None
+    _consumed_state_nonces[nonce] = exp
+    try:
         return int(company_id_s), int(dispatcher_id_s)
     except ValueError:
         return None
@@ -3019,6 +3129,9 @@ async def email_connect(provider: str, authorization: str | None = Header(defaul
     if not PUBLIC_BASE_URL:
         raise HTTPException(status_code=503, detail="PUBLIC_BASE_URL is not configured")
     state = _sign_connect_state(company_id, dispatcher["id"])
+    if not state:
+        # H2: fail closed when the state-signing secret is unset.
+        raise HTTPException(status_code=503, detail="Email integration is not configured (missing RELAY_STATE_SECRET)")
     return_url = f"{PUBLIC_BASE_URL}/api/email/callback?st={state}"
     url = await relay.connect_start(provider, return_url)
     if not url:
@@ -3033,6 +3146,11 @@ async def email_callback(
     email: str = Query(default=""),
     provider: str = Query(default=""),
 ):
+    # H2: fail closed if the signing secret is unset (no insecure fallback).
+    if not _email_state_secret():
+        return RedirectResponse(url="/?email=error#mailbox", status_code=302)
+    # company_id is taken ONLY from the signed/single-use state, never from raw
+    # query params, so a forged callback can't bind a mailbox to another tenant.
     verified = _verify_connect_state(st)
     if not verified:
         return RedirectResponse(url="/?email=invalid_state#mailbox", status_code=302)
@@ -3040,6 +3158,11 @@ async def email_callback(
     if accountId:
         try:
             database.create_email_account(company_id, accountId, provider or "gmail", email or "")
+        except ValueError as exc:
+            # H2: relay_account_id already belongs to a DIFFERENT company —
+            # refuse the silent cross-tenant transfer.
+            logger.warning("Email callback cross-company conflict: %s", exc)
+            return RedirectResponse(url="/?email=conflict#mailbox", status_code=302)
         except Exception as exc:
             logger.warning("Email callback store failed: %s", exc)
             return RedirectResponse(url="/?email=error#mailbox", status_code=302)
@@ -3083,6 +3206,9 @@ async def email_disconnect(account_id: int, authorization: str | None = Header(d
 async def email_send(request: Request, authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
     company_id = get_company_id(dispatcher)
+    # L10: bound outbound email from the company's real business address so a
+    # low-priv user can't blast spam from it (per-dispatcher sliding window).
+    _enforce_eld_rate_limit(dispatcher["id"], "email_send")
     try:
         body = await request.json()
     except Exception:
@@ -3113,6 +3239,8 @@ async def email_send(request: Request, authorization: str | None = Header(defaul
 async def mailbox_reply(msg_id: int, request: Request, authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
     company_id = get_company_id(dispatcher)
+    # L10: same per-dispatcher send budget as /api/email/send.
+    _enforce_eld_rate_limit(dispatcher["id"], "email_send")
     msg = database.get_entity("mailbox_messages", msg_id, company_id)
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -3148,12 +3276,54 @@ async def mailbox_reply(msg_id: int, request: Request, authorization: str | None
     return {"ok": True}
 
 
+def _attachment_in_message(msg: dict, attachment_id: str) -> bool:
+    """L10: only allow attachment ids that actually belong to this message so a
+    broker-controlled id can't be smuggled straight into the Relay URL."""
+    raw = msg.get("attachments_json")
+    if not raw:
+        return False
+    try:
+        atts = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return False
+    if not isinstance(atts, list):
+        return False
+    return any(
+        str(a.get("id")) == str(attachment_id)
+        for a in atts
+        if isinstance(a, dict) and a.get("id") is not None
+    )
+
+
+def _safe_attachment_media_type(content_type: str | None, filename: str) -> str:
+    """H3: never echo a broker-controlled active content type (text/html, svg,
+    js, ...) — a same-origin iframe/preview could execute it. Only PDFs and
+    raster images get a renderable type; everything else is downgraded to
+    application/octet-stream (downloaded, never rendered inline)."""
+    ct = (content_type or "").split(";")[0].strip().lower()
+    fn = (filename or "").lower()
+    if ct == "application/pdf" or fn.endswith(".pdf"):
+        return "application/pdf"
+    img_ext = {
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+    }
+    for ext, mt in img_ext.items():
+        if fn.endswith(ext):
+            return mt
+    if ct in ("image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"):
+        return ct
+    return "application/octet-stream"
+
+
 @app.get("/api/mailbox/{msg_id}/attachments/{attachment_id}")
 async def mailbox_attachment(msg_id: int, attachment_id: str, authorization: str | None = Header(default=None)):
     dispatcher = require_dispatcher(authorization)
     company_id = get_company_id(dispatcher)
     msg = database.get_entity("mailbox_messages", msg_id, company_id)
     if not msg or not msg.get("account_id") or not msg.get("external_id"):
+        raise HTTPException(status_code=404, detail="Attachment not available")
+    if not _attachment_in_message(msg, attachment_id):
         raise HTTPException(status_code=404, detail="Attachment not available")
     acc = database.get_email_account(int(msg["account_id"]), company_id)
     if not acc:
@@ -3165,7 +3335,7 @@ async def mailbox_attachment(msg_id: int, attachment_id: str, authorization: str
     safe_name = filename.replace('"', "")
     return Response(
         content=content,
-        media_type=content_type,
+        media_type=_safe_attachment_media_type(content_type, filename),
         headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
     )
 
@@ -3178,6 +3348,8 @@ async def mailbox_attachment_extract(msg_id: int, attachment_id: str, authorizat
     company_id = get_company_id(dispatcher)
     msg = database.get_entity("mailbox_messages", msg_id, company_id)
     if not msg or not msg.get("account_id") or not msg.get("external_id"):
+        raise HTTPException(status_code=404, detail="Attachment not available")
+    if not _attachment_in_message(msg, attachment_id):
         raise HTTPException(status_code=404, detail="Attachment not available")
     acc = database.get_email_account(int(msg["account_id"]), company_id)
     if not acc:

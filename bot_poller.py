@@ -84,7 +84,7 @@ def _get_driver_location_for_load(load: dict) -> dict | None:
     return None
 
 
-def _build_status_message(load: dict, eld_cfg: dict | None = None) -> str | None:
+def _build_status_message(load: dict) -> str | None:
     """Builds a status update message by querying the ELD. Returns None on failure."""
     try:
         import routing
@@ -166,13 +166,52 @@ def _process_updates(updates: list[dict]):
     global _offset
     for update in updates:
         _offset = update["update_id"] + 1
+        # Persist the advanced offset BEFORE handling each update. If the process
+        # crashes mid-batch, Telegram won't re-deliver (and so won't re-apply) an
+        # already-acknowledged non-idempotent command like /arrived or /delivered.
+        # Worst case a single in-flight update is skipped — far safer than
+        # double-applying it (e.g. /arrived advancing the stop index twice).
+        _save_offset()
         # Isolate each update: one malformed message must not abort the batch.
         try:
             _handle_update(update)
         except Exception as e:
             logger.warning("Error handling update %s: %s", update.get("update_id"), e)
-    # Persist the acknowledged offset so a restart resumes where we left off.
-    _save_offset()
+
+
+# Commands that either mutate a load or pull live driver GPS — restricted to the
+# telegram user who originally redeemed the group's link code (L4). Chatter like
+# /help and /link is unaffected.
+_GUARDED_COMMANDS = {"/status", "/eta", "/arrived", "/delivered", "/pickup"}
+
+
+def _is_authorized_sender(message: dict, chat_id) -> bool:
+    """Return True if the message sender may run a guarded command in this chat.
+
+    When a group's link is redeemed we record the redeemer's telegram user id
+    (see the /link handler). Only that user may run guarded commands afterwards.
+    Legacy groups linked before this id was recorded have no stored value — we
+    allow them for backward compatibility but log a warning so it's observable.
+    Storage read errors fail open to avoid breaking legitimate drivers."""
+    try:
+        stored = database.get_global_setting(f"tg_group_user_{chat_id}")
+    except Exception as e:
+        logger.warning("Could not read authorized telegram user for chat %s: %s", chat_id, e)
+        return True
+    if not stored:
+        logger.warning(
+            "No authorized telegram user recorded for chat %s; allowing command (legacy group)",
+            chat_id,
+        )
+        return True
+    from_id = (message.get("from") or {}).get("id")
+    if from_id is not None and str(from_id) == str(stored):
+        return True
+    logger.warning(
+        "Unauthorized telegram user %s attempted a guarded command in chat %s (authorized=%s)",
+        from_id, chat_id, stored,
+    )
+    return False
 
 
 def _handle_update(update: dict):
@@ -189,6 +228,12 @@ def _handle_update(update: dict):
     # Normalize: strip a trailing @botname and lowercase, then match exactly so
     # "/deliveredxyz" no longer fires "/delivered" and "/status@MyBot" works.
     cmd = parts[0].split("@", 1)[0].lower()
+
+    # L4: restrict load-mutating / GPS-pulling commands to the driver who linked
+    # the group, not any chat member. (No-op for legacy groups with no stored id.)
+    if cmd in _GUARDED_COMMANDS and not _is_authorized_sender(message, chat_id):
+        _reply(message, "⛔ Only the driver who linked this group can use that command.")
+        return
 
     # /link <code> — single-use code, NOT the dispatcher's API token
     if cmd == "/link":
@@ -207,6 +252,14 @@ def _handle_update(update: dict):
         chat_title = chat.get("title") or chat.get("username") or str(chat_id)
         try:
             link_group(dispatcher["id"], chat_id, chat_title)
+            # L4: remember who redeemed the link so only they can run guarded
+            # commands later. Best-effort — a storage hiccup must not block linking.
+            from_id = (message.get("from") or {}).get("id")
+            if from_id is not None:
+                try:
+                    database.set_global_setting(f"tg_group_user_{chat_id}", str(from_id))
+                except Exception as e:
+                    logger.warning("Could not record authorized telegram user for chat %s: %s", chat_id, e)
             _reply(message, f"✅ Group '{chat_title}' linked to {dispatcher['name']}!")
         except Exception as e:
             logger.error("link_group error: %s", e)
@@ -360,20 +413,18 @@ def _auto_send_loop():
                         if elapsed_h < hours:
                             continue
 
-                    eld_cfg = {
-                        "provider": load.get("eld_provider"),
-                        "api_key": load.get("eld_api_key"),
-                        "company": load.get("eld_company"),
-                        "provider_token": load.get("eld_provider_token"),
-                    }
-                    if not eld_cfg["provider"] or not eld_cfg["api_key"]:
+                    # The dispatcher's full (multi-provider) ELD config is resolved
+                    # inside _build_status_message; here we only gate on the columns
+                    # get_loads_for_auto_send already fetched, to skip loads with no
+                    # ELD config without building a now-unused dict.
+                    if not load.get("eld_provider") or not load.get("eld_api_key"):
                         continue
 
                     chat_id = load.get("group_chat_id")
                     if not chat_id:
                         continue
 
-                    msg = _build_status_message(load, eld_cfg)
+                    msg = _build_status_message(load)
                     if msg:
                         telegram.send_message(chat_id, msg)
                         database.update_last_auto_send(load["id"])

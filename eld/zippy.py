@@ -76,7 +76,10 @@ class ZippyClient:
             codriver_name = f"{cd.get('first_name', '')} {cd.get('second_name', '')}".strip()
             loc = loc_by_vin.get(vin, {})
             coords = loc.get("coordinates") or {}
-            speed = self._get_latest_speed(vehicle_id)
+            # M10: avoid an N+1 blocking HTTP call per truck. Read speed from the
+            # bulk units-by-usdot coordinates payload already fetched above instead
+            # of a per-truck Trackings request (None when the payload omits speed).
+            speed = coords.get("speed")
             result.append({
                 "id": vehicle_id,
                 "truck_number": u.get("truck_number") or vin,

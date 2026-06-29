@@ -1,11 +1,11 @@
 # SimpleTrucking — full TLS vhost. Enable AFTER obtaining a cert:
-#   certbot certonly --webroot -w /var/www/certbot -d simpletrucking.identify.uz
+#   certbot certonly --webroot -w /var/www/certbot -d simpletrucking.online
 # then copy this over nginx.conf and reload nginx.
 
 # 80 → 443 redirect (keeps ACME challenge on 80).
 server {
     listen 80;
-    server_name simpletrucking.identify.uz;
+    server_name simpletrucking.online;
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
     location / { return 301 https://$host$request_uri; }
 }
@@ -13,10 +13,10 @@ server {
 server {
     listen 443 ssl;
     http2 on;
-    server_name simpletrucking.identify.uz;
+    server_name simpletrucking.online;
 
-    ssl_certificate     /etc/letsencrypt/live/simpletrucking.identify.uz/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/simpletrucking.identify.uz/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/simpletrucking.online/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/simpletrucking.online/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
@@ -24,11 +24,15 @@ server {
 
     client_max_body_size 50M;
 
+    # HSTS: force HTTPS for a year incl. subdomains (only safe once TLS is live).
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "geolocation=(self), microphone=(), camera=()" always;
+    # CSP: SPA uses inline handlers → script-src keeps 'unsafe-inline'. Real XSS defense
+    # is sink-escaping in the templates; this is defense-in-depth.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-src 'self' blob:; frame-ancestors 'self'" always;
 
     gzip on;
     gzip_types text/plain text/css application/json application/javascript image/svg+xml;

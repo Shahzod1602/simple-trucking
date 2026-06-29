@@ -1,7 +1,8 @@
 """PDF Invoice generator for trucking loads."""
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 
+import database
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle
@@ -72,7 +73,7 @@ def generate_invoice(load: dict, company: dict, invoice_number: str) -> bytes:
     story.append(HRFlowable(width="100%", thickness=2, color=accent, spaceAfter=14))
 
     # ── Invoice meta (number, date, due) ───────────────────────────────────
-    today = datetime.utcnow().strftime("%B %d, %Y")
+    today = datetime.now(timezone.utc).strftime("%B %d, %Y")
     terms = company.get("payment_terms") or "Net 30"
     meta_data = [
         [_p("Invoice #",      label), _p("Date",         label), _p("Payment Terms", label)],
@@ -94,7 +95,7 @@ def generate_invoice(load: dict, company: dict, invoice_number: str) -> bytes:
 
     # ── Bill To ────────────────────────────────────────────────────────────
     bill_to_lines = [_p("BILL TO", label)]
-    broker = load.get("broker") or "Broker / Shipper"
+    broker = load.get("broker_name") or "Broker / Shipper"
     bill_to_lines.append(_p(broker, bold))
     story.append(Table([[bill_to_lines]], colWidths=["100%"]))
     story.append(Spacer(1, 16))
@@ -108,6 +109,12 @@ def generate_invoice(load: dict, company: dict, invoice_number: str) -> bytes:
     miles         = load.get("miles") or "—"
     rate          = load.get("total_rate_usd") or "0"
 
+    # Numeric amounts. 'charge' is the load's billable accessorial/extra charge
+    # (shown as a $ amount in the weekly KPI); add it as a line item when > 0.
+    rate_amount   = database.parse_money(rate)
+    charge_amount = database.parse_money(load.get("charge"))
+    total_amount  = rate_amount + charge_amount
+
     detail_header = [
         _p("Description", bold),
         _p("Load #",      bold),
@@ -115,14 +122,24 @@ def generate_invoice(load: dict, company: dict, invoice_number: str) -> bytes:
         _p("Amount",      bold),
     ]
     description = f"Freight Transportation\n{origin} → {destination}"
-    detail_row = [
-        _p(description, normal),
-        _p(load_number, normal),
-        _p(str(miles),  normal),
-        _p(f"${_fmt(rate)}", normal),
+    detail_rows = [
+        detail_header,
+        [
+            _p(description, normal),
+            _p(load_number, normal),
+            _p(str(miles),  normal),
+            _p(_money(rate_amount), normal),
+        ],
     ]
+    if charge_amount > 0:
+        detail_rows.append([
+            _p("Additional Charges", normal),
+            _p("", normal),
+            _p("", normal),
+            _p(_money(charge_amount), normal),
+        ])
     detail_table = Table(
-        [detail_header, detail_row],
+        detail_rows,
         colWidths=[3.4 * inch, 1.3 * inch, 1.0 * inch, 1.5 * inch],
     )
     detail_table.setStyle(TableStyle([
@@ -150,9 +167,9 @@ def generate_invoice(load: dict, company: dict, invoice_number: str) -> bytes:
     # ── Total ──────────────────────────────────────────────────────────────
     total_table = Table(
         [
-            [_p("Subtotal", normal), _p(f"${_fmt(rate)}", normal)],
+            [_p("Subtotal", normal), _p(_money(total_amount), normal)],
             [_p("TOTAL DUE", ParagraphStyle("td", fontName="Helvetica-Bold", fontSize=11)),
-             _p(f"${_fmt(rate)}", total_s)],
+             _p(_money(total_amount), total_s)],
         ],
         colWidths=[5.5 * inch, 1.7 * inch],
     )
@@ -193,8 +210,8 @@ def generate_invoice(load: dict, company: dict, invoice_number: str) -> bytes:
     return buf.getvalue()
 
 
-def _fmt(value) -> str:
-    try:
-        return f"{float(value):,.2f}"
-    except (TypeError, ValueError):
-        return str(value)
+def _money(value) -> str:
+    """Format a free-text money value (e.g. '$1,675.00' or 1675) into
+    '$1,675.00' exactly once. Parsing with database.parse_money() strips any
+    existing '$'/commas so we never end up with a doubled dollar sign."""
+    return f"${database.parse_money(value):,.2f}"

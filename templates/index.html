@@ -175,6 +175,29 @@
     .nav-item[hidden] { display: none; }
     .nav-pref-hidden { display: none !important; }
     .sa-hide { display: none !important; }
+    /* ── Gmail-style mailbox ── */
+    .mail-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+    .mail-compose-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--primary, #2563eb); color: #fff; border: none; border-radius: 22px; padding: 10px 20px; font-size: 0.9rem; font-weight: 700; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.18); transition: filter 0.15s; }
+    .mail-compose-btn:hover { filter: brightness(1.07); }
+    .mail-search { flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 22px; padding: 9px 16px; }
+    .mail-search i { color: var(--text-muted); }
+    .mail-search input { border: none; background: none; outline: none; flex: 1; color: var(--text); font-size: 0.9rem; }
+    .mail-refresh { padding: 8px 13px; border-radius: 50%; }
+    .mail-list { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .mail-row { display: flex; align-items: center; gap: 13px; padding: 11px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.12s, box-shadow 0.12s; }
+    .mail-row:last-child { border-bottom: none; }
+    .mail-row:not(.unread) { background: var(--surface-2); }
+    .mail-row:hover { background: var(--surface); box-shadow: inset 3px 0 0 var(--primary, #2563eb), 0 1px 6px rgba(0,0,0,0.08); }
+    .mail-row.unread .mail-sender, .mail-row.unread .mail-subj { font-weight: 700; color: var(--text); }
+    .mail-row:not(.unread) .mail-sender { color: var(--text-muted); }
+    .mail-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 0.95rem; flex-shrink: 0; }
+    .mail-main { flex: 1; min-width: 0; }
+    .mail-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .mail-sender { font-size: 0.9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+    .mail-time { font-size: 0.74rem; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+    .mail-subj { font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+    .mail-snip { color: var(--text-muted); font-weight: 400; }
+    .mail-clip { font-size: 0.72rem; }
     .nav-search-hide { display: none !important; }
     .nav-search-show { display: flex !important; }
     .nav-cust-group { display: flex; flex-direction: column; gap: 1px; }
@@ -1714,10 +1737,6 @@
           <div>
             <h1 class="page-title">Mailbox</h1>
             <p class="page-subtitle">Broker emails and system messages</p>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn-outline" onclick="loadMailbox()">↺ Refresh</button>
-            <button class="btn-blue" onclick="openCompose()">+ New Message</button>
           </div>
         </div>
         <div id="page-mailbox-content"></div>
@@ -3641,6 +3660,55 @@ Rate: {{total_rate_usd}}
       try { return it.attachments_json ? JSON.parse(it.attachments_json) : []; } catch { return []; }
     }
 
+    let _mailQuery = '', _mailAccounts = [];
+    function _senderName(addr) {
+      addr = String(addr || '');
+      const m = addr.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>/);
+      if (m && m[1].trim()) return m[1].trim();
+      const em = addr.match(/<([^>]+)>/);
+      const e = em ? em[1] : addr;
+      return (e.split('@')[0] || e || '\u2014').trim();
+    }
+    function _avatarColor(str) {
+      let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+      const palette = ['#d97706','#2563eb','#16a34a','#dc2626','#7c3aed','#0891b2','#db2777','#ca8a04','#4f46e5'];
+      return palette[Math.abs(h) % palette.length];
+    }
+    function _mailSnippet(body) { return String(body || '').replace(/\s+/g, ' ').trim().slice(0, 100); }
+    function _mailTime(ts) {
+      if (!ts) return '';
+      const d = new Date(ts); if (isNaN(d)) return '';
+      const now = new Date();
+      if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      return d.toLocaleDateString([], { year: '2-digit', month: 'numeric', day: 'numeric' });
+    }
+    function _mailSearch(v) { _mailQuery = v; _mailRenderList(); }
+    function _mailRenderList() {
+      const box = document.getElementById('mail-list');
+      if (!box) return;
+      const q = (_mailQuery || '').toLowerCase().trim();
+      let list = Object.values(_mailboxItems);
+      if (q) list = list.filter(it => ((it.from_addr || '') + ' ' + (it.subject || '') + ' ' + (it.body || '')).toLowerCase().includes(q));
+      list.sort((a, b) => new Date(b.received_at || 0) - new Date(a.received_at || 0));
+      if (!list.length) { box.innerHTML = '<div style="padding:42px;text-align:center;color:var(--text-muted);font-size:0.85rem;">No matching emails.</div>'; return; }
+      box.innerHTML = list.map(it => {
+        const atts = _mailboxAttachments(it);
+        const name = _senderName(it.from_addr);
+        const unread = !it.is_read;
+        return `<div class="mail-row${unread ? ' unread' : ''}" onclick="openMessage(${it.id})">
+          <div class="mail-avatar" style="background:${_avatarColor(it.from_addr || '?')};">${esc((name[0] || '?').toUpperCase())}</div>
+          <div class="mail-main">
+            <div class="mail-row-top">
+              <span class="mail-sender">${esc(name)}</span>
+              <span class="mail-time">${atts.length ? '<span class="mail-clip">\uD83D\uDCCE</span> ' : ''}${esc(_mailTime(it.received_at))}</span>
+            </div>
+            <div class="mail-subj">${esc(it.subject || '(no subject)')}<span class="mail-snip">${it.body ? ' \u2014 ' + esc(_mailSnippet(it.body)) : ''}</span></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
     async function loadMailbox() {
       const el = document.getElementById('page-mailbox-content');
       if (!el) return;
@@ -3686,22 +3754,16 @@ Rate: {{total_rate_usd}}
                 <button class="btn-outline" style="padding:5px 10px;font-size:0.78rem;" onclick="connectEmail('outlook')">Outlook</button>
               </span></div>`
           : '';
-        const rows = items.map(it => {
-          const atts = _mailboxAttachments(it);
-          const unread = !it.is_read;
-          const when = it.received_at ? new Date(it.received_at).toLocaleString() : '';
-          return `<tr style="cursor:pointer;${unread ? 'font-weight:700;' : ''}" onclick="openMessage(${it.id})">
-            <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;white-space:nowrap;">${unread ? '<span style="color:var(--primary);">●</span> ' : ''}${esc(it.from_addr || '—')}</td>
-            <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.85rem;">${esc(it.subject || '(no subject)')} ${atts.length ? '📎' : ''}</td>
-            <td style="padding:10px;border-bottom:1px solid var(--border);font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">${esc(when)}</td>
-          </tr>`;
-        }).join('');
-        el.innerHTML = banner + `<div class="card" style="padding:0;overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="width:100%;border-collapse:collapse;min-width:480px;">
-          <thead><tr style="background:var(--surface-2);">
-            <th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">From</th>
-            <th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Subject</th>
-            <th style="padding:10px;text-align:left;font-weight:600;font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Received</th>
-          </tr></thead><tbody>${rows}</tbody></table></div>`;
+        _mailAccounts = accData.accounts || [];
+        const composeBtn = _mailAccounts.length ? `<button class="mail-compose-btn" onclick="openCompose()">&#10010; Compose</button>` : '';
+        el.innerHTML = banner + `
+          <div class="mail-toolbar">
+            ${composeBtn}
+            <div class="mail-search"><i class="ph ph-magnifying-glass"></i><input type="text" id="mail-search-input" placeholder="Search mail" oninput="_mailSearch(this.value)" value="${esc(_mailQuery)}"></div>
+            <button class="btn-outline mail-refresh" onclick="loadMailbox()" title="Refresh">&#8635;</button>
+          </div>
+          <div class="mail-list" id="mail-list"></div>`;
+        _mailRenderList();
       } catch {
         el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Failed to load</div>';
       }
@@ -3721,7 +3783,7 @@ Rate: {{total_rate_usd}}
       const atts = _mailboxAttachments(it);
       if (!it.is_read) {
         fetch('/api/entities/mailbox/' + id, { method: 'PATCH', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ is_read: true }) })
-          .then(() => { it.is_read = true; refreshUnreadBadge(); }).catch(() => {});
+          .then(() => { it.is_read = true; refreshUnreadBadge(); try { _mailRenderList(); } catch {} }).catch(() => {});
       }
       const canReply = !!it.account_id;
       const attHtml = atts.length ? `<div style="margin:12px 0;display:flex;flex-direction:column;gap:8px;">
@@ -3862,7 +3924,7 @@ Rate: {{total_rate_usd}}
       let accs = [];
       try { const d = await fetch('/api/email/accounts', { headers: authH() }).then(r => r.json()); accs = d.accounts || []; } catch {}
       if (!accs.length) { toast('Connect a mailbox first (Settings → Email Accounts)', 'error'); return; }
-      const opts = accs.map(a => `<option value="${a.id}">${esc(a.email || a.provider)}</option>`).join('');
+      const opts = accs.map(a => `<option value="${a.id}">${esc(a.email_address || a.email || a.provider)}</option>`).join('');
       document.getElementById('mailbox-modal-body').innerHTML = `
         <div style="font-weight:700;font-size:1rem;margin-bottom:12px;">New Message</div>
         <div class="field"><label>From</label><select id="cmp-account">${opts}</select></div>

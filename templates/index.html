@@ -833,6 +833,31 @@
     .fm-style-menu button { display: block; width: 100%; text-align: left; border: none; background: none; color: rgba(255,255,255,0.85); font-family: 'IBM Plex Sans', sans-serif; font-size: 0.85rem; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
     .fm-style-menu button:hover { background: rgba(255,255,255,0.1); }
     .fm-style-menu button.active { color: #fff; font-weight: 700; }
+    /* Light-theme overrides for the map overlay controls (they default to a dark glass look) */
+    [data-theme="light"] .fm-toolbar { background: rgba(255,255,255,0.92); border-color: rgba(15,23,42,0.10); color: #0f172a; box-shadow: 0 4px 20px rgba(15,23,42,0.14); }
+    [data-theme="light"] .fm-seg { background: rgba(15,23,42,0.06); }
+    [data-theme="light"] .fm-seg-btn { color: rgba(15,23,42,0.55); }
+    [data-theme="light"] .fm-seg-btn.active { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(15,23,42,0.18); }
+    [data-theme="light"] .fm-count { color: rgba(15,23,42,0.65); }
+    [data-theme="light"] .fm-icon-btn { background: rgba(15,23,42,0.06); color: #0f172a; }
+    [data-theme="light"] .fm-icon-btn:hover { background: rgba(15,23,42,0.12); }
+    [data-theme="light"] .fm-auto { color: rgba(15,23,42,0.60); }
+    [data-theme="light"] .fm-tr input[type=text] { color: #0f172a; }
+    [data-theme="light"] .fm-tr input[type=text]::placeholder { color: rgba(15,23,42,0.45); }
+    [data-theme="light"] .fm-tr select { background: rgba(15,23,42,0.06); color: #0f172a; }
+    [data-theme="light"] .fm-empty-card { background: rgba(255,255,255,0.97); border-color: rgba(15,23,42,0.10); color: #0f172a; box-shadow: 0 16px 56px rgba(15,23,42,0.20); }
+    [data-theme="light"] .fm-empty-icon { background: rgba(15,23,42,0.06); color: #475569; }
+    [data-theme="light"] .fm-empty-title { color: #0f172a; }
+    [data-theme="light"] .fm-empty-sub { color: rgba(15,23,42,0.60); }
+    [data-theme="light"] .fm-empty-card .btn-primary { background: #111827; color: #fff; }
+    [data-theme="light"] .fm-empty-card .btn-primary:hover:not(:disabled) { background: #0f172a; }
+    [data-theme="light"] .fm-empty-card .btn-outline { color: #0f172a; border-color: rgba(15,23,42,0.25); }
+    [data-theme="light"] .fm-empty-card .btn-outline:hover { color: #111827; border-color: #111827; background: rgba(15,23,42,0.04); }
+    [data-theme="light"] .fm-style-btn { background: rgba(255,255,255,0.92); border-color: rgba(15,23,42,0.10); color: #0f172a; box-shadow: 0 4px 20px rgba(15,23,42,0.14); }
+    [data-theme="light"] .fm-style-menu { background: rgba(255,255,255,0.97); border-color: rgba(15,23,42,0.10); box-shadow: 0 10px 40px rgba(15,23,42,0.20); }
+    [data-theme="light"] .fm-style-menu button { color: rgba(15,23,42,0.80); }
+    [data-theme="light"] .fm-style-menu button:hover { background: rgba(15,23,42,0.06); }
+    [data-theme="light"] .fm-style-menu button.active { color: #111827; }
     #page-map #nearby-panel { position: absolute; top: 66px; right: 16px; z-index: 480; width: 320px; max-height: calc(100vh - 96px); overflow-y: auto; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); }
 
     /* ── File & auto-send buttons ── */

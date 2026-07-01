@@ -2121,7 +2121,8 @@ async def extract_ratecon(
             status_code=400,
             detail=f"Unsupported file type: {suffix}. Allowed: {', '.join(SUPPORTED_EXTENSIONS)}"
         )
-    if not os.environ.get("GEMINI_API_KEY"):
+    from extractor.llm_extractor import extraction_configured
+    if not extraction_configured():
         raise HTTPException(status_code=503, detail="Extraction is not configured")
 
     contents = await file.read()
@@ -3354,7 +3355,8 @@ async def mailbox_attachment_extract(msg_id: int, attachment_id: str, authorizat
     acc = database.get_email_account(int(msg["account_id"]), company_id)
     if not acc:
         raise HTTPException(status_code=404, detail="Email account not found")
-    if not os.environ.get("GEMINI_API_KEY"):
+    from extractor.llm_extractor import extraction_configured
+    if not extraction_configured():
         raise HTTPException(status_code=503, detail="Extraction is not configured")
     result = await relay.get_attachment(acc["relay_account_id"], msg["external_id"], attachment_id)
     if not result:

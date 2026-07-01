@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import time
@@ -93,6 +94,59 @@ def _fill_missing_miles(ratecon: RateCon, api_key: str | None) -> None:
         logger.warning("Miles fallback calc failed: %s", e)
 
 
+def _use_vertex() -> bool:
+    """True when extraction should go through Vertex AI (ADC credentials) rather
+    than the Gemini Developer API key."""
+    flag = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return True
+    if flag in ("0", "false", "no", "off"):
+        return False
+    # Auto: use Vertex when an ADC credentials file is configured.
+    return bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip())
+
+
+def _vertex_project() -> str | None:
+    """Resolve the Vertex project. Explicit GOOGLE_CLOUD_PROJECT wins; otherwise
+    read quota_project_id from the ADC key file, so swapping the key file swaps
+    the project with no code change."""
+    proj = os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+    if proj:
+        return proj
+    cred = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    if cred and os.path.isfile(cred):
+        try:
+            with open(cred) as fh:
+                data = json.load(fh)
+            return data.get("quota_project_id") or data.get("project_id")
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning("Could not read Vertex project from ADC file: %s", e)
+    return None
+
+
+def extraction_configured() -> bool:
+    """Whether extraction can run at all — either Vertex (ADC) or a Gemini API key."""
+    if _use_vertex():
+        return bool(_vertex_project())
+    return bool(os.environ.get("GEMINI_API_KEY"))
+
+
+def _build_client() -> genai.Client:
+    """Build the genai client: Vertex AI (ADC) when configured, else the Gemini
+    Developer API key. Raises ExtractionError (→ 503) when neither is set."""
+    http_opts = types.HttpOptions(timeout=REQUEST_TIMEOUT_MS)
+    if _use_vertex():
+        project = _vertex_project()
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "").strip() or "global"
+        if not project:
+            raise ExtractionError("Extraction is not configured (Vertex project not resolved).")
+        return genai.Client(vertexai=True, project=project, location=location, http_options=http_opts)
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise ExtractionError("Extraction is not configured (no Vertex credentials or API key).")
+    return genai.Client(api_key=api_key, http_options=http_opts)
+
+
 def extract(file_path: str, gmaps_api_key: str | None = None) -> RateCon:
     """
     Reads a PDF or image ratecon file and returns a validated RateCon object.
@@ -116,14 +170,7 @@ def extract(file_path: str, gmaps_api_key: str | None = None) -> RateCon:
         _result_cache.move_to_end(cache_key)
         return cached.model_copy(deep=True)
 
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise ExtractionError("Extraction is not configured (missing API key).")
-
-    client = genai.Client(
-        api_key=api_key,
-        http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
-    )
+    client = _build_client()
 
     response = None
     for attempt in range(MAX_RETRIES):
@@ -132,6 +179,7 @@ def extract(file_path: str, gmaps_api_key: str | None = None) -> RateCon:
                 model="gemini-2.5-flash",
                 contents=[
                     types.Content(
+                        role="user",  # Vertex AI requires an explicit role (user/model)
                         parts=[
                             types.Part(text=EXTRACTION_PROMPT),
                             types.Part(

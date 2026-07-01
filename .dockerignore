@@ -8,3 +8,4 @@ uploads/
 .git/
 .github/
 *.md
+vertex-key.json

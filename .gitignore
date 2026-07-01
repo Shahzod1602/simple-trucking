@@ -7,3 +7,4 @@ ratecon.db
 uploads/
 *.egg-info/
 .DS_Store
+vertex-key.json

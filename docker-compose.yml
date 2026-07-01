@@ -33,6 +33,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://ratecon:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/ratecon
+      # Ratecon extraction runs on Vertex AI (ADC) instead of a Gemini API key.
+      # The credential is mounted read-only below; the project is auto-read from
+      # the key file's quota_project_id (swap the key = swap the project).
+      GOOGLE_GENAI_USE_VERTEXAI: "true"
+      GOOGLE_APPLICATION_CREDENTIALS: /app/vertex-key.json
+      GOOGLE_CLOUD_LOCATION: global
     ports:
       # Bind to loopback only: nginx proxies via the docker network name (app:8000),
       # so this published port must NOT be reachable from outside (that would bypass
@@ -41,6 +47,8 @@ services:
       - "127.0.0.1:8002:8000"
     volumes:
       - ./uploads:/app/uploads
+      # Vertex AI ADC credentials (host file, kept out of git & the image).
+      - ./vertex-key.json:/app/vertex-key.json:ro
     depends_on:
       db:
         condition: service_healthy
